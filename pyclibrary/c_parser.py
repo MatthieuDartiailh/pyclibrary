@@ -20,6 +20,7 @@ import os
 import logging
 from inspect import cleandoc
 from future.utils import istext
+from ast import literal_eval
 
 logger = logging.getLogger(__name__)
 
@@ -137,15 +138,6 @@ class CParser():
         self.data_list = ['types', 'variables', 'fnmacros', 'macros',
                           'structs', 'unions', 'enums', 'functions', 'values']
 
-        # XXXX
-        # placeholders for definitions that change during parsing
-        #if hasPyParsing:
-            #self.macroExpr = Forward()
-            #self.fnMacroExpr = Forward()
-            #self.definedType = Forward()
-            #self.definedStruct = Forward()
-            #self.definedEnum = Forward()
-
         self.file_order = []
         self.files = {}
 
@@ -160,9 +152,6 @@ class CParser():
         # Initialize empty definition lists
         for k in self.data_list:
             self.defs[k] = {}
-            # XXXX
-            #for f in files:
-                #self.fileDefs[f][k] = {}
 
         # Holds translations from typedefs/structs/unions to fundamental types
         self.compiled_types = {}
@@ -342,9 +331,6 @@ class CParser():
         cache['opts'] = self.init_opts
         cache['file_defs'] = self.file_defs
         cache['version'] = self.cache_version
-        # XXXX
-        #for k in self.dataList:
-            #cache[k] = getattr(self, k)
         import pickle
         pickle.dump(cache, open(cache_file, 'wb'))
 
@@ -428,9 +414,6 @@ class CParser():
         # First join together lines split by \\n
         text = Literal('\\\n').suppress().transformString(text)
 
-        # XXXX
-        #self.ppDirective = Combine("#" + Word(alphas).leaveWhitespace()) + restOfLine
-
         # Define the structure of a macro definition
         name = Word(alphas+'_', alphanums+'_')('name')
         deli_list = Optional(lparen + delimitedList(name) + rparen)
@@ -439,21 +422,10 @@ class CParser():
                           SkipTo(LineEnd())('value'))
         self.pp_define.setParseAction(self.process_macro_defn)
 
-        # XXXX
-        #self.updateMacroDefns()
-        #self.updateFnMacroDefns()
-
-        # XXXX
-        # define pattern for scanning through the input string
-        #self.macroExpander = (self.macroExpr | self.fnMacroExpr)
-
         # Comb through lines, process all directives
         lines = text.split('\n')
 
         result = []
-
-        #XXXX
-        #macroExpander = (quotedString | self.macroExpander)
 
         directive = re.compile(r'\s*#([a-zA-Z]+)(.*)$')
         if_true = [True]
@@ -467,8 +439,6 @@ class CParser():
                 # Only include if we are inside the correct section of an IF
                 # block
                 if if_true[-1]:
-                    # XXXX
-                    #line = macroExpander.transformString(line)  # expand all known macros
                     new_line = self.expand_macros(line)
 
             # Macro line
@@ -550,9 +520,6 @@ class CParser():
                         continue
                     try:
                         self.rem_def('macros', macroName.strip())
-                        # XXXX
-                        #self.macroListString = '|'.join(self.defs['macros'].keys() + self.defs['fnmacros'].keys())
-                        #self.updateMacroDefns()
                     except Exception:
                         if sys.exc_info()[0] is not KeyError:
                             mess = "Error removing macro definition '{}'"
@@ -619,41 +586,18 @@ class CParser():
 
         try:
             # XXXX try using litteral_eval
-            ev = bool(eval(expr2))
+            ev = bool(literal_eval(expr2))
         except Exception:
             mess = "Error evaluating preprocessor expression: {} [{}]"
             logger.debug(mess.format(expr, expr2))
             ev = False
         return ev
 
-    # XXXX remove ?
-    #def updateMacroDefns(self):
-        ##self.macroExpr << MatchFirst( [Keyword(m)('macro') for m in self.defs['macros']] )
-        ##self.macroExpr.setParseAction(self.processMacroRef)
-
-        ## regex is faster than pyparsing.
-        ## Matches quoted strings and macros
-
-        ##names = self.defs['macros'].keys() + self.defs['fnmacros'].keys()
-        #if len(self.macroListString) == 0:
-            #self.macroRegex = None
-        #else:
-            #self.macroRegex = re.compile(
-                #r'("(\\"|[^"])*")|(\b(%s)\b)'   %   self.macroListString
-            #)
-
-    #def updateFnMacroDefns(self):
-        #self.fnMacroExpr << MatchFirst( [(Keyword(m)('macro') + lparen + Group(delimitedList(expression))('args') + rparen) for m in self.defs['fnmacros']] )
-        #self.fnMacroExpr.setParseAction(self.processFnMacroRef)
-
     def process_macro_defn(self, t):
         """Parse a #define macro and register the definition.
 
         """
         logger.debug("Processing MACRO:", t)
-        # XXXX
-        #macroVal = self.macroExpander.transformString(t.value).strip()
-        #macroVal = Literal('\\\n').suppress().transformString(macroVal) ## remove escaped newlines
         macro_val = t.value.strip()
         if macro_val in self.defs['fnmacros']:
             self.add_def('fnmacros', t.macro, self.defs['fnmacros'][macro_val])
@@ -674,13 +618,6 @@ class CParser():
                 logger.debug("  Add fn macro:", t.macro, t.args,
                              self.defs['fnmacros'][t.macro])
 
-        # XXXX
-        #if self.macroListString == '':
-            #self.macroListString = t.macro
-        #else:
-            #self.macroListString += '|' + t.macro
-        #self.updateMacroDefns()
-        #self.macroExpr << MatchFirst( map(Keyword,self.defs['macros'].keys()) )
         return "#define " + t.macro + " " + macro_val
 
     def compile_fn_macro(self, text, args):
@@ -733,36 +670,6 @@ class CParser():
         parts.append(line[start:])
         return ''.join(parts)
 
-    # XXXX
-    #def expandMacros(self, line):
-        #if self.macroRegex is None:
-            #return line
-        #parts = []
-        #start = 0
-        #N = 3   ## the group number to check for macro names
-        #for m in self.macroRegex.finditer(line):
-            #name = m.groups()[N]
-            #if name is not None:
-                #if name in self.defs['macros']:
-                    #parts.append(line[start:m.start(N)])
-                    #start = m.end(N)
-                    #parts.append(self.defs['macros'][name])
-                #elif name in self.defs['fnmacros']:
-                    #try:  ## If function macro expansion fails, just ignore it.
-                        #exp, end = self.expandFnMacro(name, line[m.end(N):])
-                        #parts.append(line[start:m.start(N)])
-                        #start = end + m.end(N)
-                        #parts.append(exp)
-                    #except:
-                        #if sys.exc_info()[1][0] != 0:
-                            #print "Function macro expansion failed:", name, line[m.end(N):]
-                            #raise
-
-                #else:
-                    #raise Exception("Macro '%s' not found (internal error)" % name)
-        #parts.append(line[start:])
-        #return ''.join(parts)
-
     def expand_fn_macro(self, name, text):
         """
         """
@@ -780,34 +687,6 @@ class CParser():
         newStr = defn[0].format(tuple([args[0][i] for i in defn[1]]))
 
         return (newStr, end)
-
-    # XXXX
-    # parse action to replace macro references with their respective definition
-    #def processMacroRef(self, t):
-        #return self.defs['macros'][t.macro]
-
-    #def processFnMacroRef(self, t):
-        #m = self.defs['fnmacros'][t.macro]
-        ##print "=====>>"
-        ##print "Process FN MACRO:", t
-        ##print "  macro defn:", t.macro, m
-        ##print "  macro call:", t.args
-        ### m looks like ('a + b', ('a', 'b'))
-        #newStr = m[0][:]
-        ##print "  starting str:", newStr
-        #try:
-            #for i in range(len(m[1])):
-                ##print "  step", i
-                #arg = m[1][i]
-                ##print "    arg:", arg, '=>', t.args[i]
-
-                #newStr = Keyword(arg).copy().setParseAction(lambda: t.args[i]).transformString(newStr)
-                ##print "    new str:", newStr
-        #except:
-            ##sys.excepthook(*sys.exc_info())
-            #raise
-        ##print "<<====="
-        #return newStr
 
     def parse_defs(self, path, return_unparsed=False):
         """Scan through the named file for variable, struct, enum, and function
@@ -830,8 +709,6 @@ class CParser():
         """
         self.assert_pyparsing()
         self.current_file = path
-        # XXXX
-        #self.definedType << kwl(self.defs['types'].keys())
 
         parser = self.build_parser()
         if return_unparsed:
@@ -859,9 +736,6 @@ class CParser():
                 )
         self.type_spec = (type_qualifier + desc + type_qualifier + ms_modifier
                           ).setParseAction(recombine)
-
-        # XXXX
-        #self.argList = Forward()
 
         # --- Abstract declarators for use in function pointer arguments
         #   Thus begins the extremely hairy business of parsing C declarators.
@@ -896,14 +770,6 @@ class CParser():
             Group(ZeroOrMore(lbrack + Optional(expression, default='-1') +
                   rbrack))('arrays')
         )
-
-        # XXXX
-        ## Argument list may consist of declarators or abstract declarators
-        #self.argList << delimitedList(Group(
-            #self.typeSpec('type') +
-            #(self.declarator('decl') | self.abstractDeclarator('decl')) +
-            #Optional(Keyword('=')) + expression
-        #))
 
         # Declarators look like:
         #     varName
@@ -954,8 +820,6 @@ class CParser():
         self.variable_decl.setParseAction(self.process_variable)
 
         # Function definition
-        # XXXX
-        #self.paramDecl = Group(self.typeSpec + (self.declarator | self.abstractDeclarator)) + Optional(Literal('=').suppress() + expression('value'))
         self.typeless_function_decl = (self.declarator('decl') +
                                        nestedExpr('{', '}').suppress())
         self.function_decl = (self.type_spec('type') +
@@ -966,8 +830,6 @@ class CParser():
         # Struct definition
         self.struct_decl = Forward()
         struct_kw = (Keyword('struct') | Keyword('union'))
-        # XXXX
-        #self.struct_type << structKW('struct_type') + ((Optional(ident)('name') + lbrace + Group(ZeroOrMore( Group(self.structDecl | self.variableDecl.copy().setParseAction(lambda: None)) ))('members') + rbrace) | ident('name'))
         self.struct_member = (
             Group(self.variable_decl.copy().setParseAction(lambda: None)) |
             (self.type_spec + self.declarator +
@@ -982,8 +844,6 @@ class CParser():
                                self.decl_list) | ident('name'))
                              )
         self.struct_type.setParseAction(self.process_struct)
-        # XXXX
-        #self.updateStructDefn()
 
         self.struct_decl = self.struct_type + semi
 
@@ -1001,8 +861,6 @@ class CParser():
         self.enum_type.setParseAction(self.process_enum)
         self.enum_decl = self.enum_type + semi
 
-        # XXXX
-        #self.parser = (self.typeDecl | self.variableDecl | self.structDecl | self.enumDecl | self.functionDecl)
         self.parser = (self.typeDecl | self.variableDecl | self.functionDecl)
         return self.parser
 
@@ -1023,16 +881,6 @@ class CParser():
             toks.append('*' * len(decl['ptrs']))
 
         if 'arrays' in decl and len(decl['arrays']) > 0:
-            # XXXX
-            #arrays  = []
-            #for x in decl['arrays']:
-                #n = self.evalExpr(x)
-                #if n == -1:           ## If an array was given as '[]', interpret it as '*' instead.
-                    #toks.append('*')
-                #else:
-                    #arrays.append(n)
-            #if len(arrays) > 0:
-                #toks.append(arrays)
             toks.append([self.eval_expr(x) for x in decl['arrays']])
 
         if 'args' in decl and len(decl['args']) > 0:
@@ -1109,7 +957,7 @@ class CParser():
                 for v in t.members:
                     if v.value != '':
                         # XXXX test with literal_eval
-                        i = eval(v.value)
+                        i = literal_eval(v.value)
                     if v.valueName != '':
                         i = enum[v.valueName]
                     enum[v.name] = i
@@ -1223,8 +1071,6 @@ class CParser():
             (name, decl) = self.process_type(typ, d)
             logger.debug("  ", name, decl)
             self.add_def('types', name, decl)
-            # XXXX
-            #self.definedType << MatchFirst( map(Keyword,self.defs['types'].keys()) )
 
     def eval_expr(self, toks):
         """Evaluates expressions.
@@ -1418,8 +1264,7 @@ if HAS_PYPARSING:
     ident = (WordStart(wordchars) + ~keyword +
              Word(alphas + "_", alphanums + "_$") +
              WordEnd(wordchars)).setParseAction(lambda t: t[0])
-    # XXXX
-    #integer = Combine(Optional("-") + (Word( nums ) | Combine("0x" + Word(hexnums))))
+
     semi   = Literal(";").ignore(quotedString).suppress()
     lbrace = Literal("{").ignore(quotedString).suppress()
     rbrace = Literal("}").ignore(quotedString).suppress()
@@ -1427,7 +1272,6 @@ if HAS_PYPARSING:
     rbrack = Literal("]").ignore(quotedString).suppress()
     lparen = Literal("(").ignore(quotedString).suppress()
     rparen = Literal(")").ignore(quotedString).suppress()
-    # XXXX hexint, decint can also be simply U
     hexint = Regex('-?0[xX][{}]+[UL]*'.format(hexnums)).setParseAction(lambda t: t[0].rstrip('UL'))
     decint = Regex(r'-?\d+[UL]*').setParseAction(lambda t: t[0].rstrip('UL'))
     integer = (hexint | decint)
@@ -1439,9 +1283,7 @@ if HAS_PYPARSING:
     uni_left_operator = oneOf("++ -- - + * sizeof new")
     name = (WordStart(wordchars) + Word(alphas+"_", alphanums+"_$") +
             WordEnd(wordchars))
-    # XXXX
-    #number = Word(hexnums + ".-+xUL").setParseAction(lambda t: t[0].rstrip('UL'))
-    #stars = Optional(Word('*&'), default='')('ptrs')  ## may need to separate & from * later?
+
     call_conv = Optional(Keyword('__cdecl') | Keyword('__stdcall'))('call_conv')
 
     # Removes '__name' from all type specs. may cause trouble.
@@ -1460,7 +1302,7 @@ if HAS_PYPARSING:
 
     # Language elements
     fund_type = OneOrMore(kwl(sign_modifiers + size_modifiers +
-                         base_types)).setParseAction(lambda t: ' '.join(t))
+                          base_types)).setParseAction(lambda t: ' '.join(t))
 
     # Is there a better way to process expressions with cast operators??
     cast_atom = (
