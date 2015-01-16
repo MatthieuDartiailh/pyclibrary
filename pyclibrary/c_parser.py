@@ -1428,7 +1428,7 @@ if HAS_PYPARSING:
     lparen = Literal("(").ignore(quotedString).suppress()
     rparen = Literal(")").ignore(quotedString).suppress()
     # XXXX hexint, decint can also be simply U
-    hexint = Regex('-?0x[{}]+[UL]*'.format(hexnums)).setParseAction(lambda t: t[0].rstrip('UL'))
+    hexint = Regex('-?0[xX][{}]+[UL]*'.format(hexnums)).setParseAction(lambda t: t[0].rstrip('UL'))
     decint = Regex(r'-?\d+[UL]*').setParseAction(lambda t: t[0].rstrip('UL'))
     integer = (hexint | decint)
     floating = Regex(r'-?((\d+(\.\d*)?)|(\.\d+))([eE]-?\d+)?')
