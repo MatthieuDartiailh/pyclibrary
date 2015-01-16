@@ -1,0 +1,7 @@
+Windows headers are not included in this distribution due to possible copyright issues. 
+However, there is a cache file here which encapsulates definitions pulled from several
+headers included in Visual Studio:
+  BaseTsd.h  BaseTyps.h  WinDef.h  WinNt.h  WinUser.h  WTypes.h 
+
+If you need to recompile the cache file, you can obtain these headers from any
+Visual Studio installation. 
