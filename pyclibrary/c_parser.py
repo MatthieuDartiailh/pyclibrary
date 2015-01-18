@@ -58,7 +58,7 @@ def win_defs(verbose=False):
     return p
 
 
-class CParser():
+class CParser(object):
     """Class for parsing C code to extract variable, struct, enum, and function
     declarations as well as preprocessor macros.
 
@@ -124,7 +124,7 @@ class CParser():
     cacheVersion = 22
 
     def __init__(self, files=None, replace=None, copy_from=None,
-                 process_all=True, cache=None, verbose=False, **args):
+                 process_all=True, cache=None, **args):
 
         # Holds all definitions
         self.defs = {}
@@ -171,7 +171,7 @@ class CParser():
                 self.import_dict(p.file_defs)
 
         if process_all:
-            self.process_all(cache=cache, verbose=verbose)
+            self.process_all(cache=cache)
 
     def process_all(self, cache=None, return_unparsed=False,
                     print_after_preprocess=False):
@@ -289,13 +289,13 @@ class CParser():
                     db = logger.debug
                     db("Cache file is not valid")
                     db("It was created using different initialization options")
-                    db(cache['opts'])
-                    db(self.init_opts)
+                    db('{}'.format(cache['opts']))
+                    db('{}'.format(self.init_opts))
                     return False
 
                 else:
                     logger.debug("Cache init opts are OK:")
-                    logger.debug(cache['opts'])
+                    logger.debug('{}'.format(cache['opts']))
 
                 if cache['version'] < self.cache_version:
                     mess = "Cache file is not valid--cache format has changed."
@@ -338,6 +338,15 @@ class CParser():
         """Read a file, make replacements if requested.
 
         Called by __init__, should not be called manually.
+
+        Parameters
+        ----------
+        path : unicode
+            Path of the file to load.
+
+        replace : dict, optional
+            Dictionary containing strings to replace by the associated value
+            when loading the file.
 
         """
         if not os.path.isfile(path):
@@ -398,9 +407,15 @@ class CParser():
 
         Operates in memory, does not alter the original files.
 
+        Currently support :
+        - conditionals : ifdef, ifndef, if, elif, else (defined can be used
+                         in a if statement).
+        - definition : define, undef
+        - pragmas : pragma
+
         """
         self.assert_pyparsing()
-        # We need this so that evalExpr works properly
+        # We need this so that eval_expr works properly
         self.build_parser()
         self.current_file = path
 
@@ -460,10 +475,9 @@ class CParser():
                         is_macro_func = t['name'] in self.defs['fnmacros']
                         return ['0', '1'][is_macro or is_macro_func]
 
-                    rest = (
-                        Keyword('defined') +
-                        (name | lparen + name + rparen)
-                    ).setParseAction(pa).transformString(rest)
+                    rest = (Keyword('defined') +
+                            (name | lparen + name + rparen)
+                            ).setParseAction(pa).transformString(rest)
 
                 elif d in ['define', 'undef']:
                     match = re.match(r'\s*([a-zA-Z_][a-zA-Z0-9_]*)(.*)$', rest)
@@ -479,13 +493,15 @@ class CParser():
                     else:
                         ev = self.eval_preprocessor_expr(rest)
 
-                    logger.debug("  "*(len(if_true)-2) + line, rest, ev)
+                    logger.debug("  "*(len(if_true)-2) + line +
+                                 '{}, {}'.format(rest, ev))
 
                     if_true[-1] = ev
                     if_hit[-1] = if_hit[-1] or ev
 
                 elif d == 'else':
-                    logger.debug("  "*(len(if_true)-2) + line, not if_hit[-1])
+                    logger.debug("  "*(len(if_true)-2) + line +
+                                 '{}'.format(not if_hit[-1]))
                     if_true[-1] = (not if_hit[-1]) and all(if_true[:-1])
                     if_hit[-1] = True
 
@@ -499,21 +515,22 @@ class CParser():
                         ev = self.eval_preprocessor_expr(rest)
                     else:
                         ev = False
-                    logger.debug("  "*(len(if_true)-1) + line, rest, ev)
+                    logger.debug("  "*(len(if_true)-1) + line +
+                                 '{}, {}'.format(rest, ev))
                     if_true.append(ev)
                     if_hit.append(ev)
 
                 elif d == 'define':
                     if not if_true[-1]:
                         continue
-                    logger.debug("  "*(len(if_true)) + "define:", macroName,
-                                 rest)
+                    logger.debug("  "*(len(if_true)-1) + "define: " +
+                                 '{}, {}'.format(macroName, rest))
                     try:
                         # Macro is registered here
                         self.pp_define.parseString(macroName + ' ' + rest)
                     except Exception:
-                        logger.exception("Error processing macro definition:",
-                                         macroName, rest)
+                        logger.exception("Error processing macro definition:" +
+                                         '{}, {}'.format(macroName, rest))
 
                 elif d == 'undef':
                     if not if_true[-1]:
@@ -597,7 +614,7 @@ class CParser():
         """Parse a #define macro and register the definition.
 
         """
-        logger.debug("Processing MACRO:", t)
+        logger.debug("Processing MACRO: {}".format(t))
         macro_val = t.value.strip()
         if macro_val in self.defs['fnmacros']:
             self.add_def('fnmacros', t.macro, self.defs['fnmacros'][macro_val])
@@ -608,15 +625,17 @@ class CParser():
                 val = self.eval_expr(macro_val)
                 self.add_def('macros', t.macro, macro_val)
                 self.add_def('values', t.macro, val)
-                logger.debug("  Add macro:", t.macro, "("+str(val)+")",
-                             self.defs['macros'][t.macro])
+                mess = "  Add macro: {} ({}); {}"
+                logger.debug(mess.format(t.macro, val,
+                                         self.defs['macros'][t.macro]))
 
             else:
                 self.add_def('fnmacros', t.macro,
                              self.compile_fn_macro(macro_val,
                                                    [x for x in t.args]))
-                logger.debug("  Add fn macro:", t.macro, t.args,
-                             self.defs['fnmacros'][t.macro])
+                mess = "  Add fn macro: {} ({}); {}"
+                logger.debug(mess.format(t.macro, t.args,
+                                         self.defs['fnmacros'][t.macro]))
 
         return "#define " + t.macro + " " + macro_val
 
@@ -664,8 +683,8 @@ class CParser():
                     parts.append(exp)
                 except:
                     if sys.exc_info()[1][0] != 0:
-                        logger.error("Function macro expansion failed:",
-                                     name, line[m.end(N):])
+                        mess = "Function macro expansion failed: {}, {}"
+                        logger.error(mess.format(name, line[m.end(N):]))
                         raise
         parts.append(line[start:])
         return ''.join(parts)
@@ -746,7 +765,7 @@ class CParser():
         #   ordered list of modifiers.
 
         self.declarator = Forward()
-        self.abstractDeclarator = Forward()
+        self.abstract_declarator = Forward()
 
         #  Abstract declarators look like:
         #     <empty string>
@@ -799,13 +818,13 @@ class CParser():
         self.declarator_list = Group(delimitedList(self.declarator))
 
         # Typedef
-        self.type_decl = (Keyword('typedef') + self.typeSpec('type') +
+        self.type_decl = (Keyword('typedef') + self.type_spec('type') +
                           self.declarator_list('decl_list') + semi)
         self.type_decl.setParseAction(self.process_typedef)
 
         # Variable declaration
         self.variable_decl = (
-            Group(self.typeSpec('type') +
+            Group(self.type_spec('type') +
                   Optional(self.declarator_list('decl_list')) +
                   Optional(Literal('=').suppress() +
                            (expression('value') |
@@ -861,7 +880,8 @@ class CParser():
         self.enum_type.setParseAction(self.process_enum)
         self.enum_decl = self.enum_type + semi
 
-        self.parser = (self.typeDecl | self.variableDecl | self.functionDecl)
+        self.parser = (self.type_decl | self.variable_decl |
+                       self.function_decl)
         return self.parser
 
     def process_declarator(self, decl):
@@ -873,7 +893,7 @@ class CParser():
         """
         toks = []
         name = None
-        logger.debug("DECL:", decl)
+        logger.debug("DECL: {}".format(decl))
         if 'call_conv' in decl and len(decl['call_conv']) > 0:
             toks.append(decl['call_conv'])
 
@@ -930,7 +950,7 @@ class CParser():
             struct s (*)(int, int*)   =>  (None, ["struct s", ((None, ['int']),
                                            (None, ['int', '*'])), '*'])
         """
-        logger.debug("PROCESS TYPE/DECL:", typ, decl)
+        logger.debug("PROCESS TYPE/DECL: {}/{}".format(typ, decl))
         (name, decl) = self.process_declarator(decl)
         return (name, [typ] + decl)
 
@@ -938,7 +958,7 @@ class CParser():
         """
         """
         try:
-            logger.debug("ENUM:", t)
+            logger.debug("ENUM: {}".format(t))
             if t.name == '':
                 n = 0
                 while True:
@@ -949,7 +969,7 @@ class CParser():
             else:
                 name = t.name[0]
 
-            logger.debug("  name:", name)
+            logger.debug("  name: {}".format(name))
 
             if name not in self.defs['enums']:
                 i = 0
@@ -963,28 +983,28 @@ class CParser():
                     enum[v.name] = i
                     self.add_def('values', v.name, i)
                     i += 1
-                logger.debug("  members:", enum)
+                logger.debug("  members: {}".format(enum))
                 self.add_def('enums', name, enum)
                 self.add_def('types', 'enum '+name, ('enum', name))
             return ('enum ' + name)
         except:
-            logger.exception("Error processing enum:", t)
+            logger.exception("Error processing enum: {}".format(t))
 
     def process_function(self, s, l, t):
-        logger.debug("FUNCTION", t, t.keys())
+        logger.debug("FUNCTION {} : {}".format(t, t.keys()))
 
         try:
             (name, decl) = self.process_type(t.type, t.decl[0])
             if len(decl) == 0 or type(decl[-1]) != tuple:
-                logger.error(t)
+                logger.error('{}'.format(t))
                 mess = "Incorrect declarator type for function definition."
                 raise Exception(mess)
-            logger.debug("  name:", name)
-            logger.debug("  sig:", decl)
+            logger.debug("  name: {}".format(name))
+            logger.debug("  sig: {}".format(decl))
             self.add_def('functions', name, (decl[:-1], decl[-1]))
 
         except Exception:
-            logger.exception("Error processing function:", t)
+            logger.exception("Error processing function: {}".format(t))
 
     def packing_at(self, line):
         """Return the structure packing value at the given line number.
@@ -1007,7 +1027,7 @@ class CParser():
             # Check for extra packing rules
             packing = self.packing_at(lineno(l, s))
 
-            logger.debug(str_typ.upper(), t.name, t)
+            logger.debug('{} {} {}'.format(str_typ.upper(), t.name, t))
             if t.name == '':
                 n = 0
                 while True:
@@ -1020,7 +1040,7 @@ class CParser():
                     sname = t.name
                 else:
                     sname = t.name[0]
-            logger.debug("  NAME:", sname)
+            logger.debug("  NAME: {}".format(sname))
             if (len(t.members) > 0 or sname not in self.defs[str_typ+'s'] or
                     self.defs[str_typ+'s'][sname] == {}):
                 logger.debug("  NEW " + str_typ.upper())
@@ -1028,48 +1048,51 @@ class CParser():
                 for m in t.members:
                     typ = m[0].type
                     val = self.eval_expr(m)
-                    logger.debug("    member:", m, m[0].keys(), m[0].decl_list)
+                    logger.debug("    member: {}, {}, {}".format(
+                                 m, m[0].keys(), m[0].decl_list))
                     if len(m[0].decl_list) == 0:  # anonymous member
                         struct.append((None, [typ], None))
                     for d in m[0].decl_list:
                         (name, decl) = self.process_type(typ, d)
                         struct.append((name, decl, val))
-                        logger.debug("      ", name, decl, val)
+                        logger.debug("      {} {} {}".format(name, decl, val))
                 self.add_def(str_typ+'s', sname,
                              {'pack': packing, 'members': struct})
                 self.add_def('types', str_typ+' '+sname, (str_typ, sname))
             return str_typ + ' ' + sname
 
         except Exception:
-            logger.exception('Error processing struct:', t)
+            logger.exception('Error processing struct: {}'.format(t))
 
     def process_variable(self, s, l, t):
-        logger.debug("VARIABLE:", t)
+        logger.debug("VARIABLE: {}".format(t))
         try:
             val = self.eval_expr(t[0])
             for d in t[0].decl_list:
                 (name, typ) = self.process_type(t[0].type, d)
                 # This is a function prototype
                 if type(typ[-1]) is tuple:
-                    logger.debug("  Add function prototype:", name, typ, val)
+                    logger.debug("  Add function prototype: {} {} {}".format(
+                                 name, typ, val))
                     self.add_def('functions', name, (typ[:-1], typ[-1]))
                 # This is a variable
                 else:
-                    logger.debug("  Add variable:", name, typ, val)
+                    logger.debug("  Add variable: {} {} {}".format(name,
+                                 typ, val))
                     self.add_def('variables', name, (val, typ))
                     self.add_def('values', name, val)
 
         except Exception:
-            logger.exception('Error processing variable: ', t)
+            logger.exception('Error processing variable: {}'.format(t))
 
     def process_typedef(self, s, l, t):
         """
         """
-        logger.debug("TYPE:", t)
+        logger.debug("TYPE: {}".format(t))
         typ = t.type
         for d in t.decl_list:
             (name, decl) = self.process_type(typ, d)
-            logger.debug("  ", name, decl)
+            logger.debug("  {} {}".format(name, decl))
             self.add_def('types', name, decl)
 
     def eval_expr(self, toks):
@@ -1081,7 +1104,7 @@ class CParser():
         implement...
 
         """
-        logger.debug("Eval:", toks)
+        logger.debug("Eval: {}".format(toks))
         try:
             if istext(toks):
                 val = self.eval(toks, None, self.defs['values'])
@@ -1095,7 +1118,7 @@ class CParser():
             return val
 
         except Exception:
-            logger.exception("    failed eval:", toks)
+            logger.exception("    failed eval: {}".format(toks))
             return None
 
     def eval(self, expr, *args):
@@ -1224,12 +1247,12 @@ class CParser():
 
 HAS_PYPARSING = False
 try:
-    from pyparsing import (ParserElement, ParseResults, Forward, Optional,
-                           Word, WordStart, WordEnd, Keyword, Regex, Literal,
-                           SkipTo, ZeroOrMore, OneOrMore, Group, LineEnd,
-                           stringStart, quotedString, oneOf, nestedExpr,
-                           delimitedList, restOfLine, cStyleComment,
-                           alphas, alphanums, hexnums, lineno)
+    from .thirdparty.pyparsing import \
+        (ParserElement, ParseResults, Forward, Optional, Word, WordStart,
+         WordEnd, Keyword, Regex, Literal, SkipTo, ZeroOrMore, OneOrMore,
+         Group, LineEnd, stringStart, quotedString, oneOf, nestedExpr,
+         delimitedList, restOfLine, cStyleComment, alphas, alphanums, hexnums,
+         lineno)
     ParserElement.enablePackrat()
     HAS_PYPARSING = True
 except:
@@ -1273,10 +1296,10 @@ if HAS_PYPARSING:
     lparen = Literal("(").ignore(quotedString).suppress()
     rparen = Literal(")").ignore(quotedString).suppress()
     hexint = Regex('-?0[xX][{}]+[UL]*'.format(hexnums)).setParseAction(lambda t: t[0].rstrip('UL'))
-    decint = Regex(r'-?\d+[UL]*').setParseAction(lambda t: t[0].rstrip('UL'))
+    decint = Regex('-?[0-9]+[UL]*').setParseAction(lambda t: t[0].rstrip('UL'))
     integer = (hexint | decint)
     floating = Regex(r'-?((\d+(\.\d*)?)|(\.\d+))([eE]-?\d+)?')
-    number = (hexint | floating | decint)
+    number = (integer | floating)
     bitfieldspec = ":" + integer
     bi_operator = oneOf("+ - / * | & || && ! ~ ^ % == != > < >= <= -> . :: << >> = ? :")
     uni_right_operator = oneOf("++ --")
