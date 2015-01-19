@@ -113,6 +113,7 @@ class TestMacroParsing(object):
         assert 'M' in macros and macros['M'] == ''
         assert 'N' in macros and macros['N'] == 'n' and values['N'] is None
 
+        # Decimal integer
         assert ('MACRO_D1' in macros and macros['MACRO_D1'] == '1' and
                 values['MACRO_D1'] == 1)
         assert ('MACRO_D2' in macros and macros['MACRO_D2'] == '2U' and
@@ -120,6 +121,7 @@ class TestMacroParsing(object):
         assert ('MACRO_D3' in macros and macros['MACRO_D3'] == '3UL' and
                 values['MACRO_D3'] == 3)
 
+        # Bit shifted decimal integer
         assert ('MACRO_SD1' in macros and
                 macros['MACRO_SD1'] == '(1 << 1)' and
                 values['MACRO_SD1'] == 2)
@@ -130,6 +132,7 @@ class TestMacroParsing(object):
                 macros['MACRO_SD3'] == '(3UL << 3)' and
                 values['MACRO_SD3'] == 24)
 
+        # Hexadecimal integer
         assert ('MACRO_H1' in macros and
                 macros['MACRO_H1'] == '0x000000' and
                 values['MACRO_H1'] == 0)
@@ -140,6 +143,7 @@ class TestMacroParsing(object):
                 macros['MACRO_H3'] == '0X000002UL' and
                 values['MACRO_H3'] == 2)
 
+        # Bit shifted hexadecimal integer
         assert ('MACRO_SH1' in macros and
                 macros['MACRO_SH1'] == '(0x000000 << 1)' and
                 values['MACRO_SH1'] == 0)
@@ -150,6 +154,7 @@ class TestMacroParsing(object):
                 macros['MACRO_SH3'] == '(0X000002UL << 3)' and
                 values['MACRO_SH3'] == 16)
 
+        # Floating point value
         assert ('MACRO_F1' in macros and
                 macros['MACRO_F1'] == '1.0' and
                 values['MACRO_F1'] == 1.0)
@@ -160,20 +165,84 @@ class TestMacroParsing(object):
                 macros['MACRO_F3'] == '-1.1E-1' and
                 values['MACRO_F3'] == -0.11)
 
+        # String macro
         assert ('MACRO_S' in macros and macros['MACRO_S'] == '"test"' and
                 values['MACRO_S'] == 'test')
 
+        # Nested macros
         assert ('NESTED' in macros and macros['NESTED'] == '1' and
                 values['NESTED'] == 1)
         assert ('NESTED2' in macros and macros['NESTED2'] == '1' and
                 values['NESTED2'] == 1)
         assert 'MACRO_N' in macros and macros['MACRO_N'] == '1 2'
 
-    def test_macro_function(self):
-
-        pass
+        # Muliline macro
+        assert 'MACRO_ML' in macros
 
     def test_conditionals(self):
+
+        path = os.path.join(self.h_dir, 'macro_conditionals.h')
+        self.parser.load_file(path)
+        self.parser.remove_comments(path)
+        self.parser.preprocess(path)
+        self.parser.parse_defs(path)
+
+        macros = self.parser.defs['macros']
+        stream = self.parser.files[path]
+
+        # Test if defined conditional
+        assert 'DEFINE_IF' in macros
+        assert '  int DECLARE_IF;\n' in stream
+        assert 'NO_DEFINE_IF' not in macros
+        assert '  int NO_DECLARE_IF;\n' not in stream
+
+        # Test ifdef conditional
+        assert 'DEFINE_IFDEF' in macros
+        assert '  int DECLARE_IFDEF;\n' in stream
+        assert 'NO_DEFINE_IFDEF' not in macros
+        assert '  int NO_DECLARE_IFDEF;\n' not in stream
+
+        # Test if !defined
+        assert 'DEFINE_IFN' in macros
+        assert '  int DECLARE_IFN;\n' in stream
+        assert 'NO_DEFINE_IFN' not in macros
+        assert '  int NO_DECLARE_IFN;\n' not in stream
+
+        # Test ifndef
+        assert 'DEFINE_IFNDEF' in macros
+        assert '  int DECLARE_IFNDEF;\n' in stream
+        assert 'NO_DEFINE_IFNDEF' not in macros
+        assert '  int NO_DECLARE_IFNDEF;\n' not in stream
+
+        # Test elif
+        assert 'DEFINE_ELIF' in macros
+        assert '  int DECLARE_ELIF;\n' in stream
+        assert 'NO_DEFINE_ELIF' not in macros
+        assert '  int NO_DECLARE_ELIF;\n' not in stream
+
+        # Test else
+        assert 'DEFINE_ELSE' in macros
+        assert '  int DECLARE_ELSE;\n' in stream
+        assert 'NO_DEFINE_ELSE' not in macros
+        assert '  int NO_DECLARE_ELSE;\n' not in stream
+
+        # Test nested
+        assert 'DEFINE_N1' in macros
+        assert '  int DECLARE_N1;\n' in stream
+        assert 'NO_DEFINE_N2' not in macros
+        assert 'DEFINE_N2' not in macros
+
+        assert 'DEFINE_N3' in macros
+        assert 'NO_DEFINE_N3' not in macros
+        assert '  int NO_DECLARE_N3;\n' not in stream
+
+        # Test logical
+        assert 'DEFINE_LOG' in macros
+        assert '  int DECLARE_LOG;\n' in stream
+        assert 'NO_DEFINE_LOG' not in macros
+        assert 'NO_DEFINE_LOG' not in macros
+
+    def test_macro_function(self):
 
         pass
 

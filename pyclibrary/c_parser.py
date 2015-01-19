@@ -21,6 +21,7 @@ import logging
 from inspect import cleandoc
 from future.utils import istext
 from ast import literal_eval
+from traceback import format_exc
 
 logger = logging.getLogger(__name__)
 
@@ -599,14 +600,13 @@ class CParser(object):
             Literal('&&').setParseAction(lambda: ' and ') |
             Literal('||').setParseAction(lambda: ' or ') |
             Word(alphas + '_', alphanums + '_').setParseAction(lambda: '0'))
-        expr2 = macro_diffs.transformString(expr)
+        expr2 = macro_diffs.transformString(expr).strip()
 
         try:
-            # XXXX try using litteral_eval
-            ev = bool(literal_eval(expr2))
+            ev = bool(eval(expr2))
         except Exception:
-            mess = "Error evaluating preprocessor expression: {} [{}]"
-            logger.debug(mess.format(expr, expr2))
+            mess = "Error evaluating preprocessor expression: {} [{}]\n{}"
+            logger.debug(mess.format(expr, repr(expr2), format_exc()))
             ev = False
         return ev
 

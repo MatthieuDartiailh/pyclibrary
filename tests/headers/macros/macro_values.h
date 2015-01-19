@@ -1,4 +1,4 @@
-/* This is file is used to test the removal of C style comments */
+/* This is file is used to test the processing of macro values. */
 
 #define M
 #define N n
@@ -37,3 +37,7 @@
 #define NESTED MACRO
 #define NESTED2 NESTED
 #define MACRO_N MACRO MACRO2
+
+// Multiline macro
+#define MACRO_ML MACRO\
+                  MACRO2
