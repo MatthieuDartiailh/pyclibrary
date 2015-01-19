@@ -36,8 +36,8 @@
 #define MACRO2 2
 #define NESTED MACRO
 #define NESTED2 NESTED
-#define MACRO_N MACRO MACRO2
+#define MACRO_N MACRO + MACRO2
 
 // Multiline macro
 #define MACRO_ML MACRO\
-                  MACRO2
+                  *MACRO2

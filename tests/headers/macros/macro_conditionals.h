@@ -93,3 +93,10 @@
   #define DEFINE_LOG
   int DECLARE_LOG;
 #endif
+
+// Test undef
+#define UNDEF
+#ifdef UNDEF
+    #define DEFINE_UNDEF
+#endif
+#undef UNDEF

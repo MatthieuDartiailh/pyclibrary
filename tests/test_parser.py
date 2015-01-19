@@ -174,10 +174,11 @@ class TestMacroParsing(object):
                 values['NESTED'] == 1)
         assert ('NESTED2' in macros and macros['NESTED2'] == '1' and
                 values['NESTED2'] == 1)
-        assert 'MACRO_N' in macros and macros['MACRO_N'] == '1 2'
+        assert ('MACRO_N' in macros and macros['MACRO_N'] == '1 + 2' and
+                values['MACRO_N'] == 3)
 
         # Muliline macro
-        assert 'MACRO_ML' in macros
+        assert 'MACRO_ML' in macros and values['MACRO_ML'] == 2
 
     def test_conditionals(self):
 
@@ -242,9 +243,40 @@ class TestMacroParsing(object):
         assert 'NO_DEFINE_LOG' not in macros
         assert 'NO_DEFINE_LOG' not in macros
 
+        # Test undef
+        assert 'DEFINE_UNDEF' in macros
+        assert 'UNDEF' not in macros
+
     def test_macro_function(self):
 
-        pass
+        path = os.path.join(self.h_dir, 'macro_functions.h')
+        self.parser.load_file(path)
+        self.parser.remove_comments(path)
+        self.parser.preprocess(path)
+        self.parser.parse_defs(path)
+
+        values = self.parser.defs['values']
+        fnmacros = self.parser.defs['fnmacros']
+        stream = self.parser.files[path]
+
+        # Test macro declaration.
+        assert 'CARRE' in fnmacros
+        assert 'int carre = 2*2;' in stream
+
+        # Test nested macro declaration.
+        assert 'MAKEINTRESOURCEA' in fnmacros
+        assert 'MAKEINTRESOURCEW' in fnmacros
+        assert 'MAKEINTRESOURCE' in fnmacros
+        assert fnmacros['MAKEINTRESOURCE'] == fnmacros['MAKEINTRESOURCEA']
+        assert 'int x = ((LPSTR)((ULONG_PTR)((WORD)(4))))'
+
+        # Test macro relying on macro value.
+        assert 'BIT' in values and values['BIT'] == 1
+        assert '((y) |= (0x01))' in stream
+
+        # Test multiple parameters macros
+        assert 'SETBITS' in fnmacros
+        assert 'int z1, z2 = (((1) |= (0x01)), ((2) |= (0x01)));' in stream
 
     def test_pragmas(self):
 

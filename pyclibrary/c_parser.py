@@ -661,6 +661,8 @@ class CParser(object):
         return (''.join(parts), arg_order)
 
     def expand_macros(self, line):
+        """
+        """
         reg = re.compile(r'("(\\"|[^"])*")|(\b(\w+)\b)')
         parts = []
         start = 0
@@ -674,7 +676,14 @@ class CParser(object):
                 parts.append(line[start:m.start(N)])
                 start = m.end(N)
                 parts.append(macros[name])
-            elif name in fnmacros:
+
+        parts.append(line[start:])
+        line = ''.join(parts)
+        parts = []
+        start = 0
+        for m in reg.finditer(line):
+            name = m.groups()[N]
+            if name in fnmacros:
                 # If function macro expansion fails, just ignore it.
                 try:
                     exp, end = self.expand_fn_macro(name, line[m.end(N):])
@@ -686,6 +695,7 @@ class CParser(object):
                         mess = "Function macro expansion failed: {}, {}"
                         logger.error(mess.format(name, line[m.end(N):]))
                         raise
+
         parts.append(line[start:])
         return ''.join(parts)
 
@@ -703,9 +713,9 @@ class CParser(object):
             raise Exception(0,  mess.format(name))
 
         args, start, end = res[0]
-        newStr = defn[0].format(tuple([args[0][i] for i in defn[1]]))
+        new_str = defn[0].format(*[args[0][i] for i in defn[1]])
 
-        return (newStr, end)
+        return (new_str, end)
 
     def parse_defs(self, path, return_unparsed=False):
         """Scan through the named file for variable, struct, enum, and function
