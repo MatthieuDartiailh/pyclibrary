@@ -661,42 +661,49 @@ class CParser(object):
         return (''.join(parts), arg_order)
 
     def expand_macros(self, line):
-        """
+        """Expand all the macro expressions in a string.
+
+        Faulty calls to macro function are left untouched.
+
         """
         reg = re.compile(r'("(\\"|[^"])*")|(\b(\w+)\b)')
         parts = []
-        start = 0
         # The group number to check for macro names
         N = 3
         macros = self.defs['macros']
         fnmacros = self.defs['fnmacros']
-        for m in reg.finditer(line):
+        while True:
+            m = reg.search(line)
+            if not m:
+                break
             name = m.groups()[N]
             if name in macros:
-                parts.append(line[start:m.start(N)])
-                start = m.end(N)
+                parts.append(line[:m.start(N)])
+                line = line[m.end(N):]
                 parts.append(macros[name])
 
-        parts.append(line[start:])
-        line = ''.join(parts)
-        parts = []
-        start = 0
-        for m in reg.finditer(line):
-            name = m.groups()[N]
-            if name in fnmacros:
+            elif name in fnmacros:
                 # If function macro expansion fails, just ignore it.
                 try:
                     exp, end = self.expand_fn_macro(name, line[m.end(N):])
-                    parts.append(line[start:m.start(N)])
-                    start = end + m.end(N)
-                    parts.append(exp)
                 except:
+                    exp = name
+                    end = 0
                     if sys.exc_info()[1][0] != 0:
                         mess = "Function macro expansion failed: {}, {}"
                         logger.error(mess.format(name, line[m.end(N):]))
-                        raise
 
-        parts.append(line[start:])
+                parts.append(line[:m.start(N)])
+                start = end + m.end(N)
+                line = line[start:]
+                parts.append(exp)
+
+            else:
+                start = m.end(N)
+                parts.append(line[:start])
+                line = line[start:]
+
+        parts.append(line)
         return ''.join(parts)
 
     def expand_fn_macro(self, name, text):
@@ -713,7 +720,8 @@ class CParser(object):
             raise Exception(0,  mess.format(name))
 
         args, start, end = res[0]
-        new_str = defn[0].format(*[args[0][i] for i in defn[1]])
+        args = [self.expand_macros(arg) for arg in args[0]]
+        new_str = defn[0].format(*[args[i] for i in defn[1]])
 
         return (new_str, end)
 

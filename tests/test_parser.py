@@ -263,20 +263,25 @@ class TestMacroParsing(object):
         assert 'CARRE' in fnmacros
         assert 'int carre = 2*2;' in stream
 
-        # Test nested macro declaration.
+        # Test defining a macro function as an alias for another one.
         assert 'MAKEINTRESOURCEA' in fnmacros
         assert 'MAKEINTRESOURCEW' in fnmacros
         assert 'MAKEINTRESOURCE' in fnmacros
         assert fnmacros['MAKEINTRESOURCE'] == fnmacros['MAKEINTRESOURCEA']
         assert 'int x = ((LPSTR)((ULONG_PTR)((WORD)(4))))'
 
-        # Test macro relying on macro value.
+        # Test using a macro value in a macro function call
         assert 'BIT' in values and values['BIT'] == 1
         assert '((y) |= (0x01))' in stream
 
-        # Test multiple parameters macros
+        # Test defining a macro function calling other macros (values and
+        # functions)
         assert 'SETBITS' in fnmacros
         assert 'int z1, z2 = (((1) |= (0x01)), ((2) |= (0x01)));' in stream
+
+        # Test defining a macro function calling nested macro functions
+        assert 'SETBIT_AUTO' in fnmacros
+        assert 'int z3 = ((((3) |= (0x01)), ((3) |= (0x01))));' in stream
 
     def test_pragmas(self):
 
