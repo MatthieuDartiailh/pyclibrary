@@ -86,8 +86,6 @@ class CParser(object):
 
     cache :
 
-    verbose :
-
     *args :
         Extra parameters may be used to specify the starting state of the
         parser. For example, one could provide a set of missing type
@@ -131,6 +129,8 @@ class CParser(object):
         self.defs = {}
         # Holds definitions grouped by the file they came from
         self.file_defs = {}
+        # Description of the struct packing rules as defined by #pragma pack
+        self.pack_list = {}
 
         self.init_opts = args.copy()
         self.init_opts['files'] = []
@@ -142,8 +142,6 @@ class CParser(object):
         self.file_order = []
         self.files = {}
 
-        # Description of the struct packing rules as defined by #pragma pack
-        self.pack_list = {}
         if files is not None:
             if type(files) is str:
                 files = [files]
@@ -544,13 +542,21 @@ class CParser(object):
                             logger.exception(mess.format(macroName.strip()))
 
                 # Check for changes in structure packing
+                # Support only for #pragme pack (with all its variants
+                # save show), None is used to signal that the default packing
+                # is used.
+                # Those two definition disagree :
+                # https://gcc.gnu.org/onlinedocs/gcc/Structure-Packing-Pragmas.html
+                # http://msdn.microsoft.com/fr-fr/library/2e70t5y1.aspx
+                # The current implementation follows the MSVC doc.
                 elif d == 'pragma':
                     if not if_true[-1]:
                         continue
-                    m = re.match(r'\s+pack\s*\(([^\)]+)\)', rest)
-                    if m is None:
+                    m = re.match(r'\s+pack\s*\(([^\)]*)\)', rest)
+                    if not m:
                         continue
-                    opts = [s.strip() for s in m.groups()[0].split(',')]
+                    if m.groups():
+                        opts = [s.strip() for s in m.groups()[0].split(',')]
 
                     pushpop = id = val = None
                     for o in opts:
@@ -561,8 +567,7 @@ class CParser(object):
                         else:
                             id = o
 
-                    if val is not None:
-                        packing = val
+                    packing = val
 
                     if pushpop == 'push':
                         pack_stack.append((packing, id))
@@ -571,16 +576,14 @@ class CParser(object):
                             pack_stack.pop()
                         else:
                             ind = None
-                            for i, s in enumerate(pack_stack):
+                            for j, s in enumerate(pack_stack):
                                 if s[1] == id:
-                                    ind = i
+                                    ind = j
                                     break
                             if ind is not None:
                                 pack_stack = pack_stack[:ind]
                         if val is None:
                             packing = pack_stack[-1][0]
-                    else:
-                        packing = int(opts[0])
 
                     mess = ">> Packing changed to {} at line {}"
                     logger.debug(mess.format(str(packing), i))

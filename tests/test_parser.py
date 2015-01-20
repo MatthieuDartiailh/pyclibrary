@@ -285,7 +285,26 @@ class TestMacroParsing(object):
 
     def test_pragmas(self):
 
-        pass
+        path = os.path.join(self.h_dir, 'pragmas.h')
+        self.parser.load_file(path)
+        self.parser.remove_comments(path)
+        self.parser.preprocess(path)
+        self.parser.parse_defs(path)
+
+        stream = self.parser.files[path]
+        packings = self.parser.pack_list[path]
+
+        # Check all pragmas instructions have been removed.
+        assert stream.strip() == ''
+
+        assert packings[1] == (3, None)
+        assert packings[2] == (6, 4)
+        assert packings[3] == (9, 16)
+        assert packings[4] == (12, None)
+        assert packings[5] == (15, None)
+        assert packings[6] == (16, 4)
+        assert packings[7] == (19, 16)
+        assert packings[8] == (20, None)
 
 
 class TestEnumParsing(object):
