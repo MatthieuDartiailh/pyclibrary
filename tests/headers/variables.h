@@ -31,6 +31,7 @@ long double dbl = - 1E1;
 const int int_const = SQUARE(2);
 static int int_stat = SQUARE(2);
 static const int int_con_stat = SQUARE(2);
+extern int int_extern = SQUARE(2);
 
 // String
 char* str1 = "normal string";
@@ -39,10 +40,12 @@ static const char* const str3 = "string with comment: /*comment inside string*/"
 char* str4 = "string with define #define MACRO5 macro5_in_string ";
 char* str5 = "string with \"escaped quotes\" ";
 
-// Test more init
-int x1 = (5 + 3 * 0x1) / 8.0;
+// Test complex evaluation.
+float x1 = (5 + 3 * 0x1) / 8.0;
+
+// Test type casting handling.
 int x2 = (typeCast)0x544 <<16;
 
 // Test array
-int str_w[2] = {0x1, 3.1415e6};
+float array[2] = {0x1, 3.1415e6};
 static const int * const (**intJunk[4]);

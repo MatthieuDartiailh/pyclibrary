@@ -13,6 +13,7 @@ from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 
 import os
+from pytest import raises
 from pyclibrary.c_parser import CParser
 
 
@@ -328,75 +329,192 @@ class TestParsing(object):
 
         # Integers
         assert ('short1' in variables and
-                variables['short1'] == (1, ['signed short']))
+                variables['short1'] == (1, ('signed short',)))
         assert ('short_int' in variables and
-                variables['short_int'] == (1, ['short int']))
+                variables['short_int'] == (1, ('short int',)))
         assert ('short_un' in variables and
-                variables['short_un'] == (1, ['unsigned short']))
+                variables['short_un'] == (1, ('unsigned short',)))
         assert ('short_int_un' in variables and
-                variables['short_int_un'] == (1, ['unsigned short int']))
+                variables['short_int_un'] == (1, ('unsigned short int',)))
         assert ('int1' in variables and
-                variables['int1'] == (1, ['int']))
+                variables['int1'] == (1, ('int',)))
         assert ('un' in variables and
-                variables['un'] == (1, ['unsigned']))
+                variables['un'] == (1, ('unsigned',)))
         assert ('int_un' in variables and
-                variables['int_un'] == (1, ['unsigned int']))
+                variables['int_un'] == (1, ('unsigned int',)))
         assert ('long1' in variables and
-                variables['long1'] == (1, ['long']))
+                variables['long1'] == (1, ('long',)))
         assert ('long_int' in variables and
-                variables['long_int'] == (1, ['long int']))
+                variables['long_int'] == (1, ('long int',)))
         assert ('long_un' in variables and
-                variables['long_un'] == (1, ['unsigned long']))
+                variables['long_un'] == (1, ('unsigned long',)))
         assert ('long_int_un' in variables and
-                variables['long_int_un'] == (1, ['unsigned long int']))
+                variables['long_int_un'] == (1, ('unsigned long int',)))
         assert ('int64' in variables and
-                variables['int64'] == (1, ['__int64']))
+                variables['int64'] == (1, ('__int64',)))
         assert ('int64_un' in variables and
-                variables['int64_un'] == (1, ['unsigned __int64']))
+                variables['int64_un'] == (1, ('unsigned __int64',)))
         assert ('long_long' in variables and
-                variables['long_long'] == (1, ['long long']))
+                variables['long_long'] == (1, ('long long',)))
         assert ('long_long_int' in variables and
-                variables['long_long_int'] == (1, ['long long int']))
+                variables['long_long_int'] == (1, ('long long int',)))
         assert ('long_long_un' in variables and
-                variables['long_long_un'] == (1, ['unsigned long long']))
+                variables['long_long_un'] == (1, ('unsigned long long',)))
         assert ('long_long_int_un' in variables and
                 variables['long_long_int_un'] == (1,
-                                                  ['unsigned long long int']))
+                                                  ('unsigned long long int',)))
 
         # Floating point number
-        assert ('fl' in variables and variables['fl'] == (1., ['float']))
-        assert ('db' in variables and variables['db'] == (0.1, ['double']))
+        assert ('fl' in variables and variables['fl'] == (1., ('float',)))
+        assert ('db' in variables and variables['db'] == (0.1, ('double',)))
         assert ('dbl' in variables and
-                variables['dbl'] == (-10., ['long double']))
+                variables['dbl'] == (-10., ('long double',)))
 
         # Const and static modif
         assert ('int_const' in variables and
-                variables['int_const'] == (4, ['int']))
+                variables['int_const'] == (4, ('int',)))
         assert ('int_stat' in variables and
-                variables['int_stat'] == (4, ['int']))
+                variables['int_stat'] == (4, ('int',)))
         assert ('int_con_stat' in variables and
-                variables['int_con_stat'] == (4, ['int']))
+                variables['int_con_stat'] == (4, ('int',)))
+        assert ('int_extern' in variables and
+                variables['int_extern'] == (4, ('int',)))
 
         # String
         assert ('str1' in variables and
-                variables['str1'] == ("normal string", ['char', '*']))
+                variables['str1'] == ("normal string", ('char', '*')))
         assert ('str2' in variables and
                 variables['str2'] == ("string with macro: INT",
-                                      ['char', '**']))
+                                      ('char', '**')))
         assert ('str3' in variables and
                 variables['str3'] == ("string with comment: /*comment inside string*/",
-                                      ['char', '*']))
+                                      ('char', '*')))
         assert ('str4' in variables and
                 variables['str4'] == ("string with define #define MACRO5 macro5_in_string ",
-                                      ['char', '*']))
+                                      ('char', '*')))
         assert ('str5' in variables and
                 variables['str5'] == ("string with \"escaped quotes\" ",
-                                      ['char', '*']))
+                                      ('char', '*')))
 
-    def test_struct(self):
+        # Test complex evaluation
+        assert ('x1' in variables and
+                variables['x1'] == (1., ('float',)))
 
-        path = os.path.join(self.h_dir, 'variables.h')
+        # Test type casting handling.
+        assert ('x2' in variables and
+                variables['x2'] == (88342528, ('int',)))
+
+        # Test array handling
+        assert ('array' in variables and
+                variables['array'] == ([1, 3141500.0], ('float', [2])))
+        assert ('intJunk' in variables and
+                variables['intJunk'] == (None, (u'int', u'*', u'**', [4])))
+
+    # No structure, no unions, no enum
+    def test_typedef(self):
+
+        path = os.path.join(self.h_dir, 'typedefs.h')
         self.parser.load_file(path)
         self.parser.process_all()
 
-        self.parser.print_all()
+        types = self.parser.defs['types']
+        variables = self.parser.defs['variables']
+
+        # Test defining types from base types.
+        assert ('typeChar' in types and types['typeChar'] == ('char', '**'))
+        assert ('typeInt' in types and types['typeInt'] == ('int',))
+        assert ('typeIntPtr' in types and types['typeIntPtr'] == ('int', '*'))
+        assert ('typeIntArr' in types and types['typeIntArr'] == ('int', [10]))
+        assert ('typeTypeInt' in types and
+                types['typeTypeInt'] == ('typeInt',))
+        assert not self.parser.is_fund_type('typeTypeInt')
+        assert self.parser.eval_type(['typeTypeInt']) == ('int',)
+        assert ('ULONG' in types and types['ULONG'] == ('unsigned long',))
+
+        # Test using custom type.
+        assert ('ttip5' in variables and
+                variables['ttip5'] == (None, ('typeTypeInt', '*', [5])))
+
+        # Handling undefined types
+        assert ('SomeOtherType' in types and
+                types['SomeOtherType'] == ('someType',))
+        assert ('x' in variables and variables['x'] == (None, ('undefined',)))
+        assert not self.parser.is_fund_type('SomeOtherType')
+        with raises(Exception):
+            self.parser.eval_type(('undefined',))
+
+        # Testing recursive defs
+        assert 'recType1' in types
+        assert 'recType2' in types
+        assert 'recType3' in types
+        with raises(Exception):
+            self.parser.eval_type(('recType3',))
+
+    def test_enums(self):
+
+        path = os.path.join(self.h_dir, 'enums.h')
+        self.parser.load_file(path)
+        self.parser.process_all()
+
+        enums = self.parser.defs['enums']
+        types = self.parser.defs['types']
+        variables = self.parser.defs['variables']
+        assert ('enum_name' in enums and 'enum enum_name' in types)
+        assert enums['enum_name'] == {'enum1': 2, 'enum2': 6, 'enum3': 7,
+                                      'enum4': 8}
+        assert types['enum enum_name'] == ('enum', 'enum_name',)
+        assert ('enum_inst' in variables and
+                variables['enum_inst'] == (None, ('enum enum_name',)))
+
+        assert 'anon_enum0' in enums
+
+    def test_struct(self):
+
+        path = os.path.join(self.h_dir, 'structs.h')
+        self.parser.load_file(path)
+        self.parser.process_all()
+
+        structs = self.parser.defs['structs']
+        types = self.parser.defs['types']
+        variables = self.parser.defs['variables']
+
+        # Test creating a structure using only base types.
+        assert ('struct_name' in structs and 'struct struct_name' in types)
+        assert {'members': [('x', ('int',), 1),
+                            ('y', ('type_type_int',), None),
+                            ('str', ('char', [10]), None)],
+                'pack': None} == structs['struct_name']
+        assert ('struct_inst' in variables and
+                variables['struct_inst'] == (None, ('struct struct_name',)))
+
+        # Test creating a pointer type from a structure.
+        assert ('struct_name_ptr' in types and
+                types['struct_name_ptr'] == ('struct struct_name', '*'))
+
+        assert ('struct_name2_ptr' in types and
+                types['struct_name2_ptr'] == ('struct anon_struct0',
+                                              '*'))
+
+        # Test declaring a recursive structure.
+        assert ('recursive_struct' in structs and
+                'struct recursive_struct' in types)
+        assert {'members': [('next', ('struct recursive_struct', '*'), None)],
+                'pack': None} == structs['recursive_struct']
+
+        # Test declaring near and far pointers.
+        assert 'tagWNDCLASSEXA' in structs
+        assert ('NPWNDCLASSEXA' in types and
+                types['NPWNDCLASSEXA'] == ('struct tagWNDCLASSEXA', '*'))
+
+        # Test altering the packing of a structure.
+        assert ('struct_name_p' in structs and 'struct struct_name_p' in types)
+        assert {'members': [('x', ('int',), None),
+                            ('y', ('type_type_int',), None),
+                            ('str', ('char', [10]), "brace }  \0")],
+                'pack': 16} == structs['struct_name_p']
+
+    def test_unions(self):
+        pass
+
+    def test_functions(self):
+        pass

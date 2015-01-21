@@ -19,7 +19,7 @@ import re
 import os
 import logging
 from inspect import cleandoc
-from future.utils import istext
+from future.utils import istext, isbytes
 from ast import literal_eval
 from traceback import format_exc
 
@@ -871,7 +871,7 @@ class CParser(object):
                   Optional(Literal('=').suppress() +
                            (expression('value') |
                             (lbrace +
-                             Group(delimitedList(expression))('arrayValues') +
+                             Group(delimitedList(expression))('array_values') +
                              rbrace
                              )
                             )
@@ -994,7 +994,7 @@ class CParser(object):
         """
         logger.debug("PROCESS TYPE/DECL: {}/{}".format(typ, decl))
         (name, decl) = self.process_declarator(decl)
-        return (name, [typ] + decl)
+        return (name, tuple([typ] + decl))
 
     def process_enum(self, s, l, t):
         """
@@ -1004,7 +1004,7 @@ class CParser(object):
             if t.name == '':
                 n = 0
                 while True:
-                    name = 'anonEnum{}'.format(n)
+                    name = 'anon_enum{}'.format(n)
                     if name not in self.defs['enums']:
                         break
                     n += 1
@@ -1089,7 +1089,7 @@ class CParser(object):
                 struct = []
                 for m in t.members:
                     typ = m[0].type
-                    val = self.eval_expr(m)
+                    val = self.eval_expr(m[0].value)
                     logger.debug("    member: {}, {}, {}".format(
                                  m, m[0].keys(), m[0].decl_list))
                     if len(m[0].decl_list) == 0:  # anonymous member
@@ -1152,11 +1152,11 @@ class CParser(object):
         """
         logger.debug("Eval: {}".format(toks))
         try:
-            if istext(toks):
+            if istext(toks) or isbytes(toks):
                 val = self.eval(toks, None, self.defs['values'])
-            elif toks.arrayValues != '':
+            elif toks.array_values != '':
                 val = [self.eval(x, None, self.defs['values'])
-                       for x in toks.arrayValues]
+                       for x in toks.array_values]
             elif toks.value != '':
                 val = self.eval(toks.value, None, self.defs['values'])
             else:
@@ -1225,11 +1225,12 @@ class CParser(object):
 
         """
         used = []
+        typ = list(typ)
         while True:
             if self.is_fund_type(typ):
                 # Remove 'signed' before returning evaluated type
                 typ[0] = re.sub(r'\bsigned\b', '', typ[0]).strip()
-                return typ
+                return tuple(typ)
 
             parent = typ[0]
             if parent in used:
@@ -1240,7 +1241,7 @@ class CParser(object):
             if parent not in self.defs['types']:
                 m = 'Unknown type "{}" (typedefs are {})'
                 raise Exception(m.format(parent, ' -> '.join(used)))
-            pt = self.defs['types'][parent]
+            pt = list(self.defs['types'][parent])
             typ = pt + typ[1:]
 
     def find(self, name):
