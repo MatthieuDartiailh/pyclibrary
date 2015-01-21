@@ -7,7 +7,8 @@
 #pragma pack(4)   // n = 4
 
 // Push and select custom packing
-#pragma pack(push, r1, 16)   // n = 16, pushed to stack
+#define PACKING 16
+#pragma pack(push, r1, PACKING)   // n = 16, pushed to stack
 
 // Change packing back to default
 #pragma pack()

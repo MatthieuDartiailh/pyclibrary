@@ -1,0 +1,48 @@
+/* Test the parsing of variables of standard types in a header*/
+
+#define INT 1
+#define SQUARE(i) i*i
+// Test defining standard variables.
+// Integers
+signed short short1 = 1;
+short int short_int = INT;
+unsigned short short_un = 1;
+unsigned short int short_int_un = 1;
+int int1 = 0x1;
+unsigned un = 1;
+unsigned int int_un = +1;
+long long1 = 1;
+long int long_int = 1;
+unsigned long long_un = 1;
+unsigned long int long_int_un = 1;
+__int64 int64 = 1;
+unsigned __int64 int64_un = 1;
+long long long_long = 1;
+long long int long_long_int = 1;
+unsigned long long long_long_un = 1;
+unsigned long long int long_long_int_un = 1;
+
+// Floating points numbers
+float fl = + 1.0;
+double db = 1e-1;
+long double dbl = - 1E1;
+
+// Static and const modifiers
+const int int_const = SQUARE(2);
+static int int_stat = SQUARE(2);
+static const int int_con_stat = SQUARE(2);
+
+// String
+char* str1 = "normal string";
+char** str2 = "string with macro: INT";
+static const char* const str3 = "string with comment: /*comment inside string*/";
+char* str4 = "string with define #define MACRO5 macro5_in_string ";
+char* str5 = "string with \"escaped quotes\" ";
+
+// Test more init
+int x1 = (5 + 3 * 0x1) / 8.0;
+int x2 = (typeCast)0x544 <<16;
+
+// Test array
+int str_w[2] = {0x1, 3.1415e6};
+static const int * const (**intJunk[4]);

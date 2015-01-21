@@ -372,6 +372,23 @@ class CParser(object):
         self.init_opts['files'].append(bn)
         return True
 
+    def print_all(self, filename=None):
+        """Print everything parsed from files. Useful for debugging.
+
+        Parameters
+        ----------
+        filename : unicode, optional
+            Name of the file whose definition should be printed.
+
+        """
+        from pprint import pprint
+        for k in self.data_list:
+            print("============== {} ==================".format(k))
+            if filename is None:
+                pprint(self.defs[k])
+            else:
+                pprint(self.file_defs[filename][k])
+
     # =========================================================================
     # --- Processing functions
     # =========================================================================
@@ -399,6 +416,8 @@ class CParser(object):
         comment_remover = (quotedString | cStyleComment.suppress() |
                            cplusplus_line_comment.suppress())
         self.files[path] = comment_remover.transformString(text)
+
+    # --- Pre processing
 
     def preprocess(self, path):
         """Scan named file for preprocessor directives, removing them while
@@ -728,6 +747,8 @@ class CParser(object):
 
         return (new_str, end)
 
+    # --- Compilation functions
+
     def parse_defs(self, path, return_unparsed=False):
         """Scan through the named file for variable, struct, enum, and function
         declarations.
@@ -781,7 +802,7 @@ class CParser(object):
         #   Thus begins the extremely hairy business of parsing C declarators.
         #   Whomever decided this was a reasonable syntax should probably never
         #   breed.
-        #   The following parsers combined with the processDeclarator function
+        #   The following parsers combined with the process_declarator function
         #   allow us to turn a nest of type modifiers into a correctly
         #   ordered list of modifiers.
 
@@ -936,7 +957,7 @@ class CParser(object):
             toks.append('&')
 
         if 'center' in decl:
-            (n, t) = self.processDeclarator(decl['center'][0])
+            (n, t) = self.process_declarator(decl['center'][0])
             if n is not None:
                 name = n
             toks.extend(t)
@@ -1086,6 +1107,8 @@ class CParser(object):
             logger.exception('Error processing struct: {}'.format(t))
 
     def process_variable(self, s, l, t):
+        """
+        """
         logger.debug("VARIABLE: {}".format(t))
         try:
             val = self.eval_expr(t[0])
@@ -1115,6 +1138,8 @@ class CParser(object):
             (name, decl) = self.process_type(typ, d)
             logger.debug("  {} {}".format(name, decl))
             self.add_def('types', name, decl)
+
+    # --- Utility methods
 
     def eval_expr(self, toks):
         """Evaluates expressions.
@@ -1152,23 +1177,6 @@ class CParser(object):
             return None
         return eval(expr, *args)
 
-    def print_all(self, filename=None):
-        """Print everything parsed from files. Useful for debugging.
-
-        Parameters
-        ----------
-        filename : unicode, optional
-            Name of the file whose definition should be printed.
-
-        """
-        from pprint import pprint
-        for k in self.data_list:
-            print("============== {} ==================".format(k))
-            if filename is None:
-                pprint(self.defs[k])
-            else:
-                pprint(self.file_defs[filename][k])
-
     def add_def(self, typ, name, val):
         """Add a definition of a specific type to both the definition set for
         the current file and the global definition set.
@@ -1186,8 +1194,8 @@ class CParser(object):
         self.file_defs[base_name][typ][name] = val
 
     def rem_def(self, typ, name):
-        """Remove a definition of a specific type to both the definition set for
-        the current file and the global definition set.
+        """Remove a definition of a specific type to both the definition set
+        for the current file and the global definition set.
 
         """
         if self.current_file is None:
@@ -1316,11 +1324,13 @@ if HAS_PYPARSING:
     rbrack = Literal("]").ignore(quotedString).suppress()
     lparen = Literal("(").ignore(quotedString).suppress()
     rparen = Literal(")").ignore(quotedString).suppress()
-    hexint = Regex('-?0[xX][{}]+[UL]*'.format(hexnums)).setParseAction(lambda t: t[0].rstrip('UL'))
-    decint = Regex('-?[0-9]+[UL]*').setParseAction(lambda t: t[0].rstrip('UL'))
+    hexint = Regex('[+-]?\s*0[xX][{}]+[UL]*'.format(hexnums)).setParseAction(lambda t: t[0].rstrip('UL'))
+    decint = Regex('[+-]?\s*[0-9]+[UL]*').setParseAction(lambda t: t[0].rstrip('UL'))
     integer = (hexint | decint)
-    floating = Regex(r'-?((\d+(\.\d*)?)|(\.\d+))([eE]-?\d+)?')
-    number = (integer | floating)
+    # The floating regex is ugly but it is because we do not want to match
+    # integer to it.
+    floating = Regex(r'[+-]?\s*((((\d(\.\d*)?)|(\.\d+))[eE][+-]?\d+)|((\d\.\d*)|(\.\d+)))')
+    number = (floating | integer)
     bitfieldspec = ":" + integer
     bi_operator = oneOf("+ - / * | & || && ! ~ ^ % == != > < >= <= -> . :: << >> = ? :")
     uni_right_operator = oneOf("++ --")

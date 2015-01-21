@@ -90,8 +90,8 @@ class TestFileHandling(object):
             compare_lines(self.parser.files[path].split('\n'), f.readlines())
 
 
-class TestMacroParsing(object):
-    """Test macro preprocessing.
+class TestPreprocessing(object):
+    """Test preprocessing.
 
     """
     h_dir = os.path.join(H_DIRECTORY, 'macros')
@@ -116,9 +116,9 @@ class TestMacroParsing(object):
         # Decimal integer
         assert ('MACRO_D1' in macros and macros['MACRO_D1'] == '1' and
                 values['MACRO_D1'] == 1)
-        assert ('MACRO_D2' in macros and macros['MACRO_D2'] == '2U' and
-                values['MACRO_D2'] == 2)
-        assert ('MACRO_D3' in macros and macros['MACRO_D3'] == '3UL' and
+        assert ('MACRO_D2' in macros and macros['MACRO_D2'] == '-2U' and
+                values['MACRO_D2'] == -2)
+        assert ('MACRO_D3' in macros and macros['MACRO_D3'] == '+ 3UL' and
                 values['MACRO_D3'] == 3)
 
         # Bit shifted decimal integer
@@ -134,11 +134,11 @@ class TestMacroParsing(object):
 
         # Hexadecimal integer
         assert ('MACRO_H1' in macros and
-                macros['MACRO_H1'] == '0x000000' and
+                macros['MACRO_H1'] == '+0x000000' and
                 values['MACRO_H1'] == 0)
         assert ('MACRO_H2' in macros and
-                macros['MACRO_H2'] == '0x000001U' and
-                values['MACRO_H2'] == 1)
+                macros['MACRO_H2'] == '- 0x000001U' and
+                values['MACRO_H2'] == -1)
         assert ('MACRO_H3' in macros and
                 macros['MACRO_H3'] == '0X000002UL' and
                 values['MACRO_H3'] == 2)
@@ -297,29 +297,106 @@ class TestMacroParsing(object):
         # Check all pragmas instructions have been removed.
         assert stream.strip() == ''
 
-        assert packings[1] == (3, None)
-        assert packings[2] == (6, 4)
-        assert packings[3] == (9, 16)
-        assert packings[4] == (12, None)
-        assert packings[5] == (15, None)
-        assert packings[6] == (16, 4)
-        assert packings[7] == (19, 16)
-        assert packings[8] == (20, None)
+        assert packings[1][1] is None
+        assert packings[2][1] == 4
+        assert packings[3][1] == 16
+        assert packings[4][1] is None
+        assert packings[5][1] is None
+        assert packings[6][1] == 4
+        assert packings[7][1] == 16
+        assert packings[8][1] is None
 
 
-class TestEnumParsing(object):
+class TestParsing(object):
+    """Test parsing.
 
-    def setup(self):
+    """
 
-        pass
-
-    def test_enum_parsing(self):
-
-        pass
-
-
-class TestTypedefParsing(object):
+    h_dir = H_DIRECTORY
 
     def setup(self):
 
-        pass
+        self.parser = CParser(process_all=False)
+
+    def test_variables(self):
+
+        path = os.path.join(self.h_dir, 'variables.h')
+        self.parser.load_file(path)
+        self.parser.process_all()
+
+        variables = self.parser.defs['variables']
+
+        # Integers
+        assert ('short1' in variables and
+                variables['short1'] == (1, ['signed short']))
+        assert ('short_int' in variables and
+                variables['short_int'] == (1, ['short int']))
+        assert ('short_un' in variables and
+                variables['short_un'] == (1, ['unsigned short']))
+        assert ('short_int_un' in variables and
+                variables['short_int_un'] == (1, ['unsigned short int']))
+        assert ('int1' in variables and
+                variables['int1'] == (1, ['int']))
+        assert ('un' in variables and
+                variables['un'] == (1, ['unsigned']))
+        assert ('int_un' in variables and
+                variables['int_un'] == (1, ['unsigned int']))
+        assert ('long1' in variables and
+                variables['long1'] == (1, ['long']))
+        assert ('long_int' in variables and
+                variables['long_int'] == (1, ['long int']))
+        assert ('long_un' in variables and
+                variables['long_un'] == (1, ['unsigned long']))
+        assert ('long_int_un' in variables and
+                variables['long_int_un'] == (1, ['unsigned long int']))
+        assert ('int64' in variables and
+                variables['int64'] == (1, ['__int64']))
+        assert ('int64_un' in variables and
+                variables['int64_un'] == (1, ['unsigned __int64']))
+        assert ('long_long' in variables and
+                variables['long_long'] == (1, ['long long']))
+        assert ('long_long_int' in variables and
+                variables['long_long_int'] == (1, ['long long int']))
+        assert ('long_long_un' in variables and
+                variables['long_long_un'] == (1, ['unsigned long long']))
+        assert ('long_long_int_un' in variables and
+                variables['long_long_int_un'] == (1,
+                                                  ['unsigned long long int']))
+
+        # Floating point number
+        assert ('fl' in variables and variables['fl'] == (1., ['float']))
+        assert ('db' in variables and variables['db'] == (0.1, ['double']))
+        assert ('dbl' in variables and
+                variables['dbl'] == (-10., ['long double']))
+
+        # Const and static modif
+        assert ('int_const' in variables and
+                variables['int_const'] == (4, ['int']))
+        assert ('int_stat' in variables and
+                variables['int_stat'] == (4, ['int']))
+        assert ('int_con_stat' in variables and
+                variables['int_con_stat'] == (4, ['int']))
+
+        # String
+        assert ('str1' in variables and
+                variables['str1'] == ("normal string", ['char', '*']))
+        assert ('str2' in variables and
+                variables['str2'] == ("string with macro: INT",
+                                      ['char', '**']))
+        assert ('str3' in variables and
+                variables['str3'] == ("string with comment: /*comment inside string*/",
+                                      ['char', '*']))
+        assert ('str4' in variables and
+                variables['str4'] == ("string with define #define MACRO5 macro5_in_string ",
+                                      ['char', '*']))
+        assert ('str5' in variables and
+                variables['str5'] == ("string with \"escaped quotes\" ",
+                                      ['char', '*']))
+
+    def test_struct(self):
+
+        path = os.path.join(self.h_dir, 'variables.h')
+        self.parser.load_file(path)
+        self.parser.process_all()
+
+        self.parser.print_all()

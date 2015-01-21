@@ -5,8 +5,8 @@
 
 // Decimal values
 #define MACRO_D1 1
-#define MACRO_D2 2U
-#define MACRO_D3 3UL
+#define MACRO_D2 -2U
+#define MACRO_D3 + 3UL
 
 // Bit shifted decimal values
 #define MACRO_SD1 (1 << 1)
@@ -14,8 +14,8 @@
 #define MACRO_SD3 (3UL << 3)
 
 // Hexadecimal values
-#define MACRO_H1 0x000000
-#define MACRO_H2 0x000001U
+#define MACRO_H1 +0x000000
+#define MACRO_H2 - 0x000001U
 #define MACRO_H3 0X000002UL
 
 // Bit shifted hexadecimal values
