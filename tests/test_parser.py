@@ -514,7 +514,67 @@ class TestParsing(object):
                 'pack': 16} == structs['struct_name_p']
 
     def test_unions(self):
-        pass
+
+        path = os.path.join(self.h_dir, 'unions.h')
+        self.parser.load_file(path)
+        self.parser.process_all()
+
+        unions = self.parser.defs['unions']
+        structs = self.parser.defs['structs']
+        types = self.parser.defs['types']
+        variables = self.parser.defs['variables']
+
+        # Test declaring an union.
+        assert 'union_name' in unions and 'union union_name' in types
+        assert {'members': [('x', ('int',), 1),
+                            ('y', ('int',), None)],
+                'pack': None} == unions['union_name']
+        assert ('union_name_ptr' in types and
+                types['union_name_ptr'] == ('union union_name', '*'))
+
+        # Test defining an unnamed union
+        assert ('no_name_union_inst' in variables and
+                variables['no_name_union_inst'] == (None,
+                                                    ('union anon_union0',)))
+
+        # Test defining a structure using an unnamed union internally.
+        assert ('tagRID_DEVICE_INFO' in structs and
+                {'members': [('cbSize', ('DWORD',), None),
+                             ('dwType', ('DWORD',), None),
+                             (None, ('union anon_union1',), None)],
+                 'pack': None} == structs['tagRID_DEVICE_INFO'])
+
+        assert ('RID_DEVICE_INFO' in types and
+                types['RID_DEVICE_INFO'] == ('struct tagRID_DEVICE_INFO',))
+        assert ('PRID_DEVICE_INFO' in types and
+                types['PRID_DEVICE_INFO'] == ('struct tagRID_DEVICE_INFO', '*')
+                )
+        assert ('LPRID_DEVICE_INFO' in types and
+                types['LPRID_DEVICE_INFO'] == ('struct tagRID_DEVICE_INFO',
+                                               '*')
+                )
 
     def test_functions(self):
-        pass
+
+        path = os.path.join(self.h_dir, 'functions.h')
+        self.parser.load_file(path)
+        self.parser.process_all()
+
+        functions = self.parser.defs['functions']
+        variables = self.parser.defs['variables']
+
+        assert ('f' in functions and
+                functions['f'] == (('void',),
+                                   ((None, ('int',), None),
+                                    (None, ('int',), None))))
+        assert ('g' in functions and
+                functions['g'] == (('int',),
+                                   (('ch', ('char', '*'), None),
+                                    ('str', ('char', '**'), None))))
+        assert ('fnPtr' in variables and
+                variables['fnPtr'] == (None, ('int',
+                                              ((None, ('char',), None),
+                                               (None, ('float',), None)),
+                                              '*')))
+        assert ('function1' in functions and
+                functions['function1'] == (('int', '__stdcall'), ()))

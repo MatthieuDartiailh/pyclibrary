@@ -893,10 +893,15 @@ class CParser(object):
         struct_kw = (Keyword('struct') | Keyword('union'))
         self.struct_member = (
             Group(self.variable_decl.copy().setParseAction(lambda: None)) |
+            # Hack to handle bit width specification.
+            Group(Group(self.type_spec('type') +
+                        Optional(self.declarator_list('decl_list')) + colon +
+                        expression.suppress() + semi)) |
             (self.type_spec + self.declarator +
              nestedExpr('{', '}')).suppress() |
             (self.declarator + nestedExpr('{', '}')).suppress()
             )
+
         self.decl_list = (lbrace +
                           Group(OneOrMore(self.struct_member))('members') +
                           rbrace)
@@ -1082,6 +1087,7 @@ class CParser(object):
                     sname = t.name
                 else:
                     sname = t.name[0]
+
             logger.debug("  NAME: {}".format(sname))
             if (len(t.members) > 0 or sname not in self.defs[str_typ+'s'] or
                     self.defs[str_typ+'s'][sname] == {}):
@@ -1093,7 +1099,7 @@ class CParser(object):
                     logger.debug("    member: {}, {}, {}".format(
                                  m, m[0].keys(), m[0].decl_list))
                     if len(m[0].decl_list) == 0:  # anonymous member
-                        struct.append((None, [typ], None))
+                        struct.append((None, (typ,), None))
                     for d in m[0].decl_list:
                         (name, decl) = self.process_type(typ, d)
                         struct.append((name, decl, val))
@@ -1319,6 +1325,7 @@ if HAS_PYPARSING:
              WordEnd(wordchars)).setParseAction(lambda t: t[0])
 
     semi   = Literal(";").ignore(quotedString).suppress()
+    colon  = Literal(":").ignore(quotedString).suppress()
     lbrace = Literal("{").ignore(quotedString).suppress()
     rbrace = Literal("}").ignore(quotedString).suppress()
     lbrack = Literal("[").ignore(quotedString).suppress()

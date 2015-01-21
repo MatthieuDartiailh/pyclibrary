@@ -4,9 +4,11 @@ typedef int type_int;
 typedef type_int type_type_int;
 
 // Test creating a structure using only base types.
+// Test for default values, array handling and bit length specifications.
 struct struct_name
 {
-  int x = 1; type_type_int y;
+  int x = 1;
+  type_type_int y:2;
   char str[10]; /* commented brace } */
 } struct_inst;
 
