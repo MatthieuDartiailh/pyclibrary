@@ -30,32 +30,44 @@ logger = logging.getLogger(__name__)
 __all__ = ['win_defs', 'CParser']
 
 
-def win_defs(verbose=False):
+def win_defs(version='800'):
     """Loads selection of windows headers included with PyCLibrary.
 
     These definitions can either be accessed directly or included before
     parsing another file like this:
-        windefs = CParser.winDefs()
-        p = CParser.CParser("headerFile.h", copyFrom=windefs)
+        windefs = c_parser.win_defs()
+        p = c_parser.CParser("headerFile.h", copy_from=windefs)
 
     Definitions are pulled from a selection of header files included in Visual
     Studio (possibly not legal to distribute? Who knows.), some of which have
     been abridged because they take so long to parse.
 
+    Parameters
+    ----------
+    version : unicode
+        Version of the MSVC to consider when parsing.
+
+    Returns
+    -------
+    parser : CParser
+        CParser containing all the infos from te windows headers.
+
     """
-    headerFiles = ['WinNt.h', 'WinDef.h', 'WinBase.h', 'BaseTsd.h', 'WTypes.h',
-                   'WinUser.h']
+    header_files = ['WinNt.h', 'WinDef.h', 'WinBase.h', 'BaseTsd.h',
+                    'WTypes.h', 'WinUser.h']
+    if not CParser._init:
+        logger.warning('Automatic initialisation : OS is assumed to be win32')
+        from .init import auto_init
+        auto_init('win32')
     d = os.path.dirname(__file__)
     p = CParser(
-        [os.path.join(d, 'headers', h) for h in headerFiles],
-        types={'__int64': ('long long')},
-        macros={'_WIN32': '', '_MSC_VER': '800', 'CONST': 'const',
+        [os.path.join(d, 'headers', h) for h in header_files],
+        macros={'_WIN32': '', '_MSC_VER': version, 'CONST': 'const',
                 'NO_STRICT': None},
-        processAll=False
+        process_all=False
         )
 
-    p.processAll(cache=os.path.join(d, 'headers', 'WinDefs.cache'),
-                 noCacheWarning=True, verbose=verbose)
+    p.process_all(cache=os.path.join(d, 'headers', 'WinDefs.cache'))
 
     return p
 
@@ -123,8 +135,16 @@ class CParser(object):
     #: old cache files.
     cacheVersion = 22
 
+    #: Private flag allowing to know if the parser has been initiliased.
+    _init = False
+
     def __init__(self, files=None, replace=None, copy_from=None,
                  process_all=True, cache=None, **args):
+
+        if not self._init:
+            logger.warning('Automatic initialisation based on OS detection')
+            from .init import auto_init
+            auto_init()
 
         # Holds all definitions
         self.defs = {}
@@ -394,23 +414,12 @@ class CParser(object):
     # --- Processing functions
     # =========================================================================
 
-    def assert_pyparsing(self):
-        """Make sure pyparsing module is available."""
-        global HAS_PYPARSING
-        if not HAS_PYPARSING:
-            mess = cleandoc('''CParser class requires 'pyparsing' library for
-                            actual parsing work. Without this library, CParser
-                            can only be used with previously cached parse
-                            results.''')
-            raise Exception(mess)
-
     def remove_comments(self, path):
         """Remove all comments from file.
 
         Operates in memory, does not alter the original files.
 
         """
-        self.assert_pyparsing()
         text = self.files[path]
         cplusplus_line_comment = Literal("//") + restOfLine
         # match quoted strings first to prevent matching comments inside quotes
@@ -433,7 +442,6 @@ class CParser(object):
         - pragmas : pragma
 
         """
-        self.assert_pyparsing()
         # We need this so that eval_expr works properly
         self.build_parser()
         self.current_file = path
@@ -770,7 +778,6 @@ class CParser(object):
             Entire tree of successfully parsed tokens.
 
         """
-        self.assert_pyparsing()
         self.current_file = path
 
         parser = self.build_parser()
@@ -788,17 +795,18 @@ class CParser(object):
         if hasattr(self, 'parser'):
             return self.parser
 
-        self.assert_pyparsing()
-
         self.struct_type = Forward()
         self.enum_type = Forward()
-        desc = (fund_type |
-                Optional(kwl(size_modifiers+sign_modifiers)) + ident |
-                self.struct_type |
-                self.enum_type
-                )
-        self.type_spec = (type_qualifier + desc + type_qualifier + ms_modifier
-                          ).setParseAction(recombine)
+        type_ = (type_qualifier +
+                 (fund_type |
+                  Optional(kwl(size_modifiers + sign_modifiers)) + ident |
+                  self.struct_type |
+                  self.enum_type
+                  )
+                 + type_qualifier)
+        if extra_modifier is not None:
+            type_ += extra_modifier
+        self.type_spec = type_.setParseAction(recombine)
 
         # --- Abstract declarators for use in function pointer arguments
         #   Thus begins the extremely hairy business of parsing C declarators.
@@ -897,8 +905,8 @@ class CParser(object):
             Group(self.variable_decl.copy().setParseAction(lambda: None)) |
             # Hack to handle bit width specification.
             Group(Group(self.type_spec('type') +
-                        Optional(self.declarator_list('decl_list')) + colon +
-                        expression.suppress() + semi)) |
+                        Optional(self.declarator_list('decl_list')) +
+                        bitfieldspec.suppress() + semi)) |
             (self.type_spec + self.declarator +
              nestedExpr('{', '}')).suppress() |
             (self.declarator + nestedExpr('{', '}')).suppress()
@@ -1025,7 +1033,6 @@ class CParser(object):
                 enum = {}
                 for v in t.members:
                     if v.value != '':
-                        # XXXX test with literal_eval
                         i = literal_eval(v.value)
                     if v.valueName != '':
                         i = enum[v.valueName]
@@ -1238,6 +1245,7 @@ class CParser(object):
         used = []
         typ = list(typ)
         while True:
+            print(typ)
             if self.is_fund_type(typ):
                 # Remove 'signed' before returning evaluated type
                 typ[0] = re.sub(r'\bsigned\b', '', typ[0]).strip()
@@ -1286,42 +1294,114 @@ class CParser(object):
         return res
 
 
-HAS_PYPARSING = False
-try:
-    from .thirdparty.pyparsing import \
-        (ParserElement, ParseResults, Forward, Optional, Word, WordStart,
-         WordEnd, Keyword, Regex, Literal, SkipTo, ZeroOrMore, OneOrMore,
-         Group, LineEnd, stringStart, quotedString, oneOf, nestedExpr,
-         delimitedList, restOfLine, cStyleComment, alphas, alphanums, hexnums,
-         lineno)
-    ParserElement.enablePackrat()
-    HAS_PYPARSING = True
-except:
-    # No need to do anything yet as we might not be using any parsing
-    # functions.
-    pass
+from .thirdparty.pyparsing import \
+    (ParserElement, ParseResults, Forward, Optional, Word, WordStart,
+     WordEnd, Keyword, Regex, Literal, SkipTo, ZeroOrMore, OneOrMore,
+     Group, LineEnd, stringStart, quotedString, oneOf, nestedExpr,
+     delimitedList, restOfLine, cStyleComment, alphas, alphanums, hexnums,
+     lineno)
+ParserElement.enablePackrat()
+
+# --- Basic parsing elements.
 
 
-# Define some common language elements if pyparsing is available.
-if HAS_PYPARSING:
+def kwl(strs):
+    """Generate a match-first list of keywords given a list of strings."""
+    return Regex(r'\b({})\b'.format('|'.join(strs)))
+
+
+def flatten(lst):
+        res = []
+        for i in lst:
+            if isinstance(i, (list, tuple)):
+                res.extend(flatten(i))
+            else:
+                res.append(str(i))
+        return res
+
+
+def recombine(tok):
+    """Flattens a tree of tokens and joins into one big string.
+
+    """
+    return " ".join(flatten(tok.asList()))
+
+
+def print_parse_results(pr, depth=0, name=''):
+    """For debugging; pretty-prints parse result objects."""
+    start = name + " " * (20 - len(name)) + ':' + '..' * depth
+    if isinstance(pr, ParseResults):
+        print(start)
+        for i in pr:
+            name = ''
+            for k in pr.keys():
+                if pr[k] is i:
+                    name = k
+                    break
+            print_parse_results(i, depth+1, name)
+    else:
+        print(start + str(pr))
+
+
+# Syntatic delimiters
+semi = Literal(";").ignore(quotedString).suppress()
+lbrace = Literal("{").ignore(quotedString).suppress()
+rbrace = Literal("}").ignore(quotedString).suppress()
+lbrack = Literal("[").ignore(quotedString).suppress()
+rbrack = Literal("]").ignore(quotedString).suppress()
+lparen = Literal("(").ignore(quotedString).suppress()
+rparen = Literal(")").ignore(quotedString).suppress()
+
+# Numbers
+int_strip = lambda t: t[0].rstrip('UL')
+hexint = Regex('[+-]?\s*0[xX][{}]+[UL]*'.format(hexnums)).setParseAction(int_strip)
+decint = Regex('[+-]?\s*[0-9]+[UL]*').setParseAction(int_strip)
+integer = (hexint | decint)
+# The floating regex is ugly but it is because we do not want to match
+# integer to it.
+floating = Regex(r'[+-]?\s*((((\d(\.\d*)?)|(\.\d+))[eE][+-]?\d+)|((\d\.\d*)|(\.\d+)))')
+number = (floating | integer)
+
+# Miscelaneous
+bitfieldspec = ":" + integer
+bi_operator = oneOf("+ - / * | & || && ! ~ ^ % == != > < >= <= -> . :: << >> = ? :")
+uni_right_operator = oneOf("++ --")
+uni_left_operator = oneOf("++ -- - + * sizeof new")
+wordchars = alphanums+'_$'
+name = (WordStart(wordchars) + Word(alphas+"_", alphanums+"_$") +
+        WordEnd(wordchars))
+size_modifiers = ['short', 'long']
+sign_modifiers = ['signed', 'unsigned']
+
+# Syntax elements defined by _init_parser.
+expression = Forward()
+array_op = lbrack + expression + rbrack
+base_types = None
+ident = None
+call_conv = None
+type_qualifier = None
+extra_modifier = None
+fund_type = None
+pointer_operator = None
+
+
+# Define some common language elements when initialising.
+def _init_cparser(extra_types=None, extra_modifiers=None):
+    global expression
+    global call_conv, ident
+    global base_types
+    global type_qualifier, extra_modifier
+    global fund_type, pointer_operator
+
     # Some basic definitions
-    expression = Forward()
-    pexpr = '(' + expression + ')'
-    num_types = ['int', 'float', 'double', '__int64']
-    base_types = ['char', 'bool', 'void'] + num_types
-    size_modifiers = ['short', 'long']
-    sign_modifiers = ['signed', 'unsigned']
+    num_types = ['int', 'float', 'double']
+    extra_types = [] if extra_types is None else list(extra_types)
+    base_types = ['char', 'bool', 'void'] + num_types + extra_types
     qualifiers = ['const', 'static', 'volatile', 'inline', 'restrict', 'near',
                   'far']
-    ms_modifiers = ['__based', '__declspec', '__fastcall', '__restrict',
-                    '__sptr', '__uptr', '__w64', '__unaligned',
-                    '__nullterminated']
+
     keywords = (['struct', 'enum', 'union', '__stdcall', '__cdecl'] +
                 qualifiers + base_types + size_modifiers + sign_modifiers)
-
-    def kwl(strs):
-        """Generate a match-first list of keywords given a list of strings."""
-        return Regex(r'\b(%s)\b' % '|'.join(strs))
 
     keyword = kwl(keywords)
     wordchars = alphanums+'_$'
@@ -1329,29 +1409,8 @@ if HAS_PYPARSING:
              Word(alphas + "_", alphanums + "_$") +
              WordEnd(wordchars)).setParseAction(lambda t: t[0])
 
-    semi   = Literal(";").ignore(quotedString).suppress()
-    colon  = Literal(":").ignore(quotedString).suppress()
-    lbrace = Literal("{").ignore(quotedString).suppress()
-    rbrace = Literal("}").ignore(quotedString).suppress()
-    lbrack = Literal("[").ignore(quotedString).suppress()
-    rbrack = Literal("]").ignore(quotedString).suppress()
-    lparen = Literal("(").ignore(quotedString).suppress()
-    rparen = Literal(")").ignore(quotedString).suppress()
-    hexint = Regex('[+-]?\s*0[xX][{}]+[UL]*'.format(hexnums)).setParseAction(lambda t: t[0].rstrip('UL'))
-    decint = Regex('[+-]?\s*[0-9]+[UL]*').setParseAction(lambda t: t[0].rstrip('UL'))
-    integer = (hexint | decint)
-    # The floating regex is ugly but it is because we do not want to match
-    # integer to it.
-    floating = Regex(r'[+-]?\s*((((\d(\.\d*)?)|(\.\d+))[eE][+-]?\d+)|((\d\.\d*)|(\.\d+)))')
-    number = (floating | integer)
-    bitfieldspec = ":" + integer
-    bi_operator = oneOf("+ - / * | & || && ! ~ ^ % == != > < >= <= -> . :: << >> = ? :")
-    uni_right_operator = oneOf("++ --")
-    uni_left_operator = oneOf("++ -- - + * sizeof new")
-    name = (WordStart(wordchars) + Word(alphas+"_", alphanums+"_$") +
-            WordEnd(wordchars))
-
-    call_conv = Optional(Keyword('__cdecl') | Keyword('__stdcall'))('call_conv')
+    call_conv = Optional(Keyword('__cdecl') |
+                         Keyword('__stdcall'))('call_conv')
 
     # Removes '__name' from all type specs. may cause trouble.
     underscore_2_ident = (WordStart(wordchars) + ~keyword + '__' +
@@ -1360,12 +1419,17 @@ if HAS_PYPARSING:
     type_qualifier = ZeroOrMore((underscore_2_ident + Optional(nestedExpr())) |
                                 kwl(qualifiers)).suppress()
 
-    ms_modifier = ZeroOrMore(kwl(ms_modifiers) +
-                             Optional(nestedExpr())).suppress()
     pointer_operator = ('*' + type_qualifier |
                         '&' + type_qualifier |
                         '::' + ident + type_qualifier
                         )
+
+    if extra_modifiers:
+        extra_modifier = ZeroOrMore(kwl(extra_modifiers) +
+                                    Optional(nestedExpr())).suppress()
+
+    else:
+        extra_modifier = None
 
     # Language elements
     fund_type = OneOrMore(kwl(sign_modifiers + size_modifiers +
@@ -1395,37 +1459,4 @@ if HAS_PYPARSING:
     atom = cast_atom | uncast_atom
 
     expression << Group(atom + ZeroOrMore(bi_operator + atom))
-
-    arrayOp = lbrack + expression + rbrack
-
-    def recombine(tok):
-        """Flattens a tree of tokens and joins into one big string.
-
-        """
-        return " ".join(flatten(tok.asList()))
-
     expression.setParseAction(recombine)
-
-    def flatten(lst):
-        res = []
-        for i in lst:
-            if isinstance(i, (list, tuple)):
-                res.extend(flatten(i))
-            else:
-                res.append(str(i))
-        return res
-
-    def print_parse_results(pr, depth=0, name=''):
-        """For debugging; pretty-prints parse result objects."""
-        start = name + " " * (20 - len(name)) + ':' + '..' * depth
-        if isinstance(pr, ParseResults):
-            print(start)
-            for i in pr:
-                name = ''
-                for k in pr.keys():
-                    if pr[k] is i:
-                        name = k
-                        break
-                print_parse_results(i, depth+1, name)
-        else:
-            print(start + str(pr))

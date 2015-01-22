@@ -20,7 +20,7 @@ import sys
 from inspect import cleandoc
 from ctypes import *
 
-from .erros import DefinitionError
+from .errors import DefinitionError
 
 logger = logging.getLogger(__name__)
 
@@ -80,38 +80,20 @@ class CLibrary(object):
         names.
 
     """
+    #: Private flag allowing to know if the class has been initiliased.
+    _init = False
+
+    #: Balise to use when a NULL pointer is needed
     Null = object()
 
-    c_types = {
-        'char': c_char,
-        'wchar': c_wchar,
-        'unsigned char': c_ubyte,
-        'short': c_short,
-        'short int': c_short,
-        'unsigned short': c_ushort,
-        'unsigned short int': c_ushort,
-        'int': c_int,
-        'unsigned': c_uint,
-        'unsigned int': c_uint,
-        'long': c_long,
-        'long int': c_long,
-        'unsigned long': c_ulong,
-        'unsigned long int': c_ulong,
-        '__int64': c_longlong,
-        'long long': c_longlong,
-        'long long int': c_longlong,
-        'unsigned __int64': c_ulonglong,
-        'unsigned long long': c_ulonglong,
-        'unsigned long long int': c_ulonglong,
-        'float': c_float,
-        'double': c_double,
-        'long double': c_longdouble
-    }
-    c_ptr_types = {
-        'char': c_char_p,
-        'wchar': c_wchar_p,
-        'void': c_void_p
-    }
+    #: Types (filled by _init_clibrary)
+    c_types = {}
+
+    #: Types for which ctypes provides a special pointer type.
+    c_ptr_types = {'char': c_char_p,
+                   'wchar': c_wchar_p,
+                   'void': c_void_p
+                   }
 
     def __init__(self, lib, headers, prefix=None, fix_case=True):
         # name everything using underscores to avoid name collisions with
@@ -597,3 +579,43 @@ class CallResult:
 
     def auto(self):
         return [self[n] for n in self.guessed]
+
+
+def _init_clibrary(extra_types={}):
+    # First load all standard types
+    CLibrary.cTypes = {
+        'char': c_char,
+        'wchar': c_wchar,
+        'unsigned char': c_ubyte,
+        'short': c_short,
+        'short int': c_short,
+        'unsigned short': c_ushort,
+        'unsigned short int': c_ushort,
+        'int': c_int,
+        'unsigned': c_uint,
+        'unsigned int': c_uint,
+        'long': c_long,
+        'long int': c_long,
+        'unsigned long': c_ulong,
+        'unsigned long int': c_ulong,
+        'long long': c_longlong,
+        'long long int': c_longlong,
+        'unsigned __int64': c_ulonglong,
+        'unsigned long long': c_ulonglong,
+        'unsigned long long int': c_ulonglong,
+        'float': c_float,
+        'double': c_double,
+        'long double': c_longdouble,
+        'uint8_t': c_uint8,
+        'int8_t': c_int8,
+        'uint16_t': c_uint16,
+        'int16_t': c_int16,
+        'uint32_t': c_uint32,
+        'int32_t': c_int32,
+        'uint64_t': c_uint64,
+        'int64_t': c_int64
+    }
+
+    # Now complete the list with some more exotic types
+    CLibrary.cTypes.update(extra_types)
+    CLibrary._init = True

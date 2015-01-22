@@ -2,7 +2,7 @@
 
 //Defining a standard function.
 void f(int, int);
-int g(char *ch, char **str);
+inline int g(char *ch, char **str);
 
 // Defining a function pointer.
 int(*fnPtr)(char, float);
