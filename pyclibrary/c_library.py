@@ -20,6 +20,7 @@ import sys
 from inspect import cleandoc
 from ctypes import *
 
+from .erros import DefinitionError
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +138,7 @@ class CLibrary(object):
     def __call__(self, typ, name):
         if typ not in self._objs_:
             typs = self._objs_.keys()
-            raise Exception("Type must be one of %s" % str(typs))
+            raise KeyError("Type must be one of {}".format(typs))
 
         if name not in self._objs_[typ]:
             self._objs_[typ][name] = self._make_obj_(typ, name)
@@ -175,17 +176,18 @@ class CLibrary(object):
                 # Allow automatic resolving of typedefs that alias enums
                 if n not in self._defs_['enums']:
                     if n not in self._defs_['types']:
-                        raise Exception('No enums named "{}"'.format(n))
+                        raise KeyError('No enums named "{}"'.format(n))
                     typ = self._headers_.evalType([n])[0]
                     if typ[:5] != 'enum ':
-                        raise Exception('No enums named "{}"'.format(n))
+                        raise KeyError('No enums named "{}"'.format(n))
                     # Look up internal name of enum
                     n = self._defs_['types'][typ][1]
                 obj = self._defs_['enums'][n]
 
                 return obj
             else:
-                raise Exception("Unknown type %s" % typ)
+                raise KeyError("Unknown type {}".format(typ))
+
         raise NameError(name)
 
     def __getattr__(self, name):
@@ -225,7 +227,7 @@ class CLibrary(object):
             func = getattr(self._lib_, func_name)
         except:
             mess = "Function name '{}' appears in headers but not in library!"
-            raise Exception(mess.format(func))
+            raise KeyError(mess.format(func))
 
         return CFunction(self, func, self._defs_['functions'][func_name],
                          func_name)
@@ -266,7 +268,7 @@ class CLibrary(object):
             elif typ[0] == 'void':
                 cls = None
             else:
-                raise Exception("Can't find base type for {}".format(typ))
+                raise KeyError("Can't find base type for {}".format(typ))
 
             if not pointers:
                 return cls
@@ -295,8 +297,8 @@ class CLibrary(object):
                     is_ptr = False
                     conv = '__cdecl'
                     if len(mods) == 0:
-                        raise Exception("Function signature with no pointer:",
-                                        m, mods)
+                        mess = "Function signature with no pointer:"
+                        raise DefinitionError(mess, m, mods)
                     for i in [0, 1]:
                         if len(mods) < 1:
                             break
@@ -310,7 +312,7 @@ class CLibrary(object):
                     if not is_ptr:
                         mess = make_mess("""Not sure how to handle type
                             (function without single pointer): {}""")
-                        raise Exception(mess.format(typ))
+                        raise DefinitionError(mess.format(typ))
 
                     if conv == '__stdcall':
                         mkfn = WINFUNCTYPE
@@ -323,8 +325,9 @@ class CLibrary(object):
 
                 else:
                     mess = "Not sure what to do with this type modifier: '{}'"
-                    raise Exception(mess.format(p))
+                    raise TypeError(mess.format(p))
             return cls
+
         except:
             logger.error("Error while processing type: {}".format(typ))
             raise
@@ -334,13 +337,16 @@ class CLibrary(object):
 
             # Resolve struct name--typedef aliases allowed.
             if str_name not in self._defs_[str_type]:
+
                 if str_name not in self._defs_['types']:
                     mess = 'No struct/union named "{}"'
-                    raise Exception(mess.format(str_name))
+                    raise KeyError(mess.format(str_name))
+
                 typ = self._headers_.eval_type([str_name])[0]
                 if typ[:7] != 'struct ' and typ[:6] != 'union ':
                     mess = 'No struct/union named "{}"'
-                    raise Exception(mess.format(str_name))
+                    raise KeyError(mess.format(str_name))
+
                 str_name = self._defs_['types'][typ][1]
 
             # Pull struct definition
@@ -366,25 +372,27 @@ class CLibrary(object):
             # Assign names to anonymous members
             members = []
             anon = []
-            for i in range(len(defs)):
-                if defs[i][0] is None:
+            for i, d in enumerate(defs):
+                if d[0] is None:
                     c = 0
                     while True:
                         name = 'anon_member%d' % c
                         if name not in members:
-                            defs[i][0] = name
+                            d[0] = name
                             anon.append(name)
                             break
-                members.append(defs[i][0])
+                members.append(d[0])
 
             s._anonymous_ = anon
             s._fields_ = [(m[0], self._ctype(m[1])) for m in defs]
             s._defaults_ = [m[2] for m in defs]
+
         return self._structs_[strName]
 
 
 class CFunction(object):
-    """
+    """Wrapper object for a function from the library.
+
     """
     def __init__(self, lib, func, sig, name):
         self.lib = lib
@@ -406,8 +414,7 @@ class CFunction(object):
         func.argtypes = self.arg_types
         self.req_args = [x[0] for x in self.sig[1] if x[2] is None]
         # Mapping from argument names to indices
-        self.arg_inds = {(self.sig[1][i][0], i)
-                         for i in range(len(self.sig[1]))}
+        self.arg_inds = {s[0]: i for i, s in enumerate(self.sig[1])}
 
     def arg_c_type(self, arg):
         """Return the ctype required for the specified argument.
@@ -449,7 +456,7 @@ class CFunction(object):
             if k not in self.arg_inds:
                 print("Function signature:", self.pretty_signature())
                 mess = "Function signature has no argument named '{}'"
-                raise Exception(mess.format(k))
+                raise TypeError(mess.format(k))
 
             ind = self.arg_inds[k]
             # Stretch argument list if needed
@@ -473,9 +480,9 @@ class CFunction(object):
                     # request to build a null pointer
                     if arg_list[i] is self.lib.Null:
                         if len(arg_type) < 2:
-                            mess = make_mes("""Can not create NULL for
+                            mess = make_mes("""Cannot create NULL for
                                 non-pointer argument type: {}""")
-                            raise Exception(mess.format(arg_type))
+                            raise TypeError(mess.format(arg_type))
                         arg_list[i] = self.lib._ctype(sig)()
 
                     else:
@@ -494,16 +501,16 @@ class CFunction(object):
                         raise
                     print("Function signature:", self.pretty_signature())
                     mess = "Function call '{}' missing required argument {} {}"
-                    raise Exception(mess.format(self.name, i,
+                    raise TypeError(mess.format(self.name, i,
                                                 self.sig[1][i][0]))
 
         try:
             res = self.func(*arg_list)
         except Exception:
-            print("Function call failed. Signature is:",
-                  self.pretty_signature())
-            print("Arguments:", argList)
-            print("Argtypes:", self.func.argtypes)
+            logger.error("Function call failed. Signature is: {}".format(
+                self.pretty_signature()))
+            logger.error("Arguments: {}".format(arg_ist))
+            logger.error("Argtypes: {}".format(self.func.argtypes))
             raise
 
         cr = CallResult(res, arglist, self.sig, guessed=guessed_args)
@@ -553,7 +560,7 @@ class CallResult:
             ind = self.find_arg(n)
             return self.make_val(self.args[ind])
         else:
-            raise Exception("Index must be int or str.")
+            raise ValueError("Index must be int or str.")
 
     def __setitem__(self, n, val):
         if type(n) is int:
@@ -562,7 +569,7 @@ class CallResult:
             ind = self.find_arg(n)
             self.args[ind] = val
         else:
-            raise Exception("Index must be int or str.")
+            raise ValueError("Index must be int or str.")
 
     def make_val(self, obj):
         while not hasattr(obj, 'value'):
@@ -581,7 +588,7 @@ class CallResult:
                 return i
         mess = make_mess("""Can't find argument '{}' in function signature.
                          Arguments are: {}""")
-        raise Exception(mess.format(arg, str([a[0] for a in self.sig[1]])))
+        raise KeyError(mess.format(arg, str([a[0] for a in self.sig[1]])))
 
     def __iter__(self):
         yield self()
