@@ -14,17 +14,13 @@ function calling based on C header definitions.
 from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 
-from future.utils import istext, isbytes, with_metaclass
+from future.utils import istext, isbytes
 import logging
 import sys
-import os
 from inspect import cleandoc
 from ctypes import *
-from weakref import WeakValueDictionarys
 
 from .errors import DefinitionError
-from .utils import find_library
-from .backends import identify_library
 
 logger = logging.getLogger(__name__)
 
@@ -33,51 +29,7 @@ def make_mess(mess):
     return cleandoc(mess).replace('\n', ' ')
 
 
-class CLibraryMeta(type):
-    """Meta class responsible for determining the backend and ensuring no
-    duplicates libraries exists.
-
-    """
-    backends = {}
-    libs = WeakValueDictionarys
-
-    def __new__(meta, name, bases, dct):
-        if 'backend' not in dct:
-            mess = make_mess('''{} does not declare a backend name, it cannot
-                              be registered.''')
-            logger.warning(mess.format(name))
-            return None
-
-        cls = super(CLibraryMeta, meta).__new__(meta, name, bases, dct)
-        meta.backends[cls.backend] = cls
-
-        return cls
-
-    def __call__(cls, lib, *args, **kwargs):
-
-        if istext(lib) or isbytes(lib):
-            if os.sep not in lib:
-                lib_path = find_library(lib)
-            else:
-                lib_path = os.path.realpath(lib)
-            backend_cls = cls.backends[kwargs.get('backend', 'ctypes')]
-        else:
-            if 'backend' in kwargs:
-                backend_cls = cls.backends[kwargs.get('backend', 'ctypes')]
-            else:
-                backend = identify_library(lib)
-                backend_cls = cls.backends[backend]
-            lib_path = backend_cls.get_library_path(lib)
-
-        if lib_path in cls.libs:
-            return cls.libs[lib_path]
-
-        else:
-            return super(CLibraryMeta, backend_cls).__call__(lib, *args,
-                                                             **kwargs)
-
-
-class CLibrary(with_metaclass(CLibraryMeta, object)):
+class CLibrary(object):
     """The CLibrary class is intended to automate much of the work in using
     ctypes by integrating header file definitions from CParser. Ths class
     serves as a proxy to a ctypes, adding a few features:
@@ -133,6 +85,15 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
 
     #: Balise to use when a NULL pointer is needed
     Null = object()
+
+    #: Types (filled by _init_clibrary)
+    c_types = {}
+
+    #: Types for which ctypes provides a special pointer type.
+    c_ptr_types = {'char': c_char_p,
+                   'wchar': c_wchar_p,
+                   'void': c_void_p
+                   }
 
     def __init__(self, lib, headers, prefix=None, fix_case=True):
         # name everything using underscores to avoid name collisions with
