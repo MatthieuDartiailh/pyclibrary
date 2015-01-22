@@ -23,6 +23,7 @@ from future.utils import istext, isbytes
 from ast import literal_eval
 from traceback import format_exc
 
+from .errors import DefinitionError
 logger = logging.getLogger(__name__)
 
 
@@ -210,7 +211,7 @@ class CParser(object):
                 # This means the file could not be loaded and there was no
                 # cache.
                 mess = 'Could not find header file "{}" or a cache file.'
-                raise Exception(mess.format(f))
+                raise IOError(mess.format(f))
 
             logger.debug("Removing comments from file '{}'...".format(f))
             self.remove_comments(f)
@@ -258,7 +259,7 @@ class CParser(object):
 
         # Make sure cache file exists
         if not istext(cache_file):
-            raise Exception("Cache file option must be a string.")
+            raise ValueError("Cache file option must be a unicode.")
         if not os.path.isfile(cache_file):
             # If file doesn't exist, search for it in this module's path
             d = os.path.dirname(__file__)
@@ -729,7 +730,8 @@ class CParser(object):
         return ''.join(parts)
 
     def expand_fn_macro(self, name, text):
-        """
+        """Replace a function macro.
+
         """
         # defn looks like ('%s + %s / %s', (0, 0, 1))
         defn = self.defs['fnmacros'][name]
@@ -739,7 +741,7 @@ class CParser(object):
         res = [x for x in arg_list.scanString(text, 1)]
         if len(res) == 0:
             mess = "Function macro '{}' not followed by (...)"
-            raise Exception(0,  mess.format(name))
+            raise DefinitionError(0,  mess.format(name))
 
         args, start, end = res[0]
         args = [self.expand_macros(arg) for arg in args[0]]
@@ -1038,6 +1040,9 @@ class CParser(object):
             logger.exception("Error processing enum: {}".format(t))
 
     def process_function(self, s, l, t):
+        """Build a function definition from the parsing tokens.
+
+        """
         logger.debug("FUNCTION {} : {}".format(t, t.keys()))
 
         try:
@@ -1045,7 +1050,7 @@ class CParser(object):
             if len(decl) == 0 or type(decl[-1]) != tuple:
                 logger.error('{}'.format(t))
                 mess = "Incorrect declarator type for function definition."
-                raise Exception(mess)
+                raise DefinitionError(mess)
             logger.debug("  name: {}".format(name))
             logger.debug("  sig: {}".format(decl))
             self.add_def('functions', name, (decl[:-1], decl[-1]))
@@ -1241,12 +1246,12 @@ class CParser(object):
             parent = typ[0]
             if parent in used:
                 m = 'Recursive loop while evaluating types. (typedefs are {})'
-                raise Exception(m.format(' -> '.join(used+[parent])))
+                raise DefinitionError(m.format(' -> '.join(used+[parent])))
 
             used.append(parent)
             if parent not in self.defs['types']:
                 m = 'Unknown type "{}" (typedefs are {})'
-                raise Exception(m.format(parent, ' -> '.join(used)))
+                raise DefinitionError(m.format(parent, ' -> '.join(used)))
             pt = list(self.defs['types'][parent])
             typ = pt + typ[1:]
 
