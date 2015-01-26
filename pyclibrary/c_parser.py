@@ -164,7 +164,7 @@ class CParser(object):
         self.files = {}
 
         if files is not None:
-            if type(files) is str:
+            if istext(files) or isbytes(files):
                 files = [files]
             for f in files:
                 self.load_file(f, replace)
@@ -906,7 +906,7 @@ class CParser(object):
             # Hack to handle bit width specification.
             Group(Group(self.type_spec('type') +
                         Optional(self.declarator_list('decl_list')) +
-                        bitfieldspec.suppress() + semi)) |
+                        colon + integer('bit') + semi)) |
             (self.type_spec + self.declarator +
              nestedExpr('{', '}')).suppress() |
             (self.declarator + nestedExpr('{', '}')).suppress()
@@ -932,7 +932,7 @@ class CParser(object):
                            (Optional(ident)('name') +
                             lbrace +
                             Group(delimitedList(enum_var_decl))('members') +
-                            rbrace | ident('name'))
+                            Optional(comma) + rbrace | ident('name'))
                            )
         self.enum_type.setParseAction(self.process_enum)
         self.enum_decl = self.enum_type + semi
@@ -1110,12 +1110,22 @@ class CParser(object):
                     val = self.eval_expr(m[0].value)
                     logger.debug("    member: {}, {}, {}".format(
                                  m, m[0].keys(), m[0].decl_list))
+
                     if len(m[0].decl_list) == 0:  # anonymous member
-                        struct.append((None, (typ,), None))
+                        member = [None, (typ,), None]
+                        if m[0].bit:
+                            member.append(int(m[0].bit))
+                        struct.append(tuple(member))
+
                     for d in m[0].decl_list:
                         (name, decl) = self.process_type(typ, d)
-                        struct.append((name, decl, val))
-                        logger.debug("      {} {} {}".format(name, decl, val))
+                        member = [name, decl, val]
+                        if m[0].bit:
+                            member.append(int(m[0].bit))
+                        struct.append(tuple(member))
+                        logger.debug("      {} {} {} {}".format(name, decl,
+                                     val, m[0].bit))
+
                 self.add_def(str_typ+'s', sname,
                              {'pack': packing, 'members': struct})
                 self.add_def('types', str_typ+' '+sname, (str_typ, sname))
@@ -1245,7 +1255,6 @@ class CParser(object):
         used = []
         typ = list(typ)
         while True:
-            print(typ)
             if self.is_fund_type(typ):
                 # Remove 'signed' before returning evaluated type
                 typ[0] = re.sub(r'\bsigned\b', '', typ[0]).strip()
@@ -1344,6 +1353,8 @@ def print_parse_results(pr, depth=0, name=''):
 
 
 # Syntatic delimiters
+comma = Literal(",").ignore(quotedString).suppress()
+colon = Literal(":").ignore(quotedString).suppress()
 semi = Literal(";").ignore(quotedString).suppress()
 lbrace = Literal("{").ignore(quotedString).suppress()
 rbrace = Literal("}").ignore(quotedString).suppress()
@@ -1363,7 +1374,6 @@ floating = Regex(r'[+-]?\s*((((\d(\.\d*)?)|(\.\d+))[eE][+-]?\d+)|((\d\.\d*)|(\.\
 number = (floating | integer)
 
 # Miscelaneous
-bitfieldspec = ":" + integer
 bi_operator = oneOf("+ - / * | & || && ! ~ ^ % == != > < >= <= -> . :: << >> = ? :")
 uni_right_operator = oneOf("++ --")
 uni_left_operator = oneOf("++ -- - + * sizeof new")

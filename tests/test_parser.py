@@ -481,7 +481,7 @@ class TestParsing(object):
         # Test creating a structure using only base types.
         assert ('struct_name' in structs and 'struct struct_name' in types)
         assert {'members': [('x', ('int',), 1),
-                            ('y', ('type_type_int',), None),
+                            ('y', ('type_type_int',), None, 2),
                             ('str', ('char', [10]), None)],
                 'pack': None} == structs['struct_name']
         assert ('struct_inst' in variables and
