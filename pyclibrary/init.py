@@ -16,6 +16,8 @@ from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 import sys
 from ctypes import c_longlong
+from .c_parser import _init_cparser, CParser
+from .c_library import _init_clibrary, CLibrary
 
 
 def init(extra_types={}, extra_modifiers=[]):
@@ -29,9 +31,6 @@ def init(extra_types={}, extra_modifiers=[]):
         List of modifiers, such as '__stdcall'.
 
     """
-    from .c_parser import _init_cparser, CParser
-    from .c_library import _init_clibrary, CLibrary
-
     if CParser._init or CLibrary._init:
         raise RuntimeError('Can only initialise the parser once')
 

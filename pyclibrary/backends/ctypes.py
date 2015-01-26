@@ -20,7 +20,8 @@ import sys
 from inspect import cleandoc
 from ctypes import *
 
-from .errors import DefinitionError
+from ..errors import DefinitionError
+from ..c_library import CLibrary
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ def make_mess(mess):
     return cleandoc(mess).replace('\n', ' ')
 
 
-class CLibrary(object):
+class CTypesCLibrary(CLibrary):
     """The CLibrary class is intended to automate much of the work in using
     ctypes by integrating header file definitions from CParser. Ths class
     serves as a proxy to a ctypes, adding a few features:
@@ -317,19 +318,7 @@ class CLibrary(object):
     def _cstruct(self, str_type, str_name):
         if str_name not in self._structs_:
 
-            # Resolve struct name--typedef aliases allowed.
-            if str_name not in self._defs_[str_type]:
-
-                if str_name not in self._defs_['types']:
-                    mess = 'No struct/union named "{}"'
-                    raise KeyError(mess.format(str_name))
-
-                typ = self._headers_.eval_type([str_name])[0]
-                if typ[:7] != 'struct ' and typ[:6] != 'union ':
-                    mess = 'No struct/union named "{}"'
-                    raise KeyError(mess.format(str_name))
-
-                str_name = self._defs_['types'][typ][1]
+            str_name = self._resolve_struct_alias(str_type, str_name)
 
             # Pull struct definition
             defn = self._defs_[str_type][str_name]

@@ -20,11 +20,11 @@ import sys
 import os
 from inspect import cleandoc
 from ctypes import *
-from weakref import WeakValueDictionarys
+from weakref import WeakValueDictionary
+from threading import RLock
 
 from .errors import DefinitionError
 from .utils import find_library
-from .backends import identify_library
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +39,11 @@ class CLibraryMeta(type):
 
     """
     backends = {}
-    libs = WeakValueDictionarys
+    libs = WeakValueDictionary()
 
     def __new__(meta, name, bases, dct):
+        if name == 'CLibrary':
+            return super(CLibraryMeta, meta).__new__(meta, name, bases, dct)
         if 'backend' not in dct:
             mess = make_mess('''{} does not declare a backend name, it cannot
                               be registered.''')
@@ -55,31 +57,38 @@ class CLibraryMeta(type):
 
     def __call__(cls, lib, *args, **kwargs):
 
+        # Identify the library path.
         if istext(lib) or isbytes(lib):
             if os.sep not in lib:
                 lib_path = find_library(lib)
             else:
                 lib_path = os.path.realpath(lib)
+                assert (os.path.isfile(lib_path),
+                        'Provided path does not point to a file')
             backend_cls = cls.backends[kwargs.get('backend', 'ctypes')]
         else:
             if 'backend' in kwargs:
                 backend_cls = cls.backends[kwargs.get('backend', 'ctypes')]
             else:
+                from .backends import identify_library
                 backend = identify_library(lib)
                 backend_cls = cls.backends[backend]
             lib_path = backend_cls.get_library_path(lib)
 
+        # Check whether or not this library has already been opened.
         if lib_path in cls.libs:
             return cls.libs[lib_path]
 
         else:
-            return super(CLibraryMeta, backend_cls).__call__(lib, *args,
-                                                             **kwargs)
+            obj = super(CLibraryMeta, backend_cls).__call__(lib, *args,
+                                                            **kwargs)
+            cls.libs[lib_path] = obj
+            return obj
 
 
 class CLibrary(with_metaclass(CLibraryMeta, object)):
     """The CLibrary class is intended to automate much of the work in using
-    ctypes by integrating header file definitions from CParser. Ths class
+    ctypes by integrating header file definitions from CParser. This class
     serves as a proxy to a ctypes, adding a few features:
       - allows easy access to values defined via CParser
       - automatic type conversions for function calls using CParser function
@@ -124,8 +133,8 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
         Prefix to remove from all definitions.
 
     fix_case : bool
-        Should name be converted from camelCase to python PEP8 compliants
-        names.
+        Can python PEP8 compliants names be used instead of camelCase to
+        access the library elements.
 
     """
     #: Private flag allowing to know if the class has been initiliased.
@@ -134,19 +143,39 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
     #: Balise to use when a NULL pointer is needed
     Null = object()
 
-    def __init__(self, lib, headers, prefix=None, fix_case=True):
+    def __init__(self, lib, headers, prefix=None, fix_case=True,
+                 lock_calls=False):
         # name everything using underscores to avoid name collisions with
         # library
 
-        self._lib_ = lib
-        self._headers_ = headers
+        # Create or store the internal representation of the library.
+        if istext(lib) or isbytes(lib):
+            self._link_library(lib)
+        else:
+            self._lib_ = lib
+
+        # Build or store the parser from the header files.
+        if isinstance(headers, list):
+            self._headers_ = self._build_parser(headers)
+        else:
+            self._headers_ = headers
         self._defs_ = headers.defs
+
+        # Store the list of prefix and dynamically the _all_names method.
         if prefix is None:
             self._prefix_ = []
         elif isinstance(prefix, list):
             self._prefix_ = prefix
         else:
             self._prefix_ = [prefix]
+        if fix_case:
+            self._all_names_ = self._all_names_case_fixing_
+        else:
+            self._all_names_ = self._all_names_no_case_fixing_
+
+        self._lock_calls_ = lock_calls
+        if lock_calls:
+            self._lock_ = RLock()
 
         self._objs_ = {}
         for k in ['values', 'functions', 'types', 'structs', 'unions',
@@ -165,51 +194,6 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
             self._objs_[typ][name] = self._make_obj_(typ, name)
 
         return self._objs_[typ][name]
-
-    def _all_names_(self, name):
-        return [name] + [p + name for p in self._prefix_]
-
-    def _make_obj_(self, typ, name):
-        names = self._all_names_(name)
-
-        for n in names:
-            if n in self._objs_:
-                return self._objs_[n]
-
-        for n in names:  # try with and without prefix
-            if (n not in self._defs_[typ] and
-                not (typ in ['structs', 'unions', 'enums'] and
-                     n in self._defs_['types'])):
-                continue
-
-            if typ == 'values':
-                return self._defs_[typ][n]
-            elif typ == 'functions':
-                return self._get_function(n)
-            elif typ == 'types':
-                obj = self._defs_[typ][n]
-                return self._ctype(obj)
-            elif typ == 'structs':
-                return self._cstruct('structs', n)
-            elif typ == 'unions':
-                return self._cstruct('unions', n)
-            elif typ == 'enums':
-                # Allow automatic resolving of typedefs that alias enums
-                if n not in self._defs_['enums']:
-                    if n not in self._defs_['types']:
-                        raise KeyError('No enums named "{}"'.format(n))
-                    typ = self._headers_.eval_type([n])[0]
-                    if typ[:5] != 'enum ':
-                        raise KeyError('No enums named "{}"'.format(n))
-                    # Look up internal name of enum
-                    n = self._defs_['types'][typ][1]
-                obj = self._defs_['enums'][n]
-
-                return obj
-            else:
-                raise KeyError("Unknown type {}".format(typ))
-
-        raise NameError(name)
 
     def __getattr__(self, name):
         """Used to retrieve any type of definition from the headers.
@@ -240,10 +224,84 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
         """
         return self._defs_[name]
 
+#    def _all_names_case_fixing(self, name):
+#        """Build a list of all possible names by taking into account that
+#        the user omitted a prefix and chose to use a pythonic name over
+#        a camelCase name.
+#
+#        """
+#        camel_names = None  # Need regex and two versions (one with starting Capital)
+#        return ([name] + [p + name for p in self._prefix_]
+#                [p + cname for p in self._prefix for cname in camel_names])
+
+    def _all_names_no_case_fixing(self, name):
+        """Build a list of all possible names by taking into account that
+        the user omitted a prefix.
+
+        """
+        return [name] + [p + name for p in self._prefix_]
+
+    def _make_obj_(self, typ, name):
+        """
+        """
+        names = self._all_names_(name)
+        objs = self._objs_[typ]
+
+        for n in names:
+            if n in objs:
+                return self.objs[n]
+
+        for n in names:  # try with and without prefix
+            if (n not in self._defs_[typ] and
+                not (typ in ['structs', 'unions', 'enums'] and
+                     n in self._defs_['types'])):
+                continue
+
+            if typ == 'values':
+                return self._defs_[typ][n]
+            elif typ == 'functions':
+                return self._get_function(n)
+            elif typ == 'types':
+                obj = self._defs_[typ][n]
+                return self._get_type(obj)
+            elif typ == 'structs':
+                return self._get_struct('structs', n)
+            elif typ == 'unions':
+                return self._get_struct('unions', n)
+            elif typ == 'enums':
+                # Allow automatic resolving of typedefs that alias enums
+                if n not in self._defs_['enums']:
+                    if n not in self._defs_['types']:
+                        raise KeyError('No enums named "{}"'.format(n))
+                    typ = self._headers_.eval_type([n])[0]
+                    if typ[:5] != 'enum ':
+                        raise KeyError('No enums named "{}"'.format(n))
+                    # Look up internal name of enum
+                    n = self._defs_['types'][typ][1]
+                obj = self._defs_['enums'][n]
+
+                return obj
+            else:
+                raise KeyError("Unknown type {}".format(typ))
+
+        raise NameError(name)
+
     def __repr__(self):
         return "<CLibrary instance: %s>" % str(self._lib_)
 
+    def _build_parser(self, headers):
+        """
+        """
+        pass
+
+    def _link_library(self, lib_path):
+        """
+        """
+        raise NotImplementedError()
+
     def _get_function(self, func_name):
+        """
+        """
         try:
             func = getattr(self._lib_, func_name)
         except:
@@ -253,7 +311,7 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
         return CFunction(self, func, self._defs_['functions'][func_name],
                          func_name)
 
-    def _ctype(self, typ, pointers=True):
+    def _get_type(self, typ, pointers=True):
         """Return a ctype object representing the named type.
 
         If pointers is True, the class returned includes all pointer/array
@@ -261,154 +319,32 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
         with no pointers.
 
         """
-        try:
-            typ = self._headers_.eval_type(typ)
-            mods = typ[1:][:]
+        raise NotImplementedError()
 
-            # Create the initial type
-            # Some types like ['char', '*'] have a specific ctype (c_char_p)
-            # (but only do this if pointers == True)
-            if (pointers and len(typ) > 1 and typ[1] == '*' and
-                    typ[0] in self.c_ptr_types):
-                cls = self.c_ptr_types[typ[0]]
-                mods = typ[2:]
+    def _get_struct(self, str_type, str_name):
+        """
+        """
+        pass
 
-            # If the base type is in the list of existing ctypes:
-            elif typ[0] in self.c_types:
-                cls = CLibrary.c_types[typ[0]]
+    def _resolve_struct_alias(self, str_type, str_name):
+        """Resolve struct name--typedef aliases.
 
-            # structs, unions, enums:
-            elif typ[0][:7] == 'struct ':
-                cls = self._cstruct('structs', self._defs_['types'][typ[0]][1])
-            elif typ[0][:6] == 'union ':
-                cls = self._cstruct('unions', self._defs_['types'][typ[0]][1])
-            elif typ[0][:5] == 'enum ':
-                cls = c_int
+        """
+        if str_name not in self._defs_[str_type]:
 
-            # void
-            elif typ[0] == 'void':
-                cls = None
-            else:
-                raise KeyError("Can't find base type for {}".format(typ))
+            if str_name not in self._defs_['types']:
+                mess = 'No struct/union named "{}"'
+                raise KeyError(mess.format(str_name))
 
-            if not pointers:
-                return cls
+            typ = self._headers_.eval_type([str_name])[0]
+            if typ[:7] != 'struct ' and typ[:6] != 'union ':
+                mess = 'No struct/union named "{}"'
+                raise KeyError(mess.format(str_name))
 
-            # apply pointers and arrays
-            while len(mods) > 0:
-                m = mods.pop(0)
-                if istext(m):  # pointer or reference
-                    if m[0] == '*' or m[0] == '&':
-                        for i in m:
-                            cls = POINTER(cls)
+            return self._defs_['types'][typ][1]
 
-                elif isinstance(m, list):      # array
-                    for i in m:
-                        # -1 indicates an 'incomplete type' like "int
-                        # variable[]"
-                        if i == -1:
-                            # which we should interpret like "int *variable"
-                            cls = POINTER(cls)
-                        else:
-                            cls = cls * i
-
-                # Probably a function pointer
-                elif isinstance(m, tuple):
-                    # Find pointer and calling convention
-                    is_ptr = False
-                    conv = '__cdecl'
-                    if len(mods) == 0:
-                        mess = "Function signature with no pointer:"
-                        raise DefinitionError(mess, m, mods)
-                    for i in [0, 1]:
-                        if len(mods) < 1:
-                            break
-                        if mods[0] == '*':
-                            mods.pop(0)
-                            is_ptr = True
-                        elif mods[0] in ['__stdcall', '__cdecl']:
-                            conv = mods.pop(0)
-                        else:
-                            break
-                    if not is_ptr:
-                        mess = make_mess("""Not sure how to handle type
-                            (function without single pointer): {}""")
-                        raise DefinitionError(mess.format(typ))
-
-                    if conv == '__stdcall':
-                        mkfn = WINFUNCTYPE
-
-                    else:
-                        mkfn = CFUNCTYPE
-
-                    args = [self._ctype(arg[1]) for arg in m]
-                    cls = mkfn(cls, *args)
-
-                else:
-                    mess = "Not sure what to do with this type modifier: '{}'"
-                    raise TypeError(mess.format(p))
-            return cls
-
-        except:
-            logger.error("Error while processing type: {}".format(typ))
-            raise
-
-    def _cstruct(self, str_type, str_name):
-        if str_name not in self._structs_:
-
-            # Resolve struct name--typedef aliases allowed.
-            if str_name not in self._defs_[str_type]:
-
-                if str_name not in self._defs_['types']:
-                    mess = 'No struct/union named "{}"'
-                    raise KeyError(mess.format(str_name))
-
-                typ = self._headers_.eval_type([str_name])[0]
-                if typ[:7] != 'struct ' and typ[:6] != 'union ':
-                    mess = 'No struct/union named "{}"'
-                    raise KeyError(mess.format(str_name))
-
-                str_name = self._defs_['types'][typ][1]
-
-            # Pull struct definition
-            defn = self._defs_[str_type][str_name]
-
-            # create ctypes class
-            defs = defn['members'][:]
-            if str_type == 'structs':
-                class s(Structure):
-                    def __repr__(self):
-                        return "<ctypes struct '%s'>" % strName
-            elif str_type == 'unions':
-                class s(Union):
-                    def __repr__(self):
-                        return "<ctypes union '%s'>" % strName
-
-            # Must register struct here to allow recursive definitions.
-            self._structs_[str_name] = s
-
-            if defn['pack'] is not None:
-                s._pack_ = defn['pack']
-
-            # Assign names to anonymous members
-            members = []
-            anon = []
-            for i, d in enumerate(defs):
-                if d[0] is None:
-                    c = 0
-                    while True:
-                        name = 'anon_member%d' % c
-                        if name not in members:
-                            d[0] = name
-                            anon.append(name)
-                            break
-                members.append(d[0])
-
-            s._anonymous_ = anon
-            s._fields_ = [(m[0], self._ctype(m[1])) for m in defs]
-            s._defaults_ = [m[2] for m in defs]
-
-        return self._structs_[strName]
+        else:
+            return str_name
 
 
 class CFunction(object):

@@ -19,3 +19,9 @@ def find_library(name):
     """
     """
     pass
+
+
+def find_headers(name):
+    """
+    """
+    pass
