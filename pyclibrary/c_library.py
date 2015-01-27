@@ -422,7 +422,7 @@ class CFunction(object):
                     arg_list[i] = self.lib._get_type(sig)()
 
                 else:
-                    arg_list[i] = self.lib._get_pointer(arg_type)
+                    arg_list[i] = self.lib._get_pointer(arg_type, sig)
                     guessed_args.append(i)
 
             except:
