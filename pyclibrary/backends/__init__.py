@@ -11,16 +11,23 @@
 from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 
-from .ctypes import CTypesCLibrary
+from .ctypes import (CTypesCLibrary, init_clibrary as c_init,
+                     identify_library as c_iden)
+
+lib_types = {'ctypes', c_iden}
 
 
 def identify_library(lib):
+    """Identify a library backend.
+
     """
-    """
-    pass
+    for typ, check in lib_types.items():
+        if check(lib):
+            return typ
 
 
-def init_librariries():
+def init_libraries(extra_types):
+    """Run the initialiser of each backend.
+
     """
-    """
-    pass
+    c_init(extra_types)

@@ -22,7 +22,8 @@ from ctypes import (c_char, c_wchar, c_ubyte, c_short, c_ushort, c_int, c_uint,
                     c_double, c_longdouble, c_int8, c_uint8, c_int16, c_uint16,
                     c_int32, c_uint32, c_int64, c_uint64,
                     c_char_p, c_wchar_p, c_void_p,
-                    pointer, Union, Structure, POINTER, CFUNCTYPE, WINFUNCTYPE)
+                    pointer, Union, Structure,
+                    POINTER, CFUNCTYPE, WINFUNCTYPE, CDLL)
 
 from ..errors import DefinitionError
 from ..c_library import CLibrary, CFunction
@@ -91,7 +92,10 @@ class CTypesCLibrary(CLibrary):
     #: Balise to use when a NULL pointer is needed
     Null = object()
 
-    #: Types (filled by _init_clibrary)
+    #: Id of the backend
+    backend = 'ctypes'
+
+    #: Types (filled by init_clibrary)
     c_types = {}
 
     #: Types for which ctypes provides a special pointer type.
@@ -107,6 +111,7 @@ class CTypesCLibrary(CLibrary):
         """Find and link the external librairy if only a path was provided.
 
         """
+        # TODO implement
         raise NotImplementedError()
 
     def _get_function(self, func_name):
@@ -282,7 +287,10 @@ class CTypesCLibrary(CLibrary):
         return pointer(cls(0))
 
 
-def _init_clibrary(extra_types={}):
+WIN_TYPES = {'__int64': c_longlong}
+
+
+def init_clibrary(extra_types={}):
     # First load all standard types
     CLibrary.cTypes = {
         'char': c_char,
@@ -317,6 +325,13 @@ def _init_clibrary(extra_types={}):
         'int64_t': c_int64
     }
 
+    for k in extra_types:
+        if k in WIN_TYPES:
+            extra_types[k] = WIN_TYPES[k]
+
     # Now complete the list with some more exotic types
-    CLibrary.cTypes.update(extra_types)
-    CLibrary._init = True
+    CTypesCLibrary.c_types.update(extra_types)
+
+
+def identify_library(lib):
+    return isinstance(lib, CDLL)
