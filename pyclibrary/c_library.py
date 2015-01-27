@@ -19,11 +19,9 @@ import logging
 import sys
 import os
 from inspect import cleandoc
-from ctypes import *
 from weakref import WeakValueDictionary
 from threading import RLock
 
-from .errors import DefinitionError
 from .utils import find_library
 
 logger = logging.getLogger(__name__)
@@ -132,10 +130,6 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
     prefix : unicode
         Prefix to remove from all definitions.
 
-    fix_case : bool
-        Can python PEP8 compliants names be used instead of camelCase to
-        access the library elements.
-
     """
     #: Private flag allowing to know if the class has been initiliased.
     _init = False
@@ -143,8 +137,7 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
     #: Balise to use when a NULL pointer is needed
     Null = object()
 
-    def __init__(self, lib, headers, prefix=None, fix_case=True,
-                 lock_calls=False):
+    def __init__(self, lib, headers, prefix=None, lock_calls=False):
         # name everything using underscores to avoid name collisions with
         # library
 
@@ -168,10 +161,6 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
             self._prefix_ = prefix
         else:
             self._prefix_ = [prefix]
-        if fix_case:
-            self._all_names_ = self._all_names_case_fixing_
-        else:
-            self._all_names_ = self._all_names_no_case_fixing_
 
         self._lock_calls_ = lock_calls
         if lock_calls:
@@ -224,23 +213,14 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
         """
         return self._defs_[name]
 
-#    def _all_names_case_fixing(self, name):
-#        """Build a list of all possible names by taking into account that
-#        the user omitted a prefix and chose to use a pythonic name over
-#        a camelCase name.
-#
-#        """
-#        camel_names = None  # Need regex and two versions (one with starting Capital)
-#        return ([name] + [p + name for p in self._prefix_]
-#                [p + cname for p in self._prefix for cname in camel_names])
-
-    def _all_names_no_case_fixing(self, name):
+    def _all_names_(self, name):
         """Build a list of all possible names by taking into account that
         the user omitted a prefix.
 
         """
         return [name] + [p + name for p in self._prefix_]
 
+    # TODO docstring
     def _make_obj_(self, typ, name):
         """
         """
@@ -290,17 +270,21 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
         return "<CLibrary instance: %s>" % str(self._lib_)
 
     def _build_parser(self, headers):
+        """Find the headers and parse them to extract the definitions.
+
         """
-        """
+        # TODO implement
         pass
 
     def _link_library(self, lib_path):
-        """
+        """Find and link the external librairy if only a path was provided.
+
         """
         raise NotImplementedError()
 
     def _get_function(self, func_name):
-        """
+        """Return a CFuntion instance.
+
         """
         try:
             func = getattr(self._lib_, func_name)
@@ -309,10 +293,10 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
             raise KeyError(mess.format(func))
 
         return CFunction(self, func, self._defs_['functions'][func_name],
-                         func_name)
+                         func_name, self._lock_calls_)
 
     def _get_type(self, typ, pointers=True):
-        """Return a ctype object representing the named type.
+        """Return an object representing the named type.
 
         If pointers is True, the class returned includes all pointer/array
         specs provided. Otherwise, the class returned is just the base type
@@ -322,9 +306,16 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
         raise NotImplementedError()
 
     def _get_struct(self, str_type, str_name):
+        """Return an object representing the named structure or union.
+
         """
+        raise NotImplementedError()
+
+    def _get_pointer(self, arg_type):
+        """Build an uninitialised pointer for the given type.
+
         """
-        pass
+        raise NotImplementedError()
 
     def _resolve_struct_alias(self, str_type, str_name):
         """Resolve struct name--typedef aliases.
@@ -351,7 +342,9 @@ class CFunction(object):
     """Wrapper object for a function from the library.
 
     """
-    def __init__(self, lib, func, sig, name):
+    def __init__(self, lib, func, sig, name, lock_call):
+
+        self.lock_call = lock_call
         self.lib = lib
         self.func = func
 
@@ -365,26 +358,11 @@ class CFunction(object):
             if conv in self.sig[0]:
                 self.sig[0].remove(conv)
         self.name = name
-        self.res_type = lib._ctype(self.sig[0])
-        func.res_type = self.res_type
-        self.arg_types = [lib._ctype(s[1]) for s in self.sig[1]]
-        func.argtypes = self.arg_types
+        self.res_type = lib._get_type(self.sig[0])
+        self.arg_types = [lib._get_type(s[1]) for s in self.sig[1]]
         self.req_args = [x[0] for x in self.sig[1] if x[2] is None]
         # Mapping from argument names to indices
         self.arg_inds = {s[0]: i for i, s in enumerate(self.sig[1])}
-
-    def arg_c_type(self, arg):
-        """Return the ctype required for the specified argument.
-
-        Parameters
-        ----------
-        arg : int or unicode
-            Name or index of the argument whose type should be returned.
-
-        """
-        if istext(arg) or isbytes(arg):
-            arg = self.arg_inds[arg]
-        return self.lib._ctype(self.sig[1][arg][1])
 
     def __call__(self, *args, **kwargs):
         """Invoke the SO or dll function referenced, converting all arguments
@@ -428,50 +406,61 @@ class CFunction(object):
         # Finally, fill in remaining arguments if they are pointers to
         # int/float/void*/struct values (we assume these are to be modified by
         # the function and their initial value is not important)
-        for i, arg in enumerate(arg_list):
-            if arg is None or arg is self.lib.Null:
-                try:
-                    sig = self.sig[1][i][1]
-                    arg_type = self.lib._headers_.eval_type(sig)
+        missings = {arg: i for i, arg in enumerate(arg_list)
+                    if arg is None or arg is self.lib.Null}
+        for arg, i in missings.items():
+            try:
+                sig = self.sig[1][i][1]
+                arg_type = self.lib._headers_.eval_type(sig)
 
-                    # request to build a null pointer
-                    if arg_list[i] is self.lib.Null:
-                        if len(arg_type) < 2:
-                            mess = make_mes("""Cannot create NULL for
-                                non-pointer argument type: {}""")
-                            raise TypeError(mess.format(arg_type))
-                        arg_list[i] = self.lib._ctype(sig)()
+                # request to build a null pointer
+                if arg is self.lib.Null:
+                    if len(arg_type) < 2:
+                        mess = make_mess("""Cannot create NULL for
+                                        non-pointer argument type: {}""")
+                        raise TypeError(mess.format(arg_type))
+                    arg_list[i] = self.lib._get_type(sig)()
 
-                    else:
-                        if (arg_type == ['void', '**'] or
-                                arg_type == ['void', '*', '*']):
-                            cls = c_void_p
-                        else:
-                            # Must be 2-part type, second part must be '*'
-                            assert len(argType) == 2 and argType[1] == '*'
-                            cls = self.lib._ctype(sig, pointers=False)
-                        arg_list[i] = pointer(cls(0))
-                        guessed_args.append(i)
+                else:
+                    arg_list[i] = self.lib._get_pointer(arg_type)
+                    guessed_args.append(i)
 
-                except:
-                    if sys.exc_info()[0] is not AssertionError:
-                        raise
-                    print("Function signature:", self.pretty_signature())
-                    mess = "Function call '{}' missing required argument {} {}"
-                    raise TypeError(mess.format(self.name, i,
-                                                self.sig[1][i][0]))
+            except:
+                if sys.exc_info()[0] is not AssertionError:
+                    raise
+                print("Function signature:", self.pretty_signature())
+                mess = "Function call '{}' missing required argument {} {}"
+                raise TypeError(mess.format(self.name, i,
+                                            self.sig[1][i][0]))
 
         try:
-            res = self.func(*arg_list)
+            if self.lock_calls:
+                with self.lib.lock:
+                    res = self.func(*arg_list)
+            else:
+                res = self.func(*arg_list)
         except Exception:
             logger.error("Function call failed. Signature is: {}".format(
                 self.pretty_signature()))
-            logger.error("Arguments: {}".format(arg_ist))
+            logger.error("Arguments: {}".format(arg_list))
             logger.error("Argtypes: {}".format(self.func.argtypes))
             raise
 
-        cr = CallResult(res, arglist, self.sig, guessed=guessed_args)
+        cr = CallResult(res, arg_list, self.sig, guessed=guessed_args)
         return cr
+
+    def arg_c_type(self, arg):
+        """Return the type required for the specified argument.
+
+        Parameters
+        ----------
+        arg : int or unicode
+            Name or index of the argument whose type should be returned.
+
+        """
+        if istext(arg) or isbytes(arg):
+            arg = self.arg_inds[arg]
+        return self.lib._get_type(self.sig[1][arg][1])
 
     def pretty_signature(self):
         args = (''.join(self.sig[0]), self.name,
@@ -528,6 +517,7 @@ class CallResult:
         else:
             raise ValueError("Index must be int or str.")
 
+    # TODO does not work on CFFI ?
     def make_val(self, obj):
         while not hasattr(obj, 'value'):
             if not hasattr(obj, 'contents'):
@@ -554,43 +544,3 @@ class CallResult:
 
     def auto(self):
         return [self[n] for n in self.guessed]
-
-
-def _init_clibrary(extra_types={}):
-    # First load all standard types
-    CLibrary.cTypes = {
-        'char': c_char,
-        'wchar': c_wchar,
-        'unsigned char': c_ubyte,
-        'short': c_short,
-        'short int': c_short,
-        'unsigned short': c_ushort,
-        'unsigned short int': c_ushort,
-        'int': c_int,
-        'unsigned': c_uint,
-        'unsigned int': c_uint,
-        'long': c_long,
-        'long int': c_long,
-        'unsigned long': c_ulong,
-        'unsigned long int': c_ulong,
-        'long long': c_longlong,
-        'long long int': c_longlong,
-        'unsigned __int64': c_ulonglong,
-        'unsigned long long': c_ulonglong,
-        'unsigned long long int': c_ulonglong,
-        'float': c_float,
-        'double': c_double,
-        'long double': c_longdouble,
-        'uint8_t': c_uint8,
-        'int8_t': c_int8,
-        'uint16_t': c_uint16,
-        'int16_t': c_int16,
-        'uint32_t': c_uint32,
-        'int32_t': c_int32,
-        'uint64_t': c_uint64,
-        'int64_t': c_int64
-    }
-
-    # Now complete the list with some more exotic types
-    CLibrary.cTypes.update(extra_types)
-    CLibrary._init = True
