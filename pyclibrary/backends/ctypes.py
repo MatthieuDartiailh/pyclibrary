@@ -23,6 +23,7 @@ from ctypes import (c_char, c_wchar, c_ubyte, c_short, c_ushort, c_int, c_uint,
                     c_int32, c_uint32, c_int64, c_uint64,
                     c_char_p, c_wchar_p, c_void_p,
                     pointer, Union, Structure,
+                    cdll, windll, oledll,
                     POINTER, CFUNCTYPE, WINFUNCTYPE, CDLL)
 
 from ..errors import DefinitionError
@@ -107,12 +108,32 @@ class CTypesCLibrary(CLibrary):
     def __repr__(self):
         return "<CTypesCLibrary instance: %s>" % str(self._lib_)
 
-    def _link_library(self, lib_path):
+    def _link_library(self, lib_path, convention):
         """Find and link the external librairy if only a path was provided.
 
         """
-        # TODO implement
-        raise NotImplementedError()
+        if convention == 'cdll':
+            return cdll.LoadLibrary(lib_path)
+        elif convention == 'windll':
+            return windll.LoadLibrary(lib_path)
+        elif convention == 'oledll':
+            return oledll.LoadLibrary(lib_path)
+        else:
+            raise ValueError('Convention cannot be {}'.format(convention))
+
+    def _extract_val_(self, obj):
+        """Extract a Python value from a ctype object.
+
+        """
+        while not hasattr(obj, 'value'):
+            if not hasattr(obj, 'contents'):
+                return obj
+            try:
+                obj = obj.contents
+            except ValueError:
+                return None
+
+        return obj.value
 
     def _get_function(self, func_name):
         try:
