@@ -22,7 +22,8 @@ from inspect import cleandoc
 from weakref import WeakValueDictionary
 from threading import RLock
 
-from .utils import find_library
+from .utils import find_library, find_header
+from .c_parser import CParser
 
 logger = logging.getLogger(__name__)
 
@@ -137,15 +138,10 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
     #: Balise to use when a NULL pointer is needed
     Null = object()
 
-    def __init__(self, lib, headers, prefix=None, lock_calls=False):
+    def __init__(self, lib, headers, prefix=None, lock_calls=False,
+                 convention='cdll'):
         # name everything using underscores to avoid name collisions with
         # library
-
-        # Create or store the internal representation of the library.
-        if istext(lib) or isbytes(lib):
-            self._link_library(lib)
-        else:
-            self._lib_ = lib
 
         # Build or store the parser from the header files.
         if isinstance(headers, list):
@@ -154,7 +150,13 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
             self._headers_ = headers
         self._defs_ = headers.defs
 
-        # Store the list of prefix and dynamically the _all_names method.
+        # Create or store the internal representation of the library.
+        if istext(lib) or isbytes(lib):
+            self._link_library(lib, convention)
+        else:
+            self._lib_ = lib
+
+        # Store the list of prefix.
         if prefix is None:
             self._prefix_ = []
         elif isinstance(prefix, list):
@@ -220,9 +222,9 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
         """
         return [name] + [p + name for p in self._prefix_]
 
-    # TODO docstring
     def _make_obj_(self, typ, name):
-        """
+        """Build the correct C-like object from the header definitions.
+
         """
         names = self._all_names_(name)
         objs = self._objs_[typ]
@@ -273,11 +275,34 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
         """Find the headers and parse them to extract the definitions.
 
         """
-        # TODO implement
-        pass
+        hs = []
+        for header in headers:
+            if os.path.isfile(header):
+                hs.append(hs)
+            else:
+                h = find_header(header)
+                if not h:
+                    raise OSError('Cannot find header: {}'.format(header))
+                hs.append(h)
 
-    def _link_library(self, lib_path):
+        return CParser(headers)
+
+    def _link_library(self, lib_path, convention):
         """Find and link the external librairy if only a path was provided.
+
+        Parameters
+        ----------
+        lib_path : unicode
+            Path to the library to link.
+
+        convention : {'cdll', 'windll', 'oleddl'}
+            Calling convention to use.
+
+        """
+        raise NotImplementedError()
+
+    def _extract_val_(self, obj):
+        """Extract a python representation from a function return value.
 
         """
         raise NotImplementedError()
@@ -488,7 +513,8 @@ class CallResult:
        ret, arg1, arg2 = lib.run_some_function(...)
 
     """
-    def __init__(self, rval, args, sig, guessed):
+    def __init__(self, lib, rval, args, sig, guessed):
+        self.lib = lib
         self.rval = rval        # return value of function call
         self.args = args        # list of arguments to function call
         self.sig = sig          # function signature
@@ -497,14 +523,14 @@ class CallResult:
     def __call__(self):
         if self.sig[0] == ['void']:
             return None
-        return self.make_val(self.rval)
+        return self.lib._extract_val_(self.rval)
 
     def __getitem__(self, n):
         if isinstance(n, int):
-            return self.make_val(self.args[n])
+            return self.lib._extract_val_(self.args[n])
         elif istext(n) or isbytes(n):
             ind = self.find_arg(n)
-            return self.make_val(self.args[ind])
+            return self.lib._extract_val_(self.args[ind])
         else:
             raise ValueError("Index must be int or str.")
 
@@ -516,18 +542,6 @@ class CallResult:
             self.args[ind] = val
         else:
             raise ValueError("Index must be int or str.")
-
-    # TODO does not work on CFFI ?
-    def make_val(self, obj):
-        while not hasattr(obj, 'value'):
-            if not hasattr(obj, 'contents'):
-                return obj
-            try:
-                obj = obj.contents
-            except ValueError:
-                return None
-
-        return obj.value
 
     def find_arg(self, arg):
         for i, a in enumerate(self.sig[1]):
