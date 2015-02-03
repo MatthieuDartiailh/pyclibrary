@@ -63,7 +63,7 @@ def win_defs(version='800'):
     p = CParser(
         [os.path.join(d, 'headers', h) for h in header_files],
         macros={'_WIN32': '', '_MSC_VER': version, 'CONST': 'const',
-                'NO_STRICT': None},
+                'NO_STRICT': None, 'MS_WIN32': ''},
         process_all=False
         )
 
