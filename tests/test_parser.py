@@ -431,6 +431,10 @@ class TestParsing(object):
         assert self.parser.eval_type(['typeTypeInt']) == ('int',)
         assert ('ULONG' in types and types['ULONG'] == ('unsigned long',))
 
+        # Test annotated types
+        assert ('voidpc' in types and types['voidpc'] == ('void', '*'))
+        assert ('charf' in types and types['charf'] == ('char',))
+
         # Test using custom type.
         assert ('ttip5' in variables and
                 variables['ttip5'] == (None, ('typeTypeInt', '*', [5])))

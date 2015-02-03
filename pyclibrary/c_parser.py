@@ -99,7 +99,7 @@ class CParser(object):
 
     cache :
 
-    *args :
+    **kwargs :
         Extra parameters may be used to specify the starting state of the
         parser. For example, one could provide a set of missing type
         declarations by types={'UINT': ('unsigned int'), 'STRING': ('char', 1)}
@@ -139,7 +139,7 @@ class CParser(object):
     _init = False
 
     def __init__(self, files=None, replace=None, copy_from=None,
-                 process_all=True, cache=None, **args):
+                 process_all=True, cache=None, **kwargs):
 
         if not self._init:
             logger.warning('Automatic initialisation based on OS detection')
@@ -153,7 +153,7 @@ class CParser(object):
         # Description of the struct packing rules as defined by #pragma pack
         self.pack_list = {}
 
-        self.init_opts = args.copy()
+        self.init_opts = kwargs.copy()
         self.init_opts['files'] = []
         self.init_opts['replace'] = {}
 
@@ -179,9 +179,9 @@ class CParser(object):
         self.current_file = None
 
         # Import extra arguments if specified
-        for t in args:
-            for k in args[t].keys():
-                self.add_def(t, k, args[t][k])
+        for t in kwargs:
+            for k in kwargs[t].keys():
+                self.add_def(t, k, kwargs[t][k])
 
         # Import from other CParsers if specified
         if copy_from is not None:
