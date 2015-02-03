@@ -6,7 +6,7 @@
 #
 # The full license is in the file LICENCE, distributed with this software.
 # -----------------------------------------------------------------------------
-"""Utility function to retrieve a dll path and architecture.
+"""Utility functions to retrieve headers or library path and architecture.
 
 Most of those function have been taken or adapted from the ones found in
 PyVISA.
@@ -26,6 +26,8 @@ import logging
 import io
 import struct
 import subprocess
+
+from .thirdparty.find_library import find_library as find_lib
 
 logger = logging.getLogger(__name__)
 
@@ -50,15 +52,28 @@ def add_header_locations(dir_list):
     HEADER_DIRS.extend(dirs)
 
 
-def find_header(h_name):
-    """Look for the specified header file in the PATH.
+def find_header(h_name, dirs=[]):
+    """Look for a header file.
 
-    Headers are looked for in the headers specified by the user using the
+    Headers are looked for in the directories specified by the user using the
     add_header_locations function, in the headers directory of PyCLibrary, and
     in the standards locations according to the operation system.
 
+    Parameters
+    ----------
+    h_name : unicode
+        Name of the header to retrieve (should include the ".h")
+    dirs : list, optional
+        List of directory which should be searched for the header in addition
+        to the default ones.
+
+    Returns
+    -------
+    path : unicode
+        Path to the header file.
+
     """
-    dirs = HEADER_DIRS[:-1]
+    dirs += HEADER_DIRS[:-1]
     if sys.platform == 'win32':
         pass
 
@@ -75,6 +90,52 @@ def find_header(h_name):
         if os.path.isfile(path):
             return path
 
+
+LIBRARY_DIRS = []
+
+
+def add_library_locations(dir_list):
+    """Add directories in which to look for libraries.
+
+    """
+    dirs = [d for d in dir_list if os.path.isdir(d)]
+    rejected = [d for d in dir_list if d not in dirs]
+    logging.debug('The following directories are invalid: {}'.format(rejected))
+    LIBRARY_DIRS.extend(dirs)
+
+
+def find_library(name, dirs=[]):
+    """Look for a library file.
+
+    Libraries are looked for in the directories specified by the user using the
+    add_library_locations function, and using the find_library function found
+    the thirdparty package.
+
+    Parameters
+    ----------
+    name : unicode
+        Name of the library to retrieve (should include the extension)
+    dirs : list, optional
+        List of directory which should be searched for the library before
+        ressorting to using thirdparty.find_library.
+
+    Returns
+    -------
+    path : unicode
+        Path to the library file.
+
+    """
+    for d in LIBRARY_DIRS[:-1]:
+        path = os.path.join(d, name)
+        if os.path.isfile(path):
+            return LibraryPath(path)
+
+    path = find_lib(name)
+    if path:
+        return LibraryPath(path)
+
+
+# --- Private API -------------------------------------------------------------
 
 class LibraryPath(str):
 
@@ -115,66 +176,6 @@ class LibraryPath(str):
         if not self.arch:
             return 'n/a'
         return ', '.join(str(a) for a in self.arch)
-
-# Taken from PyVisa cthelper.
-
-# On Linux, find Library returns the name not the path.
-# This excerpt provides a modified find_library.
-# noinspection PyUnresolvedReferences
-if os.name == "posix" and sys.platform.startswith('linux'):
-
-    # Andreas Degert's find functions, using gcc, /sbin/ldconfig, objdump
-    def define_find_libary():
-        import re
-        import tempfile
-        import errno
-
-        def _findlib_gcc(name):
-            expr = r'[^\(\)\s]*lib%s\.[^\(\)\s]*' % re.escape(name)
-            fdout, ccout = tempfile.mkstemp()
-            os.close(fdout)
-            cmd = 'if type gcc >/dev/null 2>&1; then CC=gcc; else CC=cc; fi;' \
-                  '$CC -Wl,-t -o ' + ccout + ' 2>&1 -l' + name
-            trace = ''
-            try:
-                f = os.popen(cmd)
-                trace = f.read()
-                f.close()
-            finally:
-                try:
-                    os.unlink(ccout)
-                except OSError as e:
-                    if e.errno != errno.ENOENT:
-                        raise
-            res = re.search(expr, trace)
-            if not res:
-                return None
-            return res.group(0)
-
-        def _findlib_ldconfig(name):
-            # XXX assuming GLIBC's ldconfig (with option -p)
-            expr = r'/[^\(\)\s]*lib%s\.[^\(\)\s]*' % re.escape(name)
-            res = re.search(expr,
-                            os.popen('/sbin/ldconfig -p 2>/dev/null').read())
-            if not res:
-                # Hm, this works only for libs needed by the python executable.
-                cmd = 'ldd %s 2>/dev/null' % sys.executable
-                res = re.search(expr, os.popen(cmd).read())
-                if not res:
-                    return None
-            return res.group(0)
-
-        def _find_library(name):
-            path = _findlib_ldconfig(name) or _findlib_gcc(name)
-            if path:
-                return os.path.realpath(path)
-            return path
-
-        return _find_library
-
-    find_library = define_find_libary()
-else:
-    from ctypes.util import find_library
 
 
 def get_arch(filename):
