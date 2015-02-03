@@ -6,8 +6,6 @@
 #
 # The full license is in the file LICENCE, distributed with this software.
 # -----------------------------------------------------------------------------
-"""
-"""
 """Utility function to retrieve a dll path and architecture.
 
 Most of those function have been taken or adapted from the ones found in

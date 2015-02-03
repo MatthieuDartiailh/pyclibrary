@@ -469,7 +469,7 @@ class CParser(object):
 
         result = []
 
-        directive = re.compile(r'\s*#([a-zA-Z]+)(.*)$')
+        directive = re.compile(r'\s*#\s*([a-zA-Z]+)(.*)$')
         if_true = [True]
         if_hit = []
         for i, line in enumerate(lines):
