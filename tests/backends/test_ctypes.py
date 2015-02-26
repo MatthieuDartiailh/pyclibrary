@@ -62,12 +62,14 @@ class TestCTypesCLibrary(object):
     def test_make_struct(self):
         pass
 
-    def test_make_function(self):
-        pass
-
-    def test_function_call(self):
+    def test_function_call1(self):
         res = self.library.get_an_integer()
         assert res() == 42
+
+    def test_function_call2(self):
+        res = self.library.getSPAMANDEGGS()
+        assert res[0].name == 'first egg'
+        assert res[0].num_spams == 1
 
     def test_extract_result(self):
         pass

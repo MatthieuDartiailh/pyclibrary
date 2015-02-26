@@ -351,6 +351,15 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
         return CFunction(self, func, self._defs_['functions'][func_name],
                          func_name, self._lock_calls_)
 
+    def _init_function(self, function):
+        """Finish the function wrapper initialisation.
+
+        This is expected to be implemented by backends for which the default
+        behavior is not sufficient.
+
+        """
+        pass
+
     def _get_type(self, typ, pointers=True):
         """Return an object representing the named type.
 
@@ -420,6 +429,8 @@ class CFunction(object):
         # Mapping from argument names to indices
         self.arg_inds = {s[0]: i for i, s in enumerate(self.sig[1])}
 
+        self.lib._init_function(self)
+
     def __call__(self, *args, **kwargs):
         """Invoke the SO or dll function referenced, converting all arguments
         to the correct type.
@@ -463,6 +474,7 @@ class CFunction(object):
         # the function and their initial value is not important)
         missings = {arg: i for i, arg in enumerate(arg_list)
                     if arg is None or arg is self.lib.Null}
+        print(missings)
         for arg, i in missings.items():
             try:
                 sig = self.sig[1][i][1]
@@ -480,7 +492,8 @@ class CFunction(object):
                     arg_list[i] = self.lib._get_pointer(arg_type, sig)
                     guessed_args.append(i)
 
-            except:
+            except Exception as e:
+                print(e)
                 if sys.exc_info()[0] is not AssertionError:
                     raise
                 mess = "Function call '{}' missing required argument {} {}"

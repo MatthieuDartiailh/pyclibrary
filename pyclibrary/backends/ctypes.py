@@ -105,6 +105,16 @@ class CTypesCLibrary(CLibrary):
                    'void': c_void_p
                    }
 
+    def to_pointer(self, val):
+        """
+        """
+        pass
+
+    def from_pointer(self, point):
+        """
+        """
+        pass
+
     def __repr__(self):
         return "<CTypesCLibrary instance: %s>" % str(self._lib_)
 
@@ -144,7 +154,7 @@ class CTypesCLibrary(CLibrary):
 
         """
         try:
-            typ = self._headers_.eval_type(typ)
+            typ = list(self._headers_.eval_type(typ))
             mods = typ[1:][:]
 
             # Create the initial type
@@ -277,8 +287,10 @@ class CTypesCLibrary(CLibrary):
                 members.append(d[0])
 
             s._anonymous_ = anon
-            # Handle bit field specifications
-            s._fields_ = [(m[0], self._get_type(m[1])) if len(m) == 2 else
+            # Handle bit field specifications, ctypes only supports bit fields
+            # for integer but I am not sure how to test for it in a nice
+            # fashion.
+            s._fields_ = [(m[0], self._get_type(m[1])) if m[2] is None else
                           (m[0], self._get_type(m[1]), m[2]) for m in defs]
             s._defaults_ = [m[2] for m in defs]
 
@@ -292,10 +304,20 @@ class CTypesCLibrary(CLibrary):
                 arg_type == ['void', '*', '*']):
             cls = c_void_p
         else:
-            # Must be 2-part type, second part must be '*'
-            assert len(arg_type) == 2 and arg_type[1] == '*'
-            cls = self.lib._get_type(sig, pointers=False)
-        return pointer(cls(0))
+            # Must be 2-part type, second part must be '*' or '**'
+            assert len(arg_type) == 2 and arg_type[1] in ('*', '**')
+            cls = self._get_type(sig, pointers=False)
+            if arg_type[1] == '*':
+                return pointer(cls(0))
+            else:
+                return pointer(pointer(cls(0)))
+
+    def _init_function(self, function):
+        """Overrided here to declare the arguments types and return type.
+
+        """
+        function.func.arg_types = function.arg_types
+        function.func.res_type = function.res_type
 
 
 WIN_TYPES = {'__int64': c_longlong}
