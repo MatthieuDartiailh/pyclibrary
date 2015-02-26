@@ -7,7 +7,9 @@ void f(int, int);
 inline int g(char *ch, char **str)
 {
      JUNK
-     { }
+     switch (str){
+        case 'r': return 0;
+     }
      int localVariable = 1;
 }
 
@@ -17,3 +19,7 @@ int(*fnPtr)(char, float);
 
 // Adding dllexport and stdcall annotation to a function.
 int __declspec(dllexport) __stdcall function1();
+
+#define EXPORT(x) x __declspec(dllexport)
+
+EXPORT(int) function2();

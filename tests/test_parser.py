@@ -264,6 +264,9 @@ class TestPreprocessing(object):
         assert 'CARRE' in fnmacros
         assert 'int carre = 2*2;' in stream
 
+        assert 'int __declspec(dllexport) function2()' in stream
+        assert '__declspec(dllexport) int function3()' in stream
+
         # Test defining a macro function as an alias for another one.
         assert 'MAKEINTRESOURCEA' in fnmacros
         assert 'MAKEINTRESOURCEW' in fnmacros
@@ -582,3 +585,6 @@ class TestParsing(object):
                                               '*')))
         assert ('function1' in functions and
                 functions['function1'] == (('int', '__stdcall'), ()))
+
+        assert ('function2' in functions and
+                functions['function2'] == (('int',), ()))

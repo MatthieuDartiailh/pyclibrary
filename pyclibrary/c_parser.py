@@ -717,12 +717,11 @@ class CParser(object):
                 # If function macro expansion fails, just ignore it.
                 try:
                     exp, end = self.expand_fn_macro(name, line[m.end(N):])
-                except:
+                except Exception:
                     exp = name
                     end = 0
-                    if sys.exc_info()[1][0] != 0:
-                        mess = "Function macro expansion failed: {}, {}"
-                        logger.error(mess.format(name, line[m.end(N):]))
+                    mess = "Function macro expansion failed: {}, {}"
+                    logger.error(mess.format(name, line[m.end(N):]))
 
                 parts.append(line[:m.start(N)])
                 start = end + m.end(N)
@@ -893,7 +892,8 @@ class CParser(object):
         # Function definition
         self.typeless_function_decl = (self.declarator('decl') +
                                        nestedExpr('{', '}').suppress())
-        self.function_decl = (self.type_spec('type') +
+        # XXXX Hack on win32 __declspec(dllexport) can appear before the type.
+        self.function_decl = (extra_modifier + self.type_spec('type') +
                               self.declarator('decl') +
                               nestedExpr('{', '}').suppress())
         self.function_decl.setParseAction(self.process_function)
@@ -1456,11 +1456,12 @@ def _init_cparser(extra_types=None, extra_modifiers=None):
         ZeroOrMore(uni_right_operator)
         )
 
+    # XXX Added name here to catch macro functions on types
     uncast_atom = (
         ZeroOrMore(uni_left_operator) +
         ((ident + '(' + Optional(delimitedList(expression)) + ')' |
           ident + OneOrMore('[' + expression + ']') |
-          ident | number | quotedString
+          ident | number | name | quotedString
           ) |
          ('(' + expression + ')')) +
         ZeroOrMore(uni_right_operator)
