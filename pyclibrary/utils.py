@@ -48,11 +48,13 @@ def add_header_locations(dir_list):
     """
     dirs = [d for d in dir_list if os.path.isdir(d)]
     rejected = [d for d in dir_list if d not in dirs]
-    logging.debug('The following directories are invalid: {}'.format(rejected))
+    if rejected:
+        msg = 'The following directories are invalid: {}'
+        logging.warning(msg.format(rejected))
     HEADER_DIRS.extend(dirs)
 
 
-def find_header(h_name, dirs=[]):
+def find_header(h_name, dirs=None):
     """Look for a header file.
 
     Headers are looked for in the directories specified by the user using the
@@ -73,7 +75,11 @@ def find_header(h_name, dirs=[]):
         Path to the header file.
 
     """
-    dirs += HEADER_DIRS[:-1]
+    if dirs:
+        dirs += HEADER_DIRS[::-1]
+    else:
+        dirs = HEADER_DIRS[::-1]
+
     if sys.platform == 'win32':
         pass
 
@@ -100,7 +106,9 @@ def add_library_locations(dir_list):
     """
     dirs = [d for d in dir_list if os.path.isdir(d)]
     rejected = [d for d in dir_list if d not in dirs]
-    logging.debug('The following directories are invalid: {}'.format(rejected))
+    if rejected:
+        msg = 'The following directories are invalid: {}'
+        logging.warning(msg.format(rejected))
     LIBRARY_DIRS.extend(dirs)
 
 
