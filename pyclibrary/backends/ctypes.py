@@ -27,7 +27,7 @@ from ctypes import (c_char, c_wchar, c_ubyte, c_short, c_ushort, c_int, c_uint,
                     POINTER, CFUNCTYPE, WINFUNCTYPE, CDLL)
 
 from ..errors import DefinitionError
-from ..c_library import CLibrary, CFunction
+from ..c_library import CLibrary
 
 logger = logging.getLogger(__name__)
 
@@ -135,16 +135,6 @@ class CTypesCLibrary(CLibrary):
 
         return obj.value
 
-    def _get_function(self, func_name):
-        try:
-            func = getattr(self._lib_, func_name)
-        except:
-            mess = "Function name '{}' appears in headers but not in library!"
-            raise KeyError(mess.format(func))
-
-        return CFunction(self, func, self._defs_['functions'][func_name],
-                         func_name)
-
     def _get_type(self, typ, pointers=True):
         """Return a ctype object representing the named type.
 
@@ -167,7 +157,7 @@ class CTypesCLibrary(CLibrary):
 
             # If the base type is in the list of existing ctypes:
             elif typ[0] in self.c_types:
-                cls = CLibrary.c_types[typ[0]]
+                cls = self.c_types[typ[0]]
 
             # structs, unions, enums:
             elif typ[0][:7] == 'struct ':
@@ -313,7 +303,7 @@ WIN_TYPES = {'__int64': c_longlong}
 
 def init_clibrary(extra_types={}):
     # First load all standard types
-    CLibrary.cTypes = {
+    CTypesCLibrary.c_types = {
         'char': c_char,
         'wchar': c_wchar,
         'unsigned char': c_ubyte,

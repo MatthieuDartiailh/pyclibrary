@@ -7,7 +7,7 @@
 # The full license is in the file LICENCE, distributed with this software.
 # -----------------------------------------------------------------------------
 """
-Proxy to both CHeader and ctypes, allowing automatic type conversion and
+Proxy to library object, allowing automatic type conversion and
 function calling based on C header definitions.
 
 """
@@ -66,12 +66,9 @@ class CLibraryMeta(type):
                     'Provided path does not point to a file'
             backend_cls = cls.backends[kwargs.get('backend', 'ctypes')]
         else:
-            if 'backend' in kwargs:
-                backend_cls = cls.backends[kwargs.get('backend', 'ctypes')]
-            else:
-                from .backends import identify_library
-                backend = identify_library(lib)
-                backend_cls = cls.backends[backend]
+            from .backends import identify_library
+            backend = identify_library(lib)
+            backend_cls = cls.backends[backend]
             lib_path = backend_cls.get_library_path(lib)
 
         # Check whether or not this library has already been opened.
@@ -125,11 +122,24 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
     lib:
         Library object.
 
-    headers : CParser
-        CParser holding all the definitions.
+    headers : unicode or CParser
+        Path to the header files or CParser holding all the definitions.
 
-    prefix : unicode
+    prefix : unicode, optional
         Prefix to remove from all definitions.
+
+    lock_calls : bool, optional
+        Whether or not to lock the calls to the underlying library. This should
+        be used only if the underlying library is not thread safe.
+
+    convention : {'cdll', 'windll', 'oledll'}
+        Calling convention to use. Not all backends supports all calling
+        conventions.
+
+    backend : unicode, optional
+        Name of the backend to use. This is ignored if an already initialised
+        library object is passed.
+        NB : this kwarg is used by the metaclass.
 
     """
     #: Private flag allowing to know if the class has been initiliased.
@@ -139,20 +149,23 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
     Null = object()
 
     def __init__(self, lib, headers, prefix=None, lock_calls=False,
-                 convention='cdll'):
+                 convention='cdll', backend='ctypes'):
         # name everything using underscores to avoid name collisions with
         # library
 
         # Build or store the parser from the header files.
         if isinstance(headers, list):
             self._headers_ = self._build_parser(headers)
-        else:
+        elif isinstance(headers, CParser):
             self._headers_ = headers
-        self._defs_ = headers.defs
+        else:
+            msg = 'Expected a CParser instance or list for headers, not {}'
+            raise ValueError(msg.format(type(headers)))
+        self._defs_ = self._headers_.defs
 
         # Create or store the internal representation of the library.
         if istext(lib) or isbytes(lib):
-            self._link_library(lib, convention)
+            self._lib_ = self._link_library(lib, convention)
         else:
             self._lib_ = lib
 
@@ -175,6 +188,22 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
         self._all_objs_ = {}
         self._structs_ = {}
         self._unions_ = {}
+
+    def to_pointer(self, val):
+        """Return a pointer for the given input.
+
+        The exact object returned will be backend dependent.
+
+        """
+        raise NotImplementedError()
+
+    def from_pointer(self, val):
+        """Extract the value from a pointer.
+
+        The exact object returned will be backend dependent.
+
+        """
+        raise NotImplementedError()
 
     def __call__(self, typ, name):
         if typ not in self._objs_:
@@ -214,6 +243,8 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
 
         """
         return self._defs_[name]
+
+    # --- Private API ---------------------------------------------------------
 
     def _all_names_(self, name):
         """Build a list of all possible names by taking into account that
@@ -285,7 +316,7 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
                     raise OSError('Cannot find header: {}'.format(header))
                 hs.append(h)
 
-        return CParser(headers)
+        return CParser(hs)
 
     def _link_library(self, lib_path, convention):
         """Find and link the external librairy if only a path was provided.
@@ -315,7 +346,7 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
             func = getattr(self._lib_, func_name)
         except:
             mess = "Function name '{}' appears in headers but not in library!"
-            raise KeyError(mess.format(func))
+            raise KeyError(mess.format(func_name))
 
         return CFunction(self, func, self._defs_['functions'][func_name],
                          func_name, self._lock_calls_)
@@ -378,7 +409,7 @@ class CFunction(object):
         self.sig = list(sig)
 
         # remove void args from list
-        self.sig[1] = [s for s in sig[1] if s[1] != ['void']]
+        self.sig[1] = [s for s in sig[1] if s[1] != ('void',)]
         for conv in ['__stdcall', '__cdecl']:
             if conv in self.sig[0]:
                 self.sig[0].remove(conv)
@@ -414,7 +445,6 @@ class CFunction(object):
         # Next fill in kwargs
         for k in kwargs:
             if k not in self.arg_inds:
-                print("Function signature:", self.pretty_signature())
                 mess = "Function signature has no argument named '{}'"
                 raise TypeError(mess.format(k))
 
@@ -453,13 +483,12 @@ class CFunction(object):
             except:
                 if sys.exc_info()[0] is not AssertionError:
                     raise
-                print("Function signature:", self.pretty_signature())
                 mess = "Function call '{}' missing required argument {} {}"
                 raise TypeError(mess.format(self.name, i,
                                             self.sig[1][i][0]))
 
         try:
-            if self.lock_calls:
+            if self.lock_call:
                 with self.lib.lock:
                     res = self.func(*arg_list)
             else:
@@ -471,7 +500,8 @@ class CFunction(object):
             logger.error("Argtypes: {}".format(self.func.argtypes))
             raise
 
-        cr = CallResult(res, arg_list, self.sig, guessed=guessed_args)
+        cr = CallResult(self.lib, res, arg_list, self.sig,
+                        guessed=guessed_args)
         return cr
 
     def arg_c_type(self, arg):
@@ -489,10 +519,10 @@ class CFunction(object):
 
     def pretty_signature(self):
         args = (''.join(self.sig[0]), self.name,
-                ', '.join(["{} {}".format("".join(map(s[1])), s[0])
+                ', '.join(["{} {}".format("".join(map(s[1], s[0])))
                           for s in self.sig[1]])
                 )
-        return "{} {}({})".format(args)
+        return "{} {}({})".format(*args)
 
 
 class CallResult:
