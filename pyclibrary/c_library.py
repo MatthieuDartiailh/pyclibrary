@@ -189,22 +189,6 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
         self._structs_ = {}
         self._unions_ = {}
 
-    def to_pointer(self, val):
-        """Return a pointer for the given input.
-
-        The exact object returned will be backend dependent.
-
-        """
-        raise NotImplementedError()
-
-    def from_pointer(self, val):
-        """Extract the value from a pointer.
-
-        The exact object returned will be backend dependent.
-
-        """
-        raise NotImplementedError()
-
     def __call__(self, typ, name):
         if typ not in self._objs_:
             typs = self._objs_.keys()
@@ -474,7 +458,6 @@ class CFunction(object):
         # the function and their initial value is not important)
         missings = {arg: i for i, arg in enumerate(arg_list)
                     if arg is None or arg is self.lib.Null}
-        print(missings)
         for arg, i in missings.items():
             try:
                 sig = self.sig[1][i][1]

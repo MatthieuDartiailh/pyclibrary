@@ -105,16 +105,6 @@ class CTypesCLibrary(CLibrary):
                    'void': c_void_p
                    }
 
-    def to_pointer(self, val):
-        """
-        """
-        pass
-
-    def from_pointer(self, point):
-        """
-        """
-        pass
-
     def __repr__(self):
         return "<CTypesCLibrary instance: %s>" % str(self._lib_)
 

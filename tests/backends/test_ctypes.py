@@ -16,6 +16,7 @@ from __future__ import (division, unicode_literals, print_function,
 
 import os
 import _ctypes_test
+from pytest import raises
 
 from pyclibrary.utils import (add_header_locations, HEADER_DIRS)
 from pyclibrary.c_library import CLibrary
@@ -45,37 +46,36 @@ class TestCTypesCLibrary(object):
         self.library = CLibrary(_ctypes_test.__file__, ['ctypes_test.h'])
 
     def test_call(self):
-        pass
+        point_cls = self.library('structs', 'tagpoint')
+        point_cls(x=1, y=2)
+
+        with raises(KeyError):
+            self.library('r', 't')
 
     def test_getattr(self):
-        pass
+        assert self.library.an_integer == 42
 
     def test_getitem(self):
-        pass
-
-    def test_make_val(self):
-        pass
-
-    def test_make_type(self):
-        pass
+        assert self.library['values']['an_integer'] == 42
 
     def test_make_struct(self):
-        pass
+        self.library.BITS
 
     def test_function_call1(self):
+        # Test calling a function taking no arguments.
         res = self.library.get_an_integer()
         assert res() == 42
 
     def test_function_call2(self):
+        # Test calling a function without pointers.
         res = self.library.getSPAMANDEGGS()
         assert res[0].name == 'first egg'
         assert res[0].num_spams == 1
 
-    def test_extract_result(self):
-        pass
-
-    def test_to_pointer(self):
-        pass
-
-    def test_from_pointer(self):
-        pass
+    def test_function_call3(self):
+        # Test calling a function with an argument and a missing pointer.
+        arg = self.library.point(x=1, y=2)
+        res = self.library._testfunc_byval(arg)
+        assert res() == 3
+        assert res[1].x == arg.x
+        assert res[1].y == arg.y
