@@ -22,7 +22,7 @@ from inspect import cleandoc
 from weakref import WeakValueDictionary
 from threading import RLock
 
-from .utils import find_library, find_header
+from .utils import find_library
 from .c_parser import CParser
 
 logger = logging.getLogger(__name__)
@@ -66,10 +66,10 @@ class CLibraryMeta(type):
                     'Provided path does not point to a file'
             backend_cls = cls.backends[kwargs.get('backend', 'ctypes')]
         else:
-            from .backends import identify_library
+            from .backends import identify_library, get_library_path
             backend = identify_library(lib)
             backend_cls = cls.backends[backend]
-            lib_path = backend_cls.get_library_path(lib)
+            lib_path = get_library_path(lib, backend)
 
         # Check whether or not this library has already been opened.
         if lib_path in cls.libs:

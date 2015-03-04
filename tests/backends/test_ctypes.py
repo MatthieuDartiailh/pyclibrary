@@ -69,7 +69,7 @@ class TestCTypesCLibrary(object):
     def test_function_call2(self):
         # Test calling a function without pointers.
         res = self.library.getSPAMANDEGGS()
-        assert res[0].name == 'first egg'
+        assert res[0].name.decode('utf8') == 'first egg'
         assert res[0].num_spams == 1
 
     def test_function_call3(self):

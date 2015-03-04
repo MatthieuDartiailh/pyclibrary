@@ -16,6 +16,7 @@ from __future__ import (division, unicode_literals, print_function,
 
 from future.utils import istext
 import logging
+import os
 from inspect import cleandoc
 from ctypes import (c_char, c_wchar, c_ubyte, c_short, c_ushort, c_int, c_uint,
                     c_long, c_ulong, c_longlong, c_ulonglong, c_float,
@@ -28,6 +29,7 @@ from ctypes import (c_char, c_wchar, c_ubyte, c_short, c_ushort, c_int, c_uint,
 
 from ..errors import DefinitionError
 from ..c_library import CLibrary
+from ..utils import find_library
 
 logger = logging.getLogger(__name__)
 
@@ -358,3 +360,10 @@ def init_clibrary(extra_types={}):
 
 def identify_library(lib):
     return isinstance(lib, CDLL)
+
+
+def get_library_path(lib):
+    if os.path.isfile(lib._name):
+        return lib._name
+    else:
+        return find_library(lib._name).path
