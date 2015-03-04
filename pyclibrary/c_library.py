@@ -290,17 +290,7 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
         """Find the headers and parse them to extract the definitions.
 
         """
-        hs = []
-        for header in headers:
-            if os.path.isfile(header):
-                hs.append(hs)
-            else:
-                h = find_header(header)
-                if not h:
-                    raise OSError('Cannot find header: {}'.format(header))
-                hs.append(h)
-
-        return CParser(hs)
+        return CParser(headers)
 
     def _link_library(self, lib_path, convention):
         """Find and link the external librairy if only a path was provided.

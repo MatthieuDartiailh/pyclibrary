@@ -24,6 +24,7 @@ from ast import literal_eval
 from traceback import format_exc
 
 from .errors import DefinitionError
+from .utils import find_header
 logger = logging.getLogger(__name__)
 
 
@@ -166,7 +167,7 @@ class CParser(object):
         if files is not None:
             if istext(files) or isbytes(files):
                 files = [files]
-            for f in files:
+            for f in self.find_headers(files):
                 self.load_file(f, replace)
 
         # Initialize empty definition lists
@@ -353,6 +354,22 @@ class CParser(object):
         cache['version'] = self.cache_version
         import pickle
         pickle.dump(cache, open(cache_file, 'wb'))
+
+    def find_headers(self, headers):
+        """Try to find the specified headers.
+
+        """
+        hs = []
+        for header in headers:
+            if os.path.isfile(header):
+                hs.append(hs)
+            else:
+                h = find_header(header)
+                if not h:
+                    raise OSError('Cannot find header: {}'.format(header))
+                hs.append(h)
+
+        return hs
 
     def load_file(self, path, replace=None):
         """Read a file, make replacements if requested.
