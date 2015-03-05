@@ -13,6 +13,7 @@ from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 
 import os
+import sys
 from pytest import raises
 from pyclibrary.c_parser import CParser
 
@@ -353,10 +354,11 @@ class TestParsing(object):
                 variables['long_un'] == (1, ('unsigned long',)))
         assert ('long_int_un' in variables and
                 variables['long_int_un'] == (1, ('unsigned long int',)))
-        assert ('int64' in variables and
-                variables['int64'] == (1, ('__int64',)))
-        assert ('int64_un' in variables and
-                variables['int64_un'] == (1, ('unsigned __int64',)))
+        if sys.platform == 'win32':
+            assert ('int64' in variables and
+                    variables['int64'] == (1, ('__int64',)))
+            assert ('int64_un' in variables and
+                    variables['int64_un'] == (1, ('unsigned __int64',)))
         assert ('long_long' in variables and
                 variables['long_long'] == (1, ('long long',)))
         assert ('long_long_int' in variables and

@@ -59,7 +59,7 @@ class CLibraryMeta(type):
         # Identify the library path.
         if istext(lib) or isbytes(lib):
             if os.sep not in lib:
-                lib_path = find_library(lib)
+                lib_path = find_library(lib).path
             else:
                 lib_path = os.path.realpath(lib)
                 assert os.path.isfile(lib_path),\
