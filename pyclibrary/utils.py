@@ -142,6 +142,8 @@ def find_library(name, dirs=[]):
     if path:
         return LibraryPath(path)
 
+    raise OSError("Can't find library with name {}".format(name))
+
 
 # --- Private API -------------------------------------------------------------
 
