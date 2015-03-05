@@ -3,7 +3,12 @@
 // Test macro function definition
 #define CARRE(a) a*a
 int carre = CARRE(2);
-int carre2 = CARRE;
+
+#define EXPORT(x) x __declspec(dllexport)
+EXPORT(int) function2();
+
+#define EXPORT(x) __declspec(dllexport) x
+EXPORT(int) function3();
 
 // Test defining a macro function as an alias for another one.
 #define MAKEINTRESOURCEA(i) ((LPSTR)((ULONG_PTR)((WORD)(i))))

@@ -7,6 +7,10 @@ typedef int typeInt, *typeIntPtr, typeIntArr[10], typeIntDArr[5][5];
 typedef typeInt typeTypeInt;
 typedef unsigned long ULONG;
 
+// Typedef using type anotations.
+typedef void const *voidpc;
+typedef char far charf;
+
 // test using newly defined type.
 typeTypeInt *ttip5[5];
 

@@ -24,6 +24,7 @@ from ast import literal_eval
 from traceback import format_exc
 
 from .errors import DefinitionError
+from .utils import find_header
 logger = logging.getLogger(__name__)
 
 
@@ -63,7 +64,7 @@ def win_defs(version='800'):
     p = CParser(
         [os.path.join(d, 'headers', h) for h in header_files],
         macros={'_WIN32': '', '_MSC_VER': version, 'CONST': 'const',
-                'NO_STRICT': None},
+                'NO_STRICT': None, 'MS_WIN32': ''},
         process_all=False
         )
 
@@ -99,7 +100,7 @@ class CParser(object):
 
     cache :
 
-    *args :
+    **kwargs :
         Extra parameters may be used to specify the starting state of the
         parser. For example, one could provide a set of missing type
         declarations by types={'UINT': ('unsigned int'), 'STRING': ('char', 1)}
@@ -139,7 +140,7 @@ class CParser(object):
     _init = False
 
     def __init__(self, files=None, replace=None, copy_from=None,
-                 process_all=True, cache=None, **args):
+                 process_all=True, cache=None, **kwargs):
 
         if not self._init:
             logger.warning('Automatic initialisation based on OS detection')
@@ -153,7 +154,7 @@ class CParser(object):
         # Description of the struct packing rules as defined by #pragma pack
         self.pack_list = {}
 
-        self.init_opts = args.copy()
+        self.init_opts = kwargs.copy()
         self.init_opts['files'] = []
         self.init_opts['replace'] = {}
 
@@ -164,9 +165,9 @@ class CParser(object):
         self.files = {}
 
         if files is not None:
-            if type(files) is str:
+            if istext(files) or isbytes(files):
                 files = [files]
-            for f in files:
+            for f in self.find_headers(files):
                 self.load_file(f, replace)
 
         # Initialize empty definition lists
@@ -179,9 +180,9 @@ class CParser(object):
         self.current_file = None
 
         # Import extra arguments if specified
-        for t in args:
-            for k in args[t].keys():
-                self.add_def(t, k, args[t][k])
+        for t in kwargs:
+            for k in kwargs[t].keys():
+                self.add_def(t, k, kwargs[t][k])
 
         # Import from other CParsers if specified
         if copy_from is not None:
@@ -354,6 +355,22 @@ class CParser(object):
         import pickle
         pickle.dump(cache, open(cache_file, 'wb'))
 
+    def find_headers(self, headers):
+        """Try to find the specified headers.
+
+        """
+        hs = []
+        for header in headers:
+            if os.path.isfile(header):
+                hs.append(hs)
+            else:
+                h = find_header(header)
+                if not h:
+                    raise OSError('Cannot find header: {}'.format(header))
+                hs.append(h)
+
+        return hs
+
     def load_file(self, path, replace=None):
         """Read a file, make replacements if requested.
 
@@ -469,7 +486,7 @@ class CParser(object):
 
         result = []
 
-        directive = re.compile(r'\s*#([a-zA-Z]+)(.*)$')
+        directive = re.compile(r'\s*#\s*([a-zA-Z]+)(.*)$')
         if_true = [True]
         if_hit = []
         for i, line in enumerate(lines):
@@ -717,12 +734,11 @@ class CParser(object):
                 # If function macro expansion fails, just ignore it.
                 try:
                     exp, end = self.expand_fn_macro(name, line[m.end(N):])
-                except:
+                except Exception:
                     exp = name
                     end = 0
-                    if sys.exc_info()[1][0] != 0:
-                        mess = "Function macro expansion failed: {}, {}"
-                        logger.error(mess.format(name, line[m.end(N):]))
+                    mess = "Function macro expansion failed: {}, {}"
+                    logger.error(mess.format(name, line[m.end(N):]))
 
                 parts.append(line[:m.start(N)])
                 start = end + m.end(N)
@@ -906,7 +922,7 @@ class CParser(object):
             # Hack to handle bit width specification.
             Group(Group(self.type_spec('type') +
                         Optional(self.declarator_list('decl_list')) +
-                        bitfieldspec.suppress() + semi)) |
+                        colon + integer('bit') + semi)) |
             (self.type_spec + self.declarator +
              nestedExpr('{', '}')).suppress() |
             (self.declarator + nestedExpr('{', '}')).suppress()
@@ -932,7 +948,7 @@ class CParser(object):
                            (Optional(ident)('name') +
                             lbrace +
                             Group(delimitedList(enum_var_decl))('members') +
-                            rbrace | ident('name'))
+                            Optional(comma) + rbrace | ident('name'))
                            )
         self.enum_type.setParseAction(self.process_enum)
         self.enum_decl = self.enum_type + semi
@@ -1110,12 +1126,22 @@ class CParser(object):
                     val = self.eval_expr(m[0].value)
                     logger.debug("    member: {}, {}, {}".format(
                                  m, m[0].keys(), m[0].decl_list))
+
                     if len(m[0].decl_list) == 0:  # anonymous member
-                        struct.append((None, (typ,), None))
+                        member = [None, (typ,), None]
+                        if m[0].bit:
+                            member.append(int(m[0].bit))
+                        struct.append(tuple(member))
+
                     for d in m[0].decl_list:
                         (name, decl) = self.process_type(typ, d)
-                        struct.append((name, decl, val))
-                        logger.debug("      {} {} {}".format(name, decl, val))
+                        member = [name, decl, val]
+                        if m[0].bit:
+                            member.append(int(m[0].bit))
+                        struct.append(tuple(member))
+                        logger.debug("      {} {} {} {}".format(name, decl,
+                                     val, m[0].bit))
+
                 self.add_def(str_typ+'s', sname,
                              {'pack': packing, 'members': struct})
                 self.add_def('types', str_typ+' '+sname, (str_typ, sname))
@@ -1245,7 +1271,6 @@ class CParser(object):
         used = []
         typ = list(typ)
         while True:
-            print(typ)
             if self.is_fund_type(typ):
                 # Remove 'signed' before returning evaluated type
                 typ[0] = re.sub(r'\bsigned\b', '', typ[0]).strip()
@@ -1344,6 +1369,8 @@ def print_parse_results(pr, depth=0, name=''):
 
 
 # Syntatic delimiters
+comma = Literal(",").ignore(quotedString).suppress()
+colon = Literal(":").ignore(quotedString).suppress()
 semi = Literal(";").ignore(quotedString).suppress()
 lbrace = Literal("{").ignore(quotedString).suppress()
 rbrace = Literal("}").ignore(quotedString).suppress()
@@ -1363,7 +1390,6 @@ floating = Regex(r'[+-]?\s*((((\d(\.\d*)?)|(\.\d+))[eE][+-]?\d+)|((\d\.\d*)|(\.\
 number = (floating | integer)
 
 # Miscelaneous
-bitfieldspec = ":" + integer
 bi_operator = oneOf("+ - / * | & || && ! ~ ^ % == != > < >= <= -> . :: << >> = ? :")
 uni_right_operator = oneOf("++ --")
 uni_left_operator = oneOf("++ -- - + * sizeof new")
@@ -1446,11 +1472,12 @@ def _init_cparser(extra_types=None, extra_modifiers=None):
         ZeroOrMore(uni_right_operator)
         )
 
+    # XXX Added name here to catch macro functions on types
     uncast_atom = (
         ZeroOrMore(uni_left_operator) +
         ((ident + '(' + Optional(delimitedList(expression)) + ')' |
           ident + OneOrMore('[' + expression + ']') |
-          ident | number | quotedString
+          ident | number | name | quotedString
           ) |
          ('(' + expression + ')')) +
         ZeroOrMore(uni_right_operator)

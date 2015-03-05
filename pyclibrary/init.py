@@ -15,7 +15,9 @@ are used to declare additional types and modifiers for the parser.
 from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 import sys
-from ctypes import c_longlong
+from .c_parser import _init_cparser, CParser
+from .c_library import CLibrary
+from .backends import init_libraries
 
 
 def init(extra_types={}, extra_modifiers=[]):
@@ -29,26 +31,23 @@ def init(extra_types={}, extra_modifiers=[]):
         List of modifiers, such as '__stdcall'.
 
     """
-    from .c_parser import _init_cparser, CParser
-    from .c_library import _init_clibrary, CLibrary
-
     if CParser._init or CLibrary._init:
         raise RuntimeError('Can only initialise the parser once')
 
     _init_cparser(extra_types.keys(), extra_modifiers)
-    _init_clibrary(extra_types)
+    init_libraries(extra_types)
 
     CParser._init = True
     CLibrary._init = True
 
 
-WIN_TYPES = {'__int64': c_longlong}
+WIN_TYPES = {'__int64': None}
 WIN_MODIFIERS = ['__based', '__declspec', '__fastcall',
                  '__restrict', '__sptr', '__uptr', '__w64',
                  '__unaligned', '__nullterminated']
 
 
-def auto_init(os=None, extra_types={}, extra_modifiers=[]):
+def auto_init(os=None, extra_types=None, extra_modifiers=None):
     """Init CParser and CLibrary classes based on the targeted OS.
 
     Parameters
@@ -62,8 +61,11 @@ def auto_init(os=None, extra_types={}, extra_modifiers=[]):
         List of extra modifiers, such as '__stdcall'.
 
     """
+    extra_types = extra_types if extra_types else {}
+    extra_modifiers = extra_modifiers if extra_modifiers else []
+
     if sys.platform == 'win32':
         extra_types.update(WIN_TYPES)
         extra_modifiers += WIN_MODIFIERS
 
-        init(extra_types, extra_modifiers)
+    init(extra_types, extra_modifiers)

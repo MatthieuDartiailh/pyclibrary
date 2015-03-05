@@ -5,7 +5,7 @@ enum enum_name
     enum1=2,
     enum2=6,
     enum3,
-    enum4
+    enum4,
 }  enum_inst;
 
 

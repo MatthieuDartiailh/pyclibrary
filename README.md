@@ -1,14 +1,29 @@
-PyClibrary
-==========
+# PyClibrary
 
-C parser and ctypes automation for Python.
+<div>
+<a href='https://travis-ci.org/MatthieuDartiailh/pyclibrary'><img src='https://travis-ci.org/MatthieuDartiailh/pyclibrary.svg?branch=master' alt='Build Status' /></a> 
+<a href='https://coveralls.io/r/MatthieuDartiailh/pyclibrary'><img src='https://coveralls.io/repos/MatthieuDartiailh/pyclibrary/badge.png' alt='Coverage Status' /></a>
+</div>
 
-Fork of <https://launchpad.net/pyclibrary>. 
+C parser and bindings automation for Python.
 
-PyCLibrary includes 1) a pure-python C parser and 2) a ctypes automation library
-that uses C header file definitions to simplify the use of ctypes. The C parser
-currently processes all macros, typedefs, structs, unions, enums, function 
-prototypes, and global variable declarations, and can evaluate typedefs down to
-their fundamental C types + pointers/arrays/function signatures. Pyclibrary can 
-automatically build ctypes structs/unions and perform type conversions when 
-calling functions via cdll/windll.
+Fork of https://launchpad.net/pyclibrary.
+
+PyCLibrary includes 1) a pure-python C parser and 2) an automation library
+that uses C header file definitions to simplify the use of c bindings. The
+C parser currently processes all macros, typedefs, structs, unions, enums,
+function prototypes, and global variable declarations, and can evaluate
+typedefs down to their fundamental C types + pointers/arrays/function
+signatures. Pyclibrary can automatically build c structs/unions and perform
+type conversions when calling functions via cdll/windll.
+
+PyCLibrary tries to present a ffi agnostic API to allow using different
+bindings. For the time being only the ctypes based backend is implemented but
+a cffi backend should be possible to implement (the rational for it would be
+that the CParser can be used on raw header files which are not always well
+supported by the cffi parser).
+
+However if you need to manipulate the C object coming back from the library
+which cannot simply be mapped to Python object your code will most likely
+not be backend independent so it is discouraged to try to switch between
+backends.

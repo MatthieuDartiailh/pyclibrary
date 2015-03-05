@@ -13,6 +13,7 @@ from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 
 import os
+import sys
 from pytest import raises
 from pyclibrary.c_parser import CParser
 
@@ -264,6 +265,9 @@ class TestPreprocessing(object):
         assert 'CARRE' in fnmacros
         assert 'int carre = 2*2;' in stream
 
+        assert 'int __declspec(dllexport) function2()' in stream
+        assert '__declspec(dllexport) int function3()' in stream
+
         # Test defining a macro function as an alias for another one.
         assert 'MAKEINTRESOURCEA' in fnmacros
         assert 'MAKEINTRESOURCEW' in fnmacros
@@ -350,10 +354,11 @@ class TestParsing(object):
                 variables['long_un'] == (1, ('unsigned long',)))
         assert ('long_int_un' in variables and
                 variables['long_int_un'] == (1, ('unsigned long int',)))
-        assert ('int64' in variables and
-                variables['int64'] == (1, ('__int64',)))
-        assert ('int64_un' in variables and
-                variables['int64_un'] == (1, ('unsigned __int64',)))
+        if sys.platform == 'win32':
+            assert ('int64' in variables and
+                    variables['int64'] == (1, ('__int64',)))
+            assert ('int64_un' in variables and
+                    variables['int64_un'] == (1, ('unsigned __int64',)))
         assert ('long_long' in variables and
                 variables['long_long'] == (1, ('long long',)))
         assert ('long_long_int' in variables and
@@ -431,6 +436,10 @@ class TestParsing(object):
         assert self.parser.eval_type(['typeTypeInt']) == ('int',)
         assert ('ULONG' in types and types['ULONG'] == ('unsigned long',))
 
+        # Test annotated types
+        assert ('voidpc' in types and types['voidpc'] == ('void', '*'))
+        assert ('charf' in types and types['charf'] == ('char',))
+
         # Test using custom type.
         assert ('ttip5' in variables and
                 variables['ttip5'] == (None, ('typeTypeInt', '*', [5])))
@@ -481,7 +490,7 @@ class TestParsing(object):
         # Test creating a structure using only base types.
         assert ('struct_name' in structs and 'struct struct_name' in types)
         assert {'members': [('x', ('int',), 1),
-                            ('y', ('type_type_int',), None),
+                            ('y', ('type_type_int',), None, 2),
                             ('str', ('char', [10]), None)],
                 'pack': None} == structs['struct_name']
         assert ('struct_inst' in variables and
@@ -578,3 +587,6 @@ class TestParsing(object):
                                               '*')))
         assert ('function1' in functions and
                 functions['function1'] == (('int', '__stdcall'), ()))
+
+        assert ('function2' in functions and
+                functions['function2'] == (('int',), ()))

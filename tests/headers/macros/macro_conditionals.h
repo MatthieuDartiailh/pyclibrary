@@ -66,13 +66,13 @@
 
 // Test nested
 #if !defined MACRO_N1
-  #define DEFINE_N1
-  int DECLARE_N1;
-  #ifdef DEFINE_N2
-    #define NO_DEFINE_N2
-  #endif
+#  define DEFINE_N1
+   int DECLARE_N1;
+#  ifdef DEFINE_N2
+#    define NO_DEFINE_N2
+#  endif
 #else
-  #define DEFINE_N2
+#  define DEFINE_N2
 #endif
 
 #ifndef DEFINE_N3

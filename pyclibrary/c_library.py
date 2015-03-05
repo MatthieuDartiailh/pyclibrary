@@ -7,20 +7,23 @@
 # The full license is in the file LICENCE, distributed with this software.
 # -----------------------------------------------------------------------------
 """
-Proxy to both CHeader and ctypes, allowing automatic type conversion and
+Proxy to library object, allowing automatic type conversion and
 function calling based on C header definitions.
 
 """
 from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 
-from future.utils import istext, isbytes
+from future.utils import istext, isbytes, with_metaclass
 import logging
 import sys
+import os
 from inspect import cleandoc
-from ctypes import *
+from weakref import WeakValueDictionary
+from threading import RLock
 
-from .errors import DefinitionError
+from .utils import find_library
+from .c_parser import CParser
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +32,60 @@ def make_mess(mess):
     return cleandoc(mess).replace('\n', ' ')
 
 
-class CLibrary(object):
+class CLibraryMeta(type):
+    """Meta class responsible for determining the backend and ensuring no
+    duplicates libraries exists.
+
+    """
+    backends = {}
+    libs = WeakValueDictionary()
+
+    def __new__(meta, name, bases, dct):
+        if name == 'CLibrary':
+            return super(CLibraryMeta, meta).__new__(meta, name, bases, dct)
+        if 'backend' not in dct:
+            mess = make_mess('''{} does not declare a backend name, it cannot
+                              be registered.''')
+            logger.warning(mess.format(name))
+            return None
+
+        cls = super(CLibraryMeta, meta).__new__(meta, name, bases, dct)
+        meta.backends[cls.backend] = cls
+
+        return cls
+
+    def __call__(cls, lib, *args, **kwargs):
+
+        # Identify the library path.
+        if istext(lib) or isbytes(lib):
+            if os.sep not in lib:
+                lib_path = find_library(lib).path
+            else:
+                lib_path = os.path.realpath(lib)
+                assert os.path.isfile(lib_path),\
+                    'Provided path does not point to a file'
+            backend_cls = cls.backends[kwargs.get('backend', 'ctypes')]
+            lib = lib_path
+        else:
+            from .backends import identify_library, get_library_path
+            backend = identify_library(lib)
+            backend_cls = cls.backends[backend]
+            lib_path = get_library_path(lib, backend)
+
+        # Check whether or not this library has already been opened.
+        if lib_path in cls.libs:
+            return cls.libs[lib_path]
+
+        else:
+            obj = super(CLibraryMeta, backend_cls).__call__(lib, *args,
+                                                            **kwargs)
+            cls.libs[lib_path] = obj
+            return obj
+
+
+class CLibrary(with_metaclass(CLibraryMeta, object)):
     """The CLibrary class is intended to automate much of the work in using
-    ctypes by integrating header file definitions from CParser. Ths class
+    ctypes by integrating header file definitions from CParser. This class
     serves as a proxy to a ctypes, adding a few features:
       - allows easy access to values defined via CParser
       - automatic type conversions for function calls using CParser function
@@ -69,15 +123,24 @@ class CLibrary(object):
     lib:
         Library object.
 
-    headers : CParser
-        CParser holding all the definitions.
+    headers : unicode or CParser
+        Path to the header files or CParser holding all the definitions.
 
-    prefix : unicode
+    prefix : unicode, optional
         Prefix to remove from all definitions.
 
-    fix_case : bool
-        Should name be converted from camelCase to python PEP8 compliants
-        names.
+    lock_calls : bool, optional
+        Whether or not to lock the calls to the underlying library. This should
+        be used only if the underlying library is not thread safe.
+
+    convention : {'cdll', 'windll', 'oledll'}
+        Calling convention to use. Not all backends supports all calling
+        conventions.
+
+    backend : unicode, optional
+        Name of the backend to use. This is ignored if an already initialised
+        library object is passed.
+        NB : this kwarg is used by the metaclass.
 
     """
     #: Private flag allowing to know if the class has been initiliased.
@@ -86,28 +149,38 @@ class CLibrary(object):
     #: Balise to use when a NULL pointer is needed
     Null = object()
 
-    #: Types (filled by _init_clibrary)
-    c_types = {}
-
-    #: Types for which ctypes provides a special pointer type.
-    c_ptr_types = {'char': c_char_p,
-                   'wchar': c_wchar_p,
-                   'void': c_void_p
-                   }
-
-    def __init__(self, lib, headers, prefix=None, fix_case=True):
+    def __init__(self, lib, headers, prefix=None, lock_calls=False,
+                 convention='cdll', backend='ctypes'):
         # name everything using underscores to avoid name collisions with
         # library
 
-        self._lib_ = lib
-        self._headers_ = headers
-        self._defs_ = headers.defs
+        # Build or store the parser from the header files.
+        if isinstance(headers, list):
+            self._headers_ = self._build_parser(headers)
+        elif isinstance(headers, CParser):
+            self._headers_ = headers
+        else:
+            msg = 'Expected a CParser instance or list for headers, not {}'
+            raise ValueError(msg.format(type(headers)))
+        self._defs_ = self._headers_.defs
+
+        # Create or store the internal representation of the library.
+        if istext(lib) or isbytes(lib):
+            self._lib_ = self._link_library(lib, convention)
+        else:
+            self._lib_ = lib
+
+        # Store the list of prefix.
         if prefix is None:
             self._prefix_ = []
         elif isinstance(prefix, list):
             self._prefix_ = prefix
         else:
             self._prefix_ = [prefix]
+
+        self._lock_calls_ = lock_calls
+        if lock_calls:
+            self._lock_ = RLock()
 
         self._objs_ = {}
         for k in ['values', 'functions', 'types', 'structs', 'unions',
@@ -126,51 +199,6 @@ class CLibrary(object):
             self._objs_[typ][name] = self._make_obj_(typ, name)
 
         return self._objs_[typ][name]
-
-    def _all_names_(self, name):
-        return [name] + [p + name for p in self._prefix_]
-
-    def _make_obj_(self, typ, name):
-        names = self._all_names_(name)
-
-        for n in names:
-            if n in self._objs_:
-                return self._objs_[n]
-
-        for n in names:  # try with and without prefix
-            if (n not in self._defs_[typ] and
-                not (typ in ['structs', 'unions', 'enums'] and
-                     n in self._defs_['types'])):
-                continue
-
-            if typ == 'values':
-                return self._defs_[typ][n]
-            elif typ == 'functions':
-                return self._get_function(n)
-            elif typ == 'types':
-                obj = self._defs_[typ][n]
-                return self._ctype(obj)
-            elif typ == 'structs':
-                return self._cstruct('structs', n)
-            elif typ == 'unions':
-                return self._cstruct('unions', n)
-            elif typ == 'enums':
-                # Allow automatic resolving of typedefs that alias enums
-                if n not in self._defs_['enums']:
-                    if n not in self._defs_['types']:
-                        raise KeyError('No enums named "{}"'.format(n))
-                    typ = self._headers_.evalType([n])[0]
-                    if typ[:5] != 'enum ':
-                        raise KeyError('No enums named "{}"'.format(n))
-                    # Look up internal name of enum
-                    n = self._defs_['types'][typ][1]
-                obj = self._defs_['enums'][n]
-
-                return obj
-            else:
-                raise KeyError("Unknown type {}".format(typ))
-
-        raise NameError(name)
 
     def __getattr__(self, name):
         """Used to retrieve any type of definition from the headers.
@@ -201,182 +229,162 @@ class CLibrary(object):
         """
         return self._defs_[name]
 
+    # --- Private API ---------------------------------------------------------
+
+    def _all_names_(self, name):
+        """Build a list of all possible names by taking into account that
+        the user omitted a prefix.
+
+        """
+        return [name] + [p + name for p in self._prefix_]
+
+    def _make_obj_(self, typ, name):
+        """Build the correct C-like object from the header definitions.
+
+        """
+        names = self._all_names_(name)
+        objs = self._objs_[typ]
+
+        for n in names:
+            if n in objs:
+                return self.objs[n]
+
+        for n in names:  # try with and without prefix
+            if (n not in self._defs_[typ] and
+                not (typ in ['structs', 'unions', 'enums'] and
+                     n in self._defs_['types'])):
+                continue
+
+            if typ == 'values':
+                return self._defs_[typ][n]
+            elif typ == 'functions':
+                return self._get_function(n)
+            elif typ == 'types':
+                obj = self._defs_[typ][n]
+                return self._get_type(obj)
+            elif typ == 'structs':
+                return self._get_struct('structs', n)
+            elif typ == 'unions':
+                return self._get_struct('unions', n)
+            elif typ == 'enums':
+                # Allow automatic resolving of typedefs that alias enums
+                if n not in self._defs_['enums']:
+                    if n not in self._defs_['types']:
+                        raise KeyError('No enums named "{}"'.format(n))
+                    typ = self._headers_.eval_type([n])[0]
+                    if typ[:5] != 'enum ':
+                        raise KeyError('No enums named "{}"'.format(n))
+                    # Look up internal name of enum
+                    n = self._defs_['types'][typ][1]
+                obj = self._defs_['enums'][n]
+
+                return obj
+            else:
+                raise KeyError("Unknown type {}".format(typ))
+
+        raise NameError(name)
+
     def __repr__(self):
         return "<CLibrary instance: %s>" % str(self._lib_)
 
+    def _build_parser(self, headers):
+        """Find the headers and parse them to extract the definitions.
+
+        """
+        return CParser(headers)
+
+    def _link_library(self, lib_path, convention):
+        """Find and link the external librairy if only a path was provided.
+
+        Parameters
+        ----------
+        lib_path : unicode
+            Path to the library to link.
+
+        convention : {'cdll', 'windll', 'oleddl'}
+            Calling convention to use.
+
+        """
+        raise NotImplementedError()
+
+    def _extract_val_(self, obj):
+        """Extract a python representation from a function return value.
+
+        """
+        raise NotImplementedError()
+
     def _get_function(self, func_name):
+        """Return a CFuntion instance.
+
+        """
         try:
             func = getattr(self._lib_, func_name)
         except:
             mess = "Function name '{}' appears in headers but not in library!"
-            raise KeyError(mess.format(func))
+            raise KeyError(mess.format(func_name))
 
         return CFunction(self, func, self._defs_['functions'][func_name],
-                         func_name)
+                         func_name, self._lock_calls_)
 
-    def _ctype(self, typ, pointers=True):
-        """Return a ctype object representing the named type.
+    def _init_function(self, function):
+        """Finish the function wrapper initialisation.
+
+        This is expected to be implemented by backends for which the default
+        behavior is not sufficient.
+
+        """
+        pass
+
+    def _get_type(self, typ, pointers=True):
+        """Return an object representing the named type.
 
         If pointers is True, the class returned includes all pointer/array
         specs provided. Otherwise, the class returned is just the base type
         with no pointers.
 
         """
-        try:
-            typ = self._headers_.eval_type(typ)
-            mods = typ[1:][:]
+        raise NotImplementedError()
 
-            # Create the initial type
-            # Some types like ['char', '*'] have a specific ctype (c_char_p)
-            # (but only do this if pointers == True)
-            if (pointers and len(typ) > 1 and typ[1] == '*' and
-                    typ[0] in self.c_ptr_types):
-                cls = self.c_ptr_types[typ[0]]
-                mods = typ[2:]
+    def _get_struct(self, str_type, str_name):
+        """Return an object representing the named structure or union.
 
-            # If the base type is in the list of existing ctypes:
-            elif typ[0] in self.c_types:
-                cls = CLibrary.c_types[typ[0]]
+        """
+        raise NotImplementedError()
 
-            # structs, unions, enums:
-            elif typ[0][:7] == 'struct ':
-                cls = self._cstruct('structs', self._defs_['types'][typ[0]][1])
-            elif typ[0][:6] == 'union ':
-                cls = self._cstruct('unions', self._defs_['types'][typ[0]][1])
-            elif typ[0][:5] == 'enum ':
-                cls = c_int
+    def _get_pointer(self, arg_type):
+        """Build an uninitialised pointer for the given type.
 
-            # void
-            elif typ[0] == 'void':
-                cls = None
-            else:
-                raise KeyError("Can't find base type for {}".format(typ))
+        """
+        raise NotImplementedError()
 
-            if not pointers:
-                return cls
+    def _resolve_struct_alias(self, str_type, str_name):
+        """Resolve struct name--typedef aliases.
 
-            # apply pointers and arrays
-            while len(mods) > 0:
-                m = mods.pop(0)
-                if istext(m):  # pointer or reference
-                    if m[0] == '*' or m[0] == '&':
-                        for i in m:
-                            cls = POINTER(cls)
+        """
+        if str_name not in self._defs_[str_type]:
 
-                elif isinstance(m, list):      # array
-                    for i in m:
-                        # -1 indicates an 'incomplete type' like "int
-                        # variable[]"
-                        if i == -1:
-                            # which we should interpret like "int *variable"
-                            cls = POINTER(cls)
-                        else:
-                            cls = cls * i
+            if str_name not in self._defs_['types']:
+                mess = 'No struct/union named "{}"'
+                raise KeyError(mess.format(str_name))
 
-                # Probably a function pointer
-                elif isinstance(m, tuple):
-                    # Find pointer and calling convention
-                    is_ptr = False
-                    conv = '__cdecl'
-                    if len(mods) == 0:
-                        mess = "Function signature with no pointer:"
-                        raise DefinitionError(mess, m, mods)
-                    for i in [0, 1]:
-                        if len(mods) < 1:
-                            break
-                        if mods[0] == '*':
-                            mods.pop(0)
-                            is_ptr = True
-                        elif mods[0] in ['__stdcall', '__cdecl']:
-                            conv = mods.pop(0)
-                        else:
-                            break
-                    if not is_ptr:
-                        mess = make_mess("""Not sure how to handle type
-                            (function without single pointer): {}""")
-                        raise DefinitionError(mess.format(typ))
+            typ = self._headers_.eval_type([str_name])[0]
+            if typ[:7] != 'struct ' and typ[:6] != 'union ':
+                mess = 'No struct/union named "{}"'
+                raise KeyError(mess.format(str_name))
 
-                    if conv == '__stdcall':
-                        mkfn = WINFUNCTYPE
+            return self._defs_['types'][typ][1]
 
-                    else:
-                        mkfn = CFUNCTYPE
-
-                    args = [self._ctype(arg[1]) for arg in m]
-                    cls = mkfn(cls, *args)
-
-                else:
-                    mess = "Not sure what to do with this type modifier: '{}'"
-                    raise TypeError(mess.format(p))
-            return cls
-
-        except:
-            logger.error("Error while processing type: {}".format(typ))
-            raise
-
-    def _cstruct(self, str_type, str_name):
-        if str_name not in self._structs_:
-
-            # Resolve struct name--typedef aliases allowed.
-            if str_name not in self._defs_[str_type]:
-
-                if str_name not in self._defs_['types']:
-                    mess = 'No struct/union named "{}"'
-                    raise KeyError(mess.format(str_name))
-
-                typ = self._headers_.eval_type([str_name])[0]
-                if typ[:7] != 'struct ' and typ[:6] != 'union ':
-                    mess = 'No struct/union named "{}"'
-                    raise KeyError(mess.format(str_name))
-
-                str_name = self._defs_['types'][typ][1]
-
-            # Pull struct definition
-            defn = self._defs_[str_type][str_name]
-
-            # create ctypes class
-            defs = defn['members'][:]
-            if str_type == 'structs':
-                class s(Structure):
-                    def __repr__(self):
-                        return "<ctypes struct '%s'>" % strName
-            elif str_type == 'unions':
-                class s(Union):
-                    def __repr__(self):
-                        return "<ctypes union '%s'>" % strName
-
-            # Must register struct here to allow recursive definitions.
-            self._structs_[str_name] = s
-
-            if defn['pack'] is not None:
-                s._pack_ = defn['pack']
-
-            # Assign names to anonymous members
-            members = []
-            anon = []
-            for i, d in enumerate(defs):
-                if d[0] is None:
-                    c = 0
-                    while True:
-                        name = 'anon_member%d' % c
-                        if name not in members:
-                            d[0] = name
-                            anon.append(name)
-                            break
-                members.append(d[0])
-
-            s._anonymous_ = anon
-            s._fields_ = [(m[0], self._ctype(m[1])) for m in defs]
-            s._defaults_ = [m[2] for m in defs]
-
-        return self._structs_[strName]
+        else:
+            return str_name
 
 
 class CFunction(object):
     """Wrapper object for a function from the library.
 
     """
-    def __init__(self, lib, func, sig, name):
+    def __init__(self, lib, func, sig, name, lock_call):
+
+        self.lock_call = lock_call
         self.lib = lib
         self.func = func
 
@@ -385,31 +393,18 @@ class CFunction(object):
         self.sig = list(sig)
 
         # remove void args from list
-        self.sig[1] = [s for s in sig[1] if s[1] != ['void']]
+        self.sig[1] = [s for s in sig[1] if s[1] != ('void',)]
         for conv in ['__stdcall', '__cdecl']:
             if conv in self.sig[0]:
                 self.sig[0].remove(conv)
         self.name = name
-        self.res_type = lib._ctype(self.sig[0])
-        func.res_type = self.res_type
-        self.arg_types = [lib._ctype(s[1]) for s in self.sig[1]]
-        func.argtypes = self.arg_types
+        self.res_type = lib._get_type(self.sig[0])
+        self.arg_types = [lib._get_type(s[1]) for s in self.sig[1]]
         self.req_args = [x[0] for x in self.sig[1] if x[2] is None]
         # Mapping from argument names to indices
         self.arg_inds = {s[0]: i for i, s in enumerate(self.sig[1])}
 
-    def arg_c_type(self, arg):
-        """Return the ctype required for the specified argument.
-
-        Parameters
-        ----------
-        arg : int or unicode
-            Name or index of the argument whose type should be returned.
-
-        """
-        if istext(arg) or isbytes(arg):
-            arg = self.arg_inds[arg]
-        return self.lib._ctype(self.sig[1][arg][1])
+        self.lib._init_function(self)
 
     def __call__(self, *args, **kwargs):
         """Invoke the SO or dll function referenced, converting all arguments
@@ -436,7 +431,6 @@ class CFunction(object):
         # Next fill in kwargs
         for k in kwargs:
             if k not in self.arg_inds:
-                print("Function signature:", self.pretty_signature())
                 mess = "Function signature has no argument named '{}'"
                 raise TypeError(mess.format(k))
 
@@ -453,57 +447,69 @@ class CFunction(object):
         # Finally, fill in remaining arguments if they are pointers to
         # int/float/void*/struct values (we assume these are to be modified by
         # the function and their initial value is not important)
-        for i, arg in enumerate(arg_list):
-            if arg is None or arg is self.lib.Null:
-                try:
-                    sig = self.sig[1][i][1]
-                    arg_type = self.lib._headers_.eval_type(sig)
+        missings = {arg: i for i, arg in enumerate(arg_list)
+                    if arg is None or arg is self.lib.Null}
+        for arg, i in missings.items():
+            try:
+                sig = self.sig[1][i][1]
+                arg_type = self.lib._headers_.eval_type(sig)
 
-                    # request to build a null pointer
-                    if arg_list[i] is self.lib.Null:
-                        if len(arg_type) < 2:
-                            mess = make_mes("""Cannot create NULL for
-                                non-pointer argument type: {}""")
-                            raise TypeError(mess.format(arg_type))
-                        arg_list[i] = self.lib._ctype(sig)()
+                # request to build a null pointer
+                if arg is self.lib.Null:
+                    if len(arg_type) < 2:
+                        mess = make_mess("""Cannot create NULL for
+                                        non-pointer argument type: {}""")
+                        raise TypeError(mess.format(arg_type))
+                    arg_list[i] = self.lib._get_type(sig)()
 
-                    else:
-                        if (arg_type == ['void', '**'] or
-                                arg_type == ['void', '*', '*']):
-                            cls = c_void_p
-                        else:
-                            # Must be 2-part type, second part must be '*'
-                            assert len(argType) == 2 and argType[1] == '*'
-                            cls = self.lib._ctype(sig, pointers=False)
-                        arg_list[i] = pointer(cls(0))
-                        guessed_args.append(i)
+                else:
+                    arg_list[i] = self.lib._get_pointer(arg_type, sig)
+                    guessed_args.append(i)
 
-                except:
-                    if sys.exc_info()[0] is not AssertionError:
-                        raise
-                    print("Function signature:", self.pretty_signature())
-                    mess = "Function call '{}' missing required argument {} {}"
-                    raise TypeError(mess.format(self.name, i,
-                                                self.sig[1][i][0]))
+            except Exception as e:
+                print(e)
+                if sys.exc_info()[0] is not AssertionError:
+                    raise
+                mess = "Function call '{}' missing required argument {} {}"
+                raise TypeError(mess.format(self.name, i,
+                                            self.sig[1][i][0]))
 
         try:
-            res = self.func(*arg_list)
+            if self.lock_call:
+                with self.lib.lock:
+                    res = self.func(*arg_list)
+            else:
+                res = self.func(*arg_list)
         except Exception:
             logger.error("Function call failed. Signature is: {}".format(
                 self.pretty_signature()))
-            logger.error("Arguments: {}".format(arg_ist))
+            logger.error("Arguments: {}".format(arg_list))
             logger.error("Argtypes: {}".format(self.func.argtypes))
             raise
 
-        cr = CallResult(res, arglist, self.sig, guessed=guessed_args)
+        cr = CallResult(self.lib, res, arg_list, self.sig,
+                        guessed=guessed_args)
         return cr
+
+    def arg_c_type(self, arg):
+        """Return the type required for the specified argument.
+
+        Parameters
+        ----------
+        arg : int or unicode
+            Name or index of the argument whose type should be returned.
+
+        """
+        if istext(arg) or isbytes(arg):
+            arg = self.arg_inds[arg]
+        return self.lib._get_type(self.sig[1][arg][1])
 
     def pretty_signature(self):
         args = (''.join(self.sig[0]), self.name,
-                ', '.join(["{} {}".format("".join(map(s[1])), s[0])
+                ', '.join(["{} {}".format("".join(map(s[1], s[0])))
                           for s in self.sig[1]])
                 )
-        return "{} {}({})".format(args)
+        return "{} {}({})".format(*args)
 
 
 class CallResult:
@@ -524,7 +530,8 @@ class CallResult:
        ret, arg1, arg2 = lib.run_some_function(...)
 
     """
-    def __init__(self, rval, args, sig, guessed):
+    def __init__(self, lib, rval, args, sig, guessed):
+        self.lib = lib
         self.rval = rval        # return value of function call
         self.args = args        # list of arguments to function call
         self.sig = sig          # function signature
@@ -533,14 +540,14 @@ class CallResult:
     def __call__(self):
         if self.sig[0] == ['void']:
             return None
-        return self.make_val(self.rval)
+        return self.lib._extract_val_(self.rval)
 
     def __getitem__(self, n):
         if isinstance(n, int):
-            return self.make_val(self.args[n])
+            return self.lib._extract_val_(self.args[n])
         elif istext(n) or isbytes(n):
             ind = self.find_arg(n)
-            return self.make_val(self.args[ind])
+            return self.lib._extract_val_(self.args[ind])
         else:
             raise ValueError("Index must be int or str.")
 
@@ -552,17 +559,6 @@ class CallResult:
             self.args[ind] = val
         else:
             raise ValueError("Index must be int or str.")
-
-    def make_val(self, obj):
-        while not hasattr(obj, 'value'):
-            if not hasattr(obj, 'contents'):
-                return obj
-            try:
-                obj = obj.contents
-            except ValueError:
-                return None
-
-        return obj.value
 
     def find_arg(self, arg):
         for i, a in enumerate(self.sig[1]):
@@ -579,43 +575,3 @@ class CallResult:
 
     def auto(self):
         return [self[n] for n in self.guessed]
-
-
-def _init_clibrary(extra_types={}):
-    # First load all standard types
-    CLibrary.cTypes = {
-        'char': c_char,
-        'wchar': c_wchar,
-        'unsigned char': c_ubyte,
-        'short': c_short,
-        'short int': c_short,
-        'unsigned short': c_ushort,
-        'unsigned short int': c_ushort,
-        'int': c_int,
-        'unsigned': c_uint,
-        'unsigned int': c_uint,
-        'long': c_long,
-        'long int': c_long,
-        'unsigned long': c_ulong,
-        'unsigned long int': c_ulong,
-        'long long': c_longlong,
-        'long long int': c_longlong,
-        'unsigned __int64': c_ulonglong,
-        'unsigned long long': c_ulonglong,
-        'unsigned long long int': c_ulonglong,
-        'float': c_float,
-        'double': c_double,
-        'long double': c_longdouble,
-        'uint8_t': c_uint8,
-        'int8_t': c_int8,
-        'uint16_t': c_uint16,
-        'int16_t': c_int16,
-        'uint32_t': c_uint32,
-        'int32_t': c_int32,
-        'uint64_t': c_uint64,
-        'int64_t': c_int64
-    }
-
-    # Now complete the list with some more exotic types
-    CLibrary.cTypes.update(extra_types)
-    CLibrary._init = True
