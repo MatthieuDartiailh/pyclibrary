@@ -84,12 +84,12 @@ def find_header(h_name, dirs=None):
         pass
 
     if sys.platform == 'darwin':
-        dirs.append('/usr/local/include', '/usr/include',
-                    '/System/Library/Frameworks', '/Library/Frameworks')
+        dirs.extend(('/usr/local/include', '/usr/include',
+                     '/System/Library/Frameworks', '/Library/Frameworks'))
 
     if sys.platform == 'linux2':
-        dirs.append('/usr/local/include', '/usr/target/include',
-                    '/usr/include')
+        dirs.append(('/usr/local/include', '/usr/target/include',
+                     '/usr/include'))
 
     for d in dirs:
         path = os.path.join(d, h_name)
