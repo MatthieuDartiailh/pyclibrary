@@ -909,8 +909,7 @@ class CParser(object):
         # Function definition
         self.typeless_function_decl = (self.declarator('decl') +
                                        nestedExpr('{', '}').suppress())
-        # XXXX Hack on win32 __declspec(dllexport) can appear before the type.
-        self.function_decl = (extra_modifier + self.type_spec('type') +
+        self.function_decl = (self.type_spec('type') +
                               self.declarator('decl') +
                               nestedExpr('{', '}').suppress())
         self.function_decl.setParseAction(self.process_function)
