@@ -1,20 +1,18 @@
 sudo: false
 
 language: python
-python: 2.7
-
-env:
-  - TOX_ENV=py27
-  - TOX_ENV=py32
-  - TOX_ENV=py33
-  - TOX_ENV=py34
+python:
+    - 2.7
+    - 3.2
+    - 3.3
+    - 3.4
 
 install:
-  - pip install tox
-  - pip install coveralls
+  - pip install -q pytest future pytest-cov pytest-capturelog
+  - pip install -q coveralls
 
 script:
-  - tox -e $TOX_ENV
+  - py.test pyclibrary/tests -v --cov coveralls --cov-report term-missing
 
 after_success:
-  - if [ "$TOX_ENV" = 'py2.7' ]; then coveralls;
+  - coveralls;
