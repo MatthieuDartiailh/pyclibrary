@@ -15,7 +15,6 @@ from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 
 import os
-import sys
 import _ctypes_test
 import ctypes
 from pytest import yield_fixture, mark
@@ -57,10 +56,8 @@ class TestCLibrary(object):
     """
     def test_accessing_library_by_name(self, library_location_fixture):
 
-        if sys.platform == 'win32':
-            library = CLibrary('_ctypes_test.pyd', ['ctypes_test.h'])
-        else:
-            library = CLibrary('_ctypes_test.so', ['ctypes_test.h'])
+        library = CLibrary(os.path.basename(_ctypes_test.__file__),
+                           ['ctypes_test.h'])
         assert library._lib_
 
     def test_accessing_library_by_path(self):
