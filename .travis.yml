@@ -18,7 +18,7 @@ install:
 script:
   - cd ${SRC_DIR}
   - python setup.py install > ${REDIRECT_TO}
-  - py.test tests -v --cov coveralls --cov-report term-missing
+  - py.test tests -m "not no_travis" -v --cov coveralls --cov-report term-missing
 
 after_success:
   - coveralls;

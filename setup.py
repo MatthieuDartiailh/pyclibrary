@@ -45,6 +45,7 @@ cdll/windll.''',
         'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 3'
         ],
+    zip_safe = False,
     packages = ['pyclibrary'],
     requires = ['future'],
 )
