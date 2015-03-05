@@ -47,7 +47,7 @@ WIN_MODIFIERS = ['__based', '__declspec', '__fastcall',
                  '__unaligned', '__nullterminated']
 
 
-def auto_init(os=None, extra_types={}, extra_modifiers=[]):
+def auto_init(os=None, extra_types=None, extra_modifiers=None):
     """Init CParser and CLibrary classes based on the targeted OS.
 
     Parameters
@@ -61,8 +61,11 @@ def auto_init(os=None, extra_types={}, extra_modifiers=[]):
         List of extra modifiers, such as '__stdcall'.
 
     """
+    extra_types = extra_types if extra_types else {}
+    extra_modifiers = extra_modifiers if extra_modifiers else []
+
     if sys.platform == 'win32':
         extra_types.update(WIN_TYPES)
         extra_modifiers += WIN_MODIFIERS
 
-        init(extra_types, extra_modifiers)
+    init(extra_types, extra_modifiers)
