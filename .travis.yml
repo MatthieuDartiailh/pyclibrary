@@ -7,12 +7,17 @@ python:
     - 3.3
     - 3.4
 
+before_install:
+    - SRC_DIR=$(pwd
+
 install:
   - pip install -q pytest future pytest-cov pytest-capturelog
   - pip install -q coveralls
 
 script:
-  - py.test pyclibrary/tests -v --cov coveralls --cov-report term-missing
+  - cd ${SRC_DIR}
+  - python setup.py install
+  - py.test tests -v --cov coveralls --cov-report term-missing
 
 after_success:
   - coveralls;
