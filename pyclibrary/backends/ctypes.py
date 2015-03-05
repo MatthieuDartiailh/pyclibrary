@@ -17,6 +17,7 @@ from __future__ import (division, unicode_literals, print_function,
 from future.utils import istext
 import logging
 import os
+import sys
 from inspect import cleandoc
 from ctypes import (c_char, c_wchar, c_ubyte, c_short, c_ushort, c_int, c_uint,
                     c_long, c_ulong, c_longlong, c_ulonglong, c_float,
@@ -24,8 +25,10 @@ from ctypes import (c_char, c_wchar, c_ubyte, c_short, c_ushort, c_int, c_uint,
                     c_int32, c_uint32, c_int64, c_uint64,
                     c_char_p, c_wchar_p, c_void_p,
                     pointer, Union, Structure,
-                    cdll, windll, oledll,
-                    POINTER, CFUNCTYPE, WINFUNCTYPE, CDLL)
+                    cdll, POINTER, CFUNCTYPE, CDLL)
+
+if sys.platform == 'win32':
+    from ctypes import windll, oledll, WINFUNCTYPE
 
 from ..errors import DefinitionError
 from ..c_library import CLibrary
