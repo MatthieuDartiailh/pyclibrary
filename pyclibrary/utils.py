@@ -74,6 +74,10 @@ def find_header(h_name, dirs=None):
     path : unicode
         Path to the header file.
 
+    Raises
+    ------
+    OSError : if no matching file can be found.
+
     """
     if dirs:
         dirs += HEADER_DIRS[::-1]
@@ -95,6 +99,8 @@ def find_header(h_name, dirs=None):
         path = os.path.join(d, h_name)
         if os.path.isfile(path):
             return path
+
+    raise OSError("Can't find header with h_name {}".format(h_name))
 
 
 LIBRARY_DIRS = []
@@ -131,6 +137,10 @@ def find_library(name, dirs=[]):
     -------
     path : unicode
         Path to the library file.
+
+    Raises
+    ------
+    OSError : if no matching file can be found.
 
     """
     if dirs:
