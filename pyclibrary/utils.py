@@ -133,7 +133,12 @@ def find_library(name, dirs=[]):
         Path to the library file.
 
     """
-    for d in LIBRARY_DIRS[:-1]:
+    if dirs:
+        dirs += LIBRARY_DIRS[::-1]
+    else:
+        dirs = LIBRARY_DIRS[::-1]
+
+    for d in dirs:
         path = os.path.join(d, name)
         if os.path.isfile(path):
             return LibraryPath(path)

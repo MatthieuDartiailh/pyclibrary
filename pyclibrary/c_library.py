@@ -65,6 +65,7 @@ class CLibraryMeta(type):
                 assert os.path.isfile(lib_path),\
                     'Provided path does not point to a file'
             backend_cls = cls.backends[kwargs.get('backend', 'ctypes')]
+            lib = lib_path
         else:
             from .backends import identify_library, get_library_path
             backend = identify_library(lib)

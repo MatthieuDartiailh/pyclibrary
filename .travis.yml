@@ -8,7 +8,8 @@ python:
     - 3.4
 
 before_install:
-    - SRC_DIR=$(pwd)
+  - SRC_DIR=$(pwd)
+  - REDIRECT_TO=/dev/null # change to /dev/stdout to unsilence travis
 
 install:
   - pip install -q pytest future pytest-cov pytest-capturelog
@@ -16,7 +17,7 @@ install:
 
 script:
   - cd ${SRC_DIR}
-  - python setup.py install
+  - python setup.py install > ${REDIRECT_TO}
   - py.test tests -v --cov coveralls --cov-report term-missing
 
 after_success:
