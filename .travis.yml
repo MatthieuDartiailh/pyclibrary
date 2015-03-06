@@ -12,14 +12,12 @@ before_install:
 
 install:
   - pip install -q pytest future pytest-cov pytest-capturelog pytest-xdist
-  - pip install -q coveralls
+  - pip install -q python-coveralls
 
 script:
   - cd ${SRC_DIR}
   - python setup.py install > ${REDIRECT_TO}
-  - py.test -m "not no_travis" -v --cov coveralls
+  - py.test tests -m "not no_travis" -v --cov pyclibrary --cov-report term-missing
 
 after_success:
-  - if [[ $ENV == python=3.4* ]]; then
-          coveralls;
-      fi
+  - coveralls;
