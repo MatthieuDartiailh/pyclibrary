@@ -11,13 +11,15 @@ before_install:
   - REDIRECT_TO=/dev/null # change to /dev/stdout to unsilence travis
 
 install:
-  - pip install -q pytest future pytest-cov pytest-capturelog
+  - pip install -q pytest future pytest-cov pytest-capturelog pytest-xdist
   - pip install -q python-coveralls
 
 script:
   - cd ${SRC_DIR}
   - python setup.py install > ${REDIRECT_TO}
-  - py.test tests -m "not no_travis" -v --cov coveralls --cov-report term-missing
+  - py.test -m "not no_travis" -v --cov coveralls --cov-report term-missing
 
 after_success:
-  - coveralls;
+  - if [[ $ENV == python=3.4* ]]; then
+          coveralls;
+      fi
