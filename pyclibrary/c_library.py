@@ -147,6 +147,10 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
         library object is passed.
         NB : this kwarg is used by the metaclass.
 
+    cache : unicode, optional
+        Path to the cache file to use to store the result of the header
+        parsing.
+
     """
     #: Private flag allowing to know if the class has been initiliased.
     _init = False
@@ -155,13 +159,13 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
     Null = object()
 
     def __init__(self, lib, headers, prefix=None, lock_calls=False,
-                 convention='cdll', backend='ctypes'):
+                 convention='cdll', backend='ctypes', cache=None):
         # name everything using underscores to avoid name collisions with
         # library
 
         # Build or store the parser from the header files.
         if isinstance(headers, list):
-            self._headers_ = self._build_parser(headers)
+            self._headers_ = self._build_parser(headers, cache)
         elif isinstance(headers, CParser):
             self._headers_ = headers
         else:
@@ -292,11 +296,11 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
     def __repr__(self):
         return "<CLibrary instance: %s>" % str(self._lib_)
 
-    def _build_parser(self, headers):
+    def _build_parser(self, headers, cache):
         """Find the headers and parse them to extract the definitions.
 
         """
-        return CParser(headers)
+        return CParser(headers, cache=cache)
 
     def _link_library(self, lib_path, convention):
         """Find and link the external librairy if only a path was provided.
