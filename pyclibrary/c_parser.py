@@ -98,7 +98,9 @@ class CParser(object):
         Flag indicating whether files should be parsed immediatly. True by
         default.
 
-    cache :
+    cache : unicode, optional
+        Path of the cache file from which to load definitions/to which save
+        definitions as parsing is an expensive operation.
 
     **kwargs :
         Extra parameters may be used to specify the starting state of the
