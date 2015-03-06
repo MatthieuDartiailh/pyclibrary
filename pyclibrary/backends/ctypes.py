@@ -19,10 +19,10 @@ import logging
 import os
 import sys
 from inspect import cleandoc
-from ctypes import (c_char, c_wchar, c_ubyte, c_short, c_ushort, c_int, c_uint,
-                    c_long, c_ulong, c_longlong, c_ulonglong, c_float,
-                    c_double, c_longdouble, c_int8, c_uint8, c_int16, c_uint16,
-                    c_int32, c_uint32, c_int64, c_uint64, c_bool,
+from ctypes import (c_char, c_wchar, c_ubyte, c_short, c_ushort,
+                    c_int, c_uint, c_long, c_ulong, c_longlong, c_ulonglong,
+                    c_float, c_double, c_longdouble, c_int8, c_uint8, c_int16,
+                    c_uint16, c_int32, c_uint32, c_int64, c_uint64, c_bool,
                     c_char_p, c_wchar_p, c_void_p,
                     pointer, Union, Structure,
                     cdll, POINTER, CFUNCTYPE, CDLL)
@@ -130,14 +130,12 @@ class CTypesCLibrary(CLibrary):
     def _extract_val_(self, obj):
         """Extract a Python value from a ctype object.
 
+        Does not try to be smart about pointer object as we are likely to get
+        it wrong (a pointer being often an array)
+
         """
-        while not hasattr(obj, 'value'):
-            if not hasattr(obj, 'contents'):
-                return obj
-            try:
-                obj = obj.contents
-            except ValueError:
-                return None
+        if not hasattr(obj, 'value'):
+            return obj
 
         return obj.value
 
@@ -326,7 +324,6 @@ def init_clibrary(extra_types={}):
         'bool': c_bool,
         'char': c_char,
         'wchar': c_wchar,
-        'wchar_t': c_wchar_t
         'unsigned char': c_ubyte,
         'short': c_short,
         'short int': c_short,
