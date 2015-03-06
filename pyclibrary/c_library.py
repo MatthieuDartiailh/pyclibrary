@@ -22,7 +22,7 @@ from inspect import cleandoc
 from weakref import WeakValueDictionary
 from threading import RLock
 
-from .utils import find_library
+from .utils import find_library, LibraryPath
 from .c_parser import CParser
 
 logger = logging.getLogger(__name__)
@@ -65,6 +65,11 @@ class CLibraryMeta(type):
                 assert os.path.isfile(lib_path),\
                     'Provided path does not point to a file'
             backend_cls = cls.backends[kwargs.get('backend', 'ctypes')]
+
+            lib_arch = LibraryPath(lib_path).arch
+            py_bitness = 64 if sys.maxsize > 2**32 else 32
+            if lib_arch and py_bitness not in lib_arch:
+                raise OSError("Library bitness does not match Python's")
             lib = lib_path
         else:
             from .backends import identify_library, get_library_path
