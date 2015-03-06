@@ -1,0 +1,4 @@
+[run]
+omit =
+    */pyclibrary/thirdparty/*
+    */__init__.py
