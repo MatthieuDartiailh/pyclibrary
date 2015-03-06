@@ -22,13 +22,13 @@ from inspect import cleandoc
 from ctypes import (c_char, c_wchar, c_ubyte, c_short, c_ushort, c_int, c_uint,
                     c_long, c_ulong, c_longlong, c_ulonglong, c_float,
                     c_double, c_longdouble, c_int8, c_uint8, c_int16, c_uint16,
-                    c_int32, c_uint32, c_int64, c_uint64,
+                    c_int32, c_uint32, c_int64, c_uint64, c_bool,
                     c_char_p, c_wchar_p, c_void_p,
                     pointer, Union, Structure,
                     cdll, POINTER, CFUNCTYPE, CDLL)
 
 if sys.platform == 'win32':
-    from ctypes import windll, oledll, WINFUNCTYPE
+    from ctypes import windll, oledll, WINFUNCTYPE, HRESULT
 
 from ..errors import DefinitionError
 from ..c_library import CLibrary
@@ -107,6 +107,7 @@ class CTypesCLibrary(CLibrary):
     #: Types for which ctypes provides a special pointer type.
     c_ptr_types = {'char': c_char_p,
                    'wchar': c_wchar_p,
+                   'wchar_t': c_wchar_p,
                    'void': c_void_p
                    }
 
@@ -315,14 +316,17 @@ class CTypesCLibrary(CLibrary):
         function.func.res_type = function.res_type
 
 
-WIN_TYPES = {'__int64': c_longlong}
+if sys.platform == 'win32':
+    WIN_TYPES = {'__int64': c_longlong, 'HRESULT': HRESULT}
 
 
 def init_clibrary(extra_types={}):
     # First load all standard types
     CTypesCLibrary.c_types = {
+        'bool': c_bool,
         'char': c_char,
         'wchar': c_wchar,
+        'wchar_t': c_wchar_t
         'unsigned char': c_ubyte,
         'short': c_short,
         'short int': c_short,
