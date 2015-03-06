@@ -20,19 +20,22 @@ from .c_library import CLibrary
 from .backends import init_libraries
 
 
-def init(extra_types={}, extra_modifiers=[]):
+def init(extra_types=None, extra_modifiers=None):
     """Init CParser and CLibrary classes.
 
     Parameters
     ----------
-    extra_types : dict
+    extra_types : dict, optional
         typeName->c_type pairs to extend typespace.
-    extra_modifiers : list
+    extra_modifiers : list, optional
         List of modifiers, such as '__stdcall'.
 
     """
     if CParser._init or CLibrary._init:
         raise RuntimeError('Can only initialise the parser once')
+
+    extra_types = extra_types if extra_types else {}
+    extra_modifiers = extra_modifiers if extra_modifiers else []
 
     _init_cparser(extra_types.keys(), extra_modifiers)
     init_libraries(extra_types)
