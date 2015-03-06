@@ -64,7 +64,7 @@ def auto_init(os=None, extra_types=None, extra_modifiers=None):
     extra_types = extra_types if extra_types else {}
     extra_modifiers = extra_modifiers if extra_modifiers else []
 
-    if sys.platform == 'win32':
+    if os == 'win32' or sys.platform == 'win32':
         extra_types.update(WIN_TYPES)
         extra_modifiers += WIN_MODIFIERS
 
