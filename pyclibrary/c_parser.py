@@ -136,7 +136,7 @@ class CParser(object):
     """
     #: Increment every time cache structure or parsing changes to invalidate
     #: old cache files.
-    cacheVersion = 22
+    cache_version = 1
 
     #: Private flag allowing to know if the parser has been initiliased.
     _init = False
@@ -294,7 +294,7 @@ class CParser(object):
         # Make sure cache is newer than all input files
         if check_validity:
             mtime = os.stat(cache_file).st_mtime
-            for f in self.file_osrder:
+            for f in self.file_order:
                 # If file does not exist, then it does not count against the
                 # validity of the cache.
                 if os.path.isfile(f) and os.stat(f).st_mtime > mtime:
