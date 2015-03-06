@@ -12,7 +12,7 @@ before_install:
 
 install:
   - pip install -q pytest future pytest-cov pytest-capturelog
-  - pip install -q coveralls
+  - pip install -q python-coveralls
 
 script:
   - cd ${SRC_DIR}
