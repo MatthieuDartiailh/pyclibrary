@@ -1191,9 +1191,7 @@ class CParser(object):
         """Evaluates expressions.
 
         Currently only works for expressions that also happen to be valid
-        python expressions. This function does not currently include previous
-        variable declarations, but that should not be too difficult to
-        implement...
+        python expressions.
 
         """
         logger.debug("Eval: {}".format(toks))
@@ -1210,7 +1208,7 @@ class CParser(object):
             return val
 
         except Exception:
-            logger.exception("    failed eval: {}".format(toks))
+            logger.debug("    failed eval {} : {}".format(toks, format_exc()))
             return None
 
     def eval(self, expr, *args):
