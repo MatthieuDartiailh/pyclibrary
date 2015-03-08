@@ -102,10 +102,10 @@ class CTypesCLibrary(CLibrary):
     backend = 'ctypes'
 
     #: Types (filled by init_clibrary)
-    c_types = {}
+    _types_ = {}
 
     #: Types for which ctypes provides a special pointer type.
-    c_ptr_types = {'char': c_char_p,
+    _ptr_types_ = {'char': c_char_p,
                    'wchar': c_wchar_p,
                    'wchar_t': c_wchar_p,
                    'void': c_void_p
@@ -131,7 +131,7 @@ class CTypesCLibrary(CLibrary):
         """Extract a Python value from a ctype object.
 
         Does not try to be smart about pointer object as we are likely to get
-        it wrong (a pointer being often an array)
+        it wrong (a pointer being often an array).
 
         """
         if not hasattr(obj, 'value'):
@@ -155,13 +155,13 @@ class CTypesCLibrary(CLibrary):
             # Some types like ['char', '*'] have a specific ctype (c_char_p)
             # (but only do this if pointers == True)
             if (pointers and len(typ) > 1 and typ[1] == '*' and
-                    typ[0] in self.c_ptr_types):
-                cls = self.c_ptr_types[typ[0]]
+                    typ[0] in self._ptr_types_):
+                cls = self._ptr_types_[typ[0]]
                 mods = typ[2:]
 
             # If the base type is in the list of existing ctypes:
-            elif typ[0] in self.c_types:
-                cls = self.c_types[typ[0]]
+            elif typ[0] in self._types_:
+                cls = self._types_[typ[0]]
 
             # structs, unions, enums:
             elif typ[0][:7] == 'struct ':
@@ -320,7 +320,7 @@ if sys.platform == 'win32':
 
 def init_clibrary(extra_types={}):
     # First load all standard types
-    CTypesCLibrary.c_types = {
+    CTypesCLibrary._types_ = {
         'bool': c_bool,
         'char': c_char,
         'wchar': c_wchar,
@@ -359,7 +359,7 @@ def init_clibrary(extra_types={}):
             extra_types[k] = WIN_TYPES[k]
 
     # Now complete the list with some more exotic types
-    CTypesCLibrary.c_types.update(extra_types)
+    CTypesCLibrary._types_.update(extra_types)
 
 
 def identify_library(lib):
