@@ -10,6 +10,6 @@ from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 
 from .c_parser import win_defs, CParser
-from .c_library import CLibrary
+from .c_library import CLibrary, address_of, build_array
 from .errors import DefinitionError
 from .init import init, auto_init

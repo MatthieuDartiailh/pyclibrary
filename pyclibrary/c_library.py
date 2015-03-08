@@ -366,6 +366,18 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
         """
         raise NotImplementedError()
 
+    def _get_address(self, obj):
+        """Return the address of a C object.
+
+        """
+        raise NotImplementedError()
+
+    def _get_array(self, typ, size, obj):
+        """Build an array of the specified type and size.
+
+        """
+        raise NotImplementedError()
+
     def _resolve_struct_alias(self, str_type, str_name):
         """Resolve struct name--typedef aliases.
 
@@ -584,3 +596,44 @@ class CallResult:
 
     def auto(self):
         return [self[n] for n in self.guessed]
+
+
+def address_of(lib, obj):
+    """Request the address of a C object.
+
+    This is a cheap way to pass an pointer to an object to a function.
+
+    Parameters
+    ----------
+    lib : CLibrary
+        Reference to the library to which the object 'belongs'. This is needed
+        as the way to get the address depends on the backend.
+
+    obj :
+        Object whose address should be returned.
+
+    """
+    return lib._get_address(obj)
+
+
+def build_array(lib, typ, size, vals=None):
+    """Build an array of the specified type and the specified size.
+
+    Parameters
+    ----------
+    lib : CLibrary
+        Reference to the library with which this object will be used. This is
+        needed as the way to build the array depends on the backend.
+
+    type : type or string
+        Type object or string which will be used to determine the type of
+        the array elements.
+
+    size : int or tuple
+        Dimensions of the array to create.
+
+    vals : list, optional
+        Initial values with which to fill the array.
+
+    """
+    return lib._get_array(typ, size, vals)

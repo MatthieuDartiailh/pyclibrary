@@ -24,7 +24,7 @@ from ctypes import (c_char, c_wchar, c_ubyte, c_short, c_ushort,
                     c_float, c_double, c_longdouble, c_int8, c_uint8, c_int16,
                     c_uint16, c_int32, c_uint32, c_int64, c_uint64, c_bool,
                     c_char_p, c_wchar_p, c_void_p,
-                    pointer, Union, Structure,
+                    pointer, Union, Structure, byref,
                     cdll, POINTER, CFUNCTYPE, CDLL)
 
 if sys.platform == 'win32':
@@ -305,6 +305,31 @@ class CTypesCLibrary(CLibrary):
                 return pointer(cls(0))
             else:
                 return pointer(pointer(cls(0)))
+
+    def _get_address(self, obj):
+        """Use byref to get an object's address.
+
+        """
+        return byref(obj)
+
+    def _get_array(self, typ, size, vals):
+        """Build an array.
+
+        """
+        if not isinstance(typ, type):
+            typ = self._get_type((typ,))
+
+        if not isinstance(size, tuple):
+            size = (size, )
+
+        new = typ
+        for s in size[::-1]:
+            new *= s
+
+        if vals:
+            return new(*vals)
+        else:
+            return new()
 
     def _init_function(self, function):
         """Overrided here to declare the arguments types and return type.
