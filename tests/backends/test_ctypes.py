@@ -70,12 +70,13 @@ class TestCTypesCLibrary(object):
         # Test calling a function without pointers.
         _, (res,) = self.library.getSPAMANDEGGS()
         egg = res[0][0]  # we get a pointer of pointer.
-        assert egg.name == 'first egg'
+        # Needed because this is a byte array in python 3
+        assert egg.name.decode('utf8') == 'first egg'
         assert egg.num_spams == 1
-        assert egg.spams[0].name == 'name1'
-        assert egg.spams[0].value == 'value1'
-        assert egg.spams[1].name == 'name2'
-        assert egg.spams[1].value == 'value2'
+        assert egg.spams[0].name.decode('utf8') == 'name1'
+        assert egg.spams[0].value.decode('utf8') == 'value1'
+        assert egg.spams[1].name.decode('utf8') == 'name2'
+        assert egg.spams[1].value.decode('utf8') == 'value2'
 
     def test_function_call3(self):
         # Test calling a function with an argument and a missing pointer.
