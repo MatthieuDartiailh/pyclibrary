@@ -548,7 +548,7 @@ class CallResult:
 
     The class can also be used as an iterator, so that tuple unpacking is
     possible:
-       ret, arg1, arg2 = lib.run_some_function(...)
+       ret, (arg1, arg2) = lib.run_some_function(...)
 
     """
     def __init__(self, lib, rval, args, sig, guessed):
@@ -591,8 +591,7 @@ class CallResult:
 
     def __iter__(self):
         yield self()
-        for i in range(len(self.args)):
-            yield(self[i])
+        yield(self[i] for i in range(len(self.args)))
 
     def auto(self):
         return [self[n] for n in self.guessed]
