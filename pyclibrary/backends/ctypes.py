@@ -379,9 +379,10 @@ def init_clibrary(extra_types={}):
         'int64_t': c_int64
     }
 
-    for k in extra_types:
-        if k in WIN_TYPES:
-            extra_types[k] = WIN_TYPES[k]
+    if sys.platform == 'win32':
+        for k in extra_types:
+            if k in WIN_TYPES:
+                extra_types[k] = WIN_TYPES[k]
 
     # Now complete the list with some more exotic types
     CTypesCLibrary._types_.update(extra_types)
