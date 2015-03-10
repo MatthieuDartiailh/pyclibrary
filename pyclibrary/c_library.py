@@ -468,9 +468,9 @@ class CFunction(object):
         # Finally, fill in remaining arguments if they are pointers to
         # int/float/void*/struct values (we assume these are to be modified by
         # the function and their initial value is not important)
-        missings = {arg: i for i, arg in enumerate(arg_list)
+        missings = {i: arg for i, arg in enumerate(arg_list)
                     if arg is None or arg is self.lib.Null}
-        for arg, i in missings.items():
+        for i, arg in missings.items():
             try:
                 sig = self.sig[1][i][1]
                 arg_type = self.lib._headers_.eval_type(sig)
@@ -487,8 +487,7 @@ class CFunction(object):
                     arg_list[i] = self.lib._get_pointer(arg_type, sig)
                     guessed_args.append(i)
 
-            except Exception as e:
-                print(e)
+            except Exception:
                 if sys.exc_info()[0] is not AssertionError:
                     raise
                 mess = "Function call '{}' missing required argument {} {}"
