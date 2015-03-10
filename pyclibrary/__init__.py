@@ -8,6 +8,8 @@
 # -----------------------------------------------------------------------------
 from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
+import logging
+logging.getLogger('pyclibrary').addHandler(logging.NullHandler())
 
 from .c_parser import win_defs, CParser
 from .c_library import CLibrary, address_of, build_array
