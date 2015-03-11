@@ -1,12 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# http://docs.python.org/distutils/
-# http://packages.python.org/distribute/
-try:
-    from setuptools import setup
-except:
-    from distutils.core import setup
+from setuptools import setup
 
 import os.path
 
@@ -46,7 +41,7 @@ cdll/windll.''',
         'Programming Language :: Python :: 3'
         ],
     zip_safe = False,
-    packages = ['pyclibrary'],
+    packages = ['pyclibrary', 'pyclibrary.backends', 'pyclibrary.thirdparty'],
     requires = ['future'],
 )
 
