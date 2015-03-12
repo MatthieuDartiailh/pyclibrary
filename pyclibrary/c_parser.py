@@ -1353,7 +1353,9 @@ def recombine(tok):
 
 
 def print_parse_results(pr, depth=0, name=''):
-    """For debugging; pretty-prints parse result objects."""
+    """For debugging; pretty-prints parse result objects.
+
+    """
     start = name + " " * (20 - len(name)) + ':' + '..' * depth
     if isinstance(pr, ParseResults):
         print(start)

@@ -25,7 +25,7 @@ pointers/arrays/function signatures. Pyclibrary can automatically build c
 structs/unions and perform type conversions when calling functions via
 cdll/windll.''',
     author = 'PyCLibrary Developers',
-    author_email = 'm.dartiailh@googlegroups.com',
+    author_email = 'm.dartiailh@gmail.com',
     url = 'http://github.com/MatthieuDartiailh/pyclibrary',
     download_url = 'http://github.com/MatthieuDartiailh/pyclibrary/tarball/master',
     keywords = 'C binding automation',

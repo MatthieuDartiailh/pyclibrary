@@ -12,6 +12,6 @@ import logging
 logging.getLogger('pyclibrary').addHandler(logging.NullHandler())
 
 from .c_parser import win_defs, CParser
-from .c_library import CLibrary, address_of, build_array
+from .c_library import CLibrary, build_array, cast_to
 from .errors import DefinitionError
 from .init import init, auto_init

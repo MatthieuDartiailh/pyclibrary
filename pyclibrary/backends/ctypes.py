@@ -24,7 +24,7 @@ from ctypes import (c_char, c_wchar, c_ubyte, c_short, c_ushort,
                     c_float, c_double, c_longdouble, c_int8, c_uint8, c_int16,
                     c_uint16, c_int32, c_uint32, c_int64, c_uint64, c_bool,
                     c_char_p, c_wchar_p, c_void_p,
-                    pointer, Union, Structure, byref,
+                    pointer, Union, Structure, byref, cast,
                     cdll, POINTER, CFUNCTYPE, CDLL)
 
 if sys.platform == 'win32':
@@ -306,11 +306,14 @@ class CTypesCLibrary(CLibrary):
             else:
                 return pointer(pointer(cls(0)))
 
-    def _get_address(self, obj):
-        """Use byref to get an object's address.
+    def _cast_to(self, obj, typ):
+        """Cast an object to a new type (new type must be a pointer).
 
         """
-        return byref(obj)
+        if not isinstance(typ, type):
+            typ = self._get_type((typ,))
+
+        return cast(obj, typ)
 
     def _get_array(self, typ, size, vals):
         """Build an array.

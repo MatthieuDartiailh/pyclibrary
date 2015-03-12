@@ -147,9 +147,9 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
         library object is passed.
         NB : this kwarg is used by the metaclass.
 
-    cache : unicode, optional
-        Path to the cache file to use to store the result of the header
-        parsing.
+    **kwargs :
+        Additional keywords argument which are passed to the CParser if one
+        is created.
 
     """
     #: Private flag allowing to know if the class has been initiliased.
@@ -159,13 +159,13 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
     Null = object()
 
     def __init__(self, lib, headers, prefix=None, lock_calls=False,
-                 convention='cdll', backend='ctypes', cache=None):
+                 convention='cdll', backend='ctypes', **kwargs):
         # name everything using underscores to avoid name collisions with
         # library
 
         # Build or store the parser from the header files.
         if isinstance(headers, list):
-            self._headers_ = self._build_parser(headers, cache)
+            self._headers_ = self._build_parser(headers, kwargs)
         elif isinstance(headers, CParser):
             self._headers_ = headers
         else:
@@ -296,11 +296,11 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
     def __repr__(self):
         return "<CLibrary instance: %s>" % str(self._lib_)
 
-    def _build_parser(self, headers, cache):
+    def _build_parser(self, headers, kwargs):
         """Find the headers and parse them to extract the definitions.
 
         """
-        return CParser(headers, cache=cache)
+        return CParser(headers, **kwargs)
 
     def _link_library(self, lib_path, convention):
         """Find and link the external librairy if only a path was provided.
@@ -362,12 +362,6 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
 
     def _get_pointer(self, arg_type):
         """Build an uninitialised pointer for the given type.
-
-        """
-        raise NotImplementedError()
-
-    def _get_address(self, obj):
-        """Return the address of a C object.
 
         """
         raise NotImplementedError()
@@ -596,10 +590,8 @@ class CallResult:
         return [self[n] for n in self.guessed]
 
 
-def address_of(lib, obj):
-    """Request the address of a C object.
-
-    This is a cheap way to pass an pointer to an object to a function.
+def cast_to(lib, obj, typ):
+    """Cast obj to a new type.
 
     Parameters
     ----------
@@ -610,8 +602,12 @@ def address_of(lib, obj):
     obj :
         Object whose address should be returned.
 
+     type : type or string
+        Type object or string which will be used to determine the type of
+        the array elements.
+
     """
-    return lib._get_address(obj)
+    lib._cast_to(obj, typ)
 
 
 def build_array(lib, typ, size, vals=None):
@@ -619,6 +615,7 @@ def build_array(lib, typ, size, vals=None):
 
     Parameters
     ----------
+
     lib : CLibrary
         Reference to the library with which this object will be used. This is
         needed as the way to build the array depends on the backend.
