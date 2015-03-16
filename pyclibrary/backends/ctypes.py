@@ -24,7 +24,7 @@ from ctypes import (c_char, c_wchar, c_ubyte, c_short, c_ushort,
                     c_float, c_double, c_longdouble, c_int8, c_uint8, c_int16,
                     c_uint16, c_int32, c_uint32, c_int64, c_uint64, c_bool,
                     c_char_p, c_wchar_p, c_void_p,
-                    pointer, Union, Structure, byref, cast,
+                    pointer, Union, Structure, cast,
                     cdll, POINTER, CFUNCTYPE, CDLL)
 
 if sys.platform == 'win32':

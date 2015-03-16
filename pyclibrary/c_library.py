@@ -526,7 +526,7 @@ class CFunction(object):
         return "{} {}({})".format(*args)
 
 
-class CallResult:
+class CallResult(object):
     """Class for bundling results from C function calls.
 
     Allows access to the function  value as well as all of the arguments, since
@@ -558,12 +558,17 @@ class CallResult:
 
     def __getitem__(self, n):
         if isinstance(n, int):
-            return self.lib._extract_val_(self.args[n])
+            arg = self.args[n]
         elif istext(n) or isbytes(n):
-            ind = self.find_arg(n)
-            return self.lib._extract_val_(self.args[ind])
+            n = self.find_arg(n)
+            arg = self.args[n]
         else:
             raise ValueError("Index must be int or str.")
+
+        if n in self.guessed:
+            arg = arg[0]
+
+        return self.lib._extract_val_(arg)
 
     def __setitem__(self, n, val):
         if type(n) is int:

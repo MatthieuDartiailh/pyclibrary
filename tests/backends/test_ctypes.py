@@ -69,7 +69,7 @@ class TestCTypesCLibrary(object):
     def test_function_call2(self):
         # Test calling a function without pointers.
         _, (res,) = self.library.getSPAMANDEGGS()
-        egg = res[0][0]  # we get a pointer of pointer.
+        egg = res[0]  # we get a pointer of pointer.
         # Needed because this is a byte array in python 3
         assert egg.name.decode('utf8') == 'first egg'
         assert egg.num_spams == 1
@@ -83,5 +83,5 @@ class TestCTypesCLibrary(object):
         arg = self.library.point(x=1, y=2)
         res, (_, test_point) = self.library._testfunc_byval(arg)
         assert res == 3
-        assert test_point[0].x == arg.x
-        assert test_point[0].y == arg.y
+        assert test_point.x == arg.x
+        assert test_point.y == arg.y
