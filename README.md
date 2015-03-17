@@ -3,6 +3,7 @@
 <div>
 <a href='https://travis-ci.org/MatthieuDartiailh/pyclibrary'><img src='https://travis-ci.org/MatthieuDartiailh/pyclibrary.svg?branch=master' alt='Build Status' /></a> 
 <a href='https://coveralls.io/r/MatthieuDartiailh/pyclibrary'><img src='https://coveralls.io/repos/MatthieuDartiailh/pyclibrary/badge.png' alt='Coverage Status' /></a>
+<a href='https://readthedocs.org/projects/pyclibrary/?badge=latest'><img src='https://readthedocs.org/projects/pyclibrary/badge/?version=latest' alt='Documentation Status' /></a>
 </div>
 
 C parser and bindings automation for Python.
