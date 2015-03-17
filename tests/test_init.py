@@ -43,7 +43,7 @@ def test_reinit_attempt(init_fixture):
 
 def test_auto_init():
 
-    auto_init('win32', {'new_type': int}, ['__modifier'])
+    auto_init({'new_type': int}, ['__modifier'], 'win32')
     assert 'new_type' in cp.base_types
     assert '__int64' in cp.base_types
     assert cp.extra_modifier is not None

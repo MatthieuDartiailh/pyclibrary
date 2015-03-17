@@ -56,7 +56,7 @@ class CTypesCLibrary(CLibrary):
 
     There are 3 ways to access library elements:
         lib(type, name):
-            - type can be one of 'values', 'functions', 'types', 'structs',
+            type can be one of 'values', 'functions', 'types', 'structs',
             'unions', or 'enums'. Returns an object matching name. For values,
             the value from the headers is returned. For functions, a callable
             object is returned that handles automatic type conversion for
@@ -64,7 +64,7 @@ class CTypesCLibrary(CLibrary):
             ctypes class is returned matching the type specified.
 
         lib.name:
-            - searches in order through values, functions, types, structs,
+            searches in order through values, functions, types, structs,
             unions, and enums from header definitions and returns an object for
             the first match found. The object returned is the same as returned
             by lib(type, name). This is the preferred way to access elements
@@ -72,7 +72,7 @@ class CTypesCLibrary(CLibrary):
             a struct and variable share the same name).
 
         lib[type]:
-            - Accesses the header definitions directly, returns definition
+            Accesses the header definitions directly, returns definition
             dictionaries based on the type requested. This is equivalent to
             headers.defs[type].
 

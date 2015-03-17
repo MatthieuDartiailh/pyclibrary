@@ -36,8 +36,8 @@ def win_defs(version='800'):
 
     These definitions can either be accessed directly or included before
     parsing another file like this:
-        windefs = c_parser.win_defs()
-        p = c_parser.CParser("headerFile.h", copy_from=windefs)
+    >>> windefs = c_parser.win_defs()
+    >>> p = c_parser.CParser("headerFile.h", copy_from=windefs)
 
     Definitions are pulled from a selection of header files included in Visual
     Studio (possibly not legal to distribute? Who knows.), some of which have
@@ -87,12 +87,12 @@ class CParser(object):
     files : str or iterable, optional
         File or files which should be parsed.
 
+    copy_from : CParser or iterable of CParser, optional
+        CParser whose definitions should be included.
+
     replace : dict, optional
         Specify som string replacements to perform before parsing. Format is
         {'searchStr': 'replaceStr', ...}
-
-    copy_from : CParser or iterable of CParser, optional
-        CParser whose definitions should be included.
 
     process_all : bool, optional
         Flag indicating whether files should be parsed immediatly. True by
@@ -102,7 +102,7 @@ class CParser(object):
         Path of the cache file from which to load definitions/to which save
         definitions as parsing is an expensive operation.
 
-    **kwargs :
+    kwargs :
         Extra parameters may be used to specify the starting state of the
         parser. For example, one could provide a set of missing type
         declarations by types={'UINT': ('unsigned int'), 'STRING': ('char', 1)}
@@ -141,7 +141,7 @@ class CParser(object):
     #: Private flag allowing to know if the parser has been initiliased.
     _init = False
 
-    def __init__(self, files=None, replace=None, copy_from=None,
+    def __init__(self, files=None, copy_from=None, replace=None,
                  process_all=True, cache=None, **kwargs):
 
         if not self._init:
@@ -267,11 +267,11 @@ class CParser(object):
             Path of the file from which the cache should be loaded.
 
         check_validity : bool, optional
-         If True, then run several checks before loading the cache:
-           - cache file must not be older than any source files
-           - cache file must not be older than this library file
-           - options recorded in cache must match options used to initialize
-             CParser
+            If True, then run several checks before loading the cache:
+              - cache file must not be older than any source files
+              - cache file must not be older than this library file
+              - options recorded in cache must match options used to initialize
+              CParser
 
         Returns
         -------
@@ -456,7 +456,7 @@ class CParser(object):
 
         Currently support :
         - conditionals : ifdef, ifndef, if, elif, else (defined can be used
-                         in a if statement).
+        in a if statement).
         - definition : define, undef
         - pragmas : pragma
 
@@ -1005,25 +1005,27 @@ class CParser(object):
         description.
 
         The description will be a list of elements (name, [basetype, modifier,
-        modifier, ...])
-          - name is the string name of the declarator or None for an abstract
-            declarator
-          - basetype is the string representing the base type
-          - modifiers can be:
-             '*'    - pointer (multiple pointers "***" allowed)
-             '&'    - reference
-             '__X'  - calling convention (windows only). X can be 'cdecl' or
-                      'stdcall'
-             list   - array. Value(s) indicate the length of each array, -1 for
-                      incomplete type.
-             tuple  - function, items are the output of processType for each
-                      function argument.
+        modifier, ...]):
+
+        - name is the string name of the declarator or None for an abstract
+          declarator
+        - basetype is the string representing the base type
+        - modifiers can be:
+            - '*'    : pointer (multiple pointers "***" allowed)
+            - '&'    : reference
+            - '__X'  : calling convention (windows only). X can be 'cdecl' or
+              'stdcall'
+            - list   : array. Value(s) indicate the length of each array, -1
+              for incomplete type.
+            - tuple  : function, items are the output of processType for each
+              function argument.
 
         Examples:
-            int *x[10]            =>  ('x', ['int', [10], '*'])
-            char fn(int x)         =>  ('fn', ['char', [('x', ['int'])]])
-            struct s (*)(int, int*)   =>  (None, ["struct s", ((None, ['int']),
-                                           (None, ['int', '*'])), '*'])
+          - int *x[10]            =>  ('x', ['int', [10], '*'])
+          - char fn(int x)         =>  ('fn', ['char', [('x', ['int'])]])
+          - struct s (*)(int, int*)   =>
+            (None, ["struct s", ((None, ['int']), (None, ['int', '*'])), '*'])
+
         """
         logger.debug("PROCESS TYPE/DECL: {}/{}".format(typ, decl))
         (name, decl) = self.process_declarator(decl)
