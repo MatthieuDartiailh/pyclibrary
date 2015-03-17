@@ -118,7 +118,7 @@ def add_library_locations(dir_list):
     LIBRARY_DIRS.extend(dirs)
 
 
-def find_library(name, dirs=[]):
+def find_library(name, dirs=None):
     """Look for a library file.
 
     Libraries are looked for in the directories specified by the user using the
