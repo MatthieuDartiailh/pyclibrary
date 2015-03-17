@@ -1,5 +1,7 @@
-pyclibrary package
-==================
+.. _api_ref:
+
+API references
+==============
 
 Subpackages
 -----------
