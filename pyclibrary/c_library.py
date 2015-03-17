@@ -91,37 +91,39 @@ class CLibraryMeta(type):
 class CLibrary(with_metaclass(CLibraryMeta, object)):
     """The CLibrary class is intended to automate much of the work in using
     ctypes by integrating header file definitions from CParser. This class
-    serves as a proxy to a ctypes, adding a few features:
-      - allows easy access to values defined via CParser
-      - automatic type conversions for function calls using CParser function
-        signatures
-      - creates ctype classes based on type definitions from CParser
+    serves as a proxy to a backend, adding a few features:
+    
+        - allows easy access to values defined via CParser.
+        - automatic type conversions for function calls using CParser function
+          signatures.
+        - creates ctype classes based on type definitions from CParser.
 
     Initialize using a ctypes shared object and a CParser:
-       headers = CParser.winDefs()
-       lib = CLibrary(windll.User32, headers)
+    >>> headers = CParser.winDefs()
+    >>> lib = CLibrary(windll.User32, headers)
 
     There are 3 ways to access library elements:
-        lib(type, name):
-            - type can be one of 'values', 'functions', 'types', 'structs',
-            'unions', or 'enums'. Returns an object matching name. For values,
-            the value from the headers is returned. For functions, a callable
-            object is returned that handles automatic type conversion for
-            arguments and return values. For structs, types, and enums, a
-            ctypes class is returned matching the type specified.
 
-        lib.name:
-            - searches in order through values, functions, types, structs,
-            unions, and enums from header definitions and returns an object for
-            the first match found. The object returned is the same as returned
-            by lib(type, name). This is the preferred way to access elements
-            from CLibrary, but may not work in some situations (for example, if
-            a struct and variable share the same name).
+    - lib(type, name):
+        type can be one of 'values', 'functions', 'types', 'structs',
+        'unions', or 'enums'. Returns an object matching name. For values,
+        the value from the headers is returned. For functions, a callable
+        object is returned that handles automatic type conversion for
+        arguments and return values. For structs, types, and enums, a
+        ctypes class is returned matching the type specified.
 
-        lib[type]:
-            - Accesses the header definitions directly, returns definition
-            dictionaries based on the type requested. This is equivalent to
-            headers.defs[type].
+    - lib.name:
+        searches in order through values, functions, types, structs,
+        unions, and enums from header definitions and returns an object for
+        the first match found. The object returned is the same as returned
+        by lib(type, name). This is the preferred way to access elements
+        from CLibrary, but may not work in some situations (for example, if
+        a struct and variable share the same name).
+
+    - lib[type]:
+        Accesses the header definitions directly, returns definition
+        dictionaries based on the type requested. This is equivalent to
+        headers.defs[type].
 
     Parameters
     ----------
@@ -147,7 +149,7 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
         library object is passed.
         NB : this kwarg is used by the metaclass.
 
-    **kwargs :
+    kwargs :
         Additional keywords argument which are passed to the CParser if one
         is created.
 
@@ -530,18 +532,22 @@ class CallResult(object):
     """Class for bundling results from C function calls.
 
     Allows access to the function  value as well as all of the arguments, since
-    the function call will often return extra values via these arguments.
+    the function call will often return extra values via these arguments:
+
       - Original ctype objects can be accessed via result.rval or result.args
       - Python values carried by these objects can be accessed using ()
+
     To access values:
-       - The return value: ()
-       - The nth argument passed: [n]
-       - The argument by name: ['name']
-       - All values that were auto-generated: .auto()
+
+      - The return value: ()
+      - The nth argument passed: [n]
+      - The argument by name: ['name']
+      - All values that were auto-generated: .auto()
 
     The class can also be used as an iterator, so that tuple unpacking is
     possible:
-       ret, (arg1, arg2) = lib.run_some_function(...)
+
+         >>> ret, (arg1, arg2) = lib.run_some_function(...)
 
     """
     def __init__(self, lib, rval, args, sig, guessed):
