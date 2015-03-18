@@ -549,6 +549,24 @@ class CallResult(object):
 
          >>> ret, (arg1, arg2) = lib.run_some_function(...)
 
+    Attributes
+    ----------
+    lib: CLibrary
+        Reference to the CLibrary to which the function that created this 
+        object balongs.
+        
+    rval :
+        Value returned by the C function.
+        
+    args : tuple
+        Arguments passed to the C function.
+        
+    sig :
+        Signature of the function which created this object.
+        
+    guessed : tuple
+        Pointers that were created on the fly.
+         
     """
     def __init__(self, lib, rval, args, sig, guessed):
         self.lib = lib
@@ -586,6 +604,9 @@ class CallResult(object):
             raise ValueError("Index must be int or str.")
 
     def find_arg(self, arg):
+        """Find argument based on name.
+        
+        """
         for i, a in enumerate(self.sig[1]):
             if a[0] == arg:
                 return i
@@ -598,6 +619,11 @@ class CallResult(object):
         yield(self[i] for i in range(len(self.args)))
 
     def auto(self):
+        """Return a list of all the auto-generated values.
+        
+        Pointers are dereferenced.
+        
+        """
         return [self[n] for n in self.guessed]
 
 

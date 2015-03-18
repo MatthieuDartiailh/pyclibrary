@@ -43,8 +43,9 @@ def make_mess(mess):
 
 class CTypesCLibrary(CLibrary):
     """The CLibrary class is intended to automate much of the work in using
-    ctypes by integrating header file definitions from CParser. Ths class
-    serves as a proxy to a ctypes, adding a few features:
+    ctypes by integrating header file definitions from CParser.
+
+    This class serves as a proxy to a ctypes object, adding a few features:
       - allows easy access to values defined via CParser
       - automatic type conversions for function calls using CParser function
         signatures

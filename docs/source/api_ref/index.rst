@@ -14,7 +14,7 @@ Submodules
 ----------
 
 pyclibrary.c_library module
----------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: pyclibrary.c_library
     :members:
@@ -22,7 +22,7 @@ pyclibrary.c_library module
     :show-inheritance:
 
 pyclibrary.c_parser module
---------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: pyclibrary.c_parser
     :members:
@@ -30,7 +30,7 @@ pyclibrary.c_parser module
     :show-inheritance:
 
 pyclibrary.errors module
-------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: pyclibrary.errors
     :members:
@@ -38,7 +38,7 @@ pyclibrary.errors module
     :show-inheritance:
 
 pyclibrary.init module
-----------------------
+^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: pyclibrary.init
     :members:
@@ -46,18 +46,9 @@ pyclibrary.init module
     :show-inheritance:
 
 pyclibrary.utils module
------------------------
+^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: pyclibrary.utils
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-
-Module contents
----------------
-
-.. automodule:: pyclibrary
     :members:
     :undoc-members:
     :show-inheritance:
