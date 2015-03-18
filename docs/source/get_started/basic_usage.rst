@@ -56,13 +56,13 @@ cache the parsed definition.
 
 To cache definitions, you simply have to provide a path pointing to the file 
 in which to save the parsed definitions to the parser (cache keyword). If the
-a cache file already exists, it is loaded only if the version of the parser
+cache file already exists, it is loaded only if the version of the parser
 matches (which allows update to always take effects) and if the arguments 
 passed to the CParser are the same (if you ask for different replacements in
 your file it will trigger a re-parsing).
 
 The previous procedure should be sufficient in general but in some cases you
-might a finer control on the parsing procedure. See for a more detailed 
+might want a finer control on the parsing procedure. See for a more detailed 
 explanation.
 
 Binding the library
@@ -135,12 +135,12 @@ you need to specify it explicitly.
 
 The third way gives access directly to the parser definitions::
 
-	>>>clib['values']['HIGH_FLAG]
+	>>>clib['values']['HIGH_FLAG']
 	1
 	
 This is equivalent to doing::
 
-	>>>parser.defs['values']['HIGH_FLAG]
+	>>>parser.defs['values']['HIGH_FLAG']
 
 Calling functions
 ^^^^^^^^^^^^^^^^^
