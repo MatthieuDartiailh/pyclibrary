@@ -1,10 +1,13 @@
 # PyClibrary
 
-<div>
-<a href='https://travis-ci.org/MatthieuDartiailh/pyclibrary'><img src='https://travis-ci.org/MatthieuDartiailh/pyclibrary.svg?branch=master' alt='Build Status' /></a> 
-<a href='https://coveralls.io/r/MatthieuDartiailh/pyclibrary'><img src='https://coveralls.io/repos/MatthieuDartiailh/pyclibrary/badge.png' alt='Coverage Status' /></a>
-<a href='https://readthedocs.org/projects/pyclibrary/?badge=latest'><img src='https://readthedocs.org/projects/pyclibrary/badge/?version=latest' alt='Documentation Status' /></a>
-</div>
+[![Build Status](https://travis-ci.org/MatthieuDartiailh/pyclibrary.svg?branch=master)](https://travis-ci.org/MatthieuDartiailh/pyclibrary)
+[![Coverage Status](https://coveralls.io/repos/MatthieuDartiailh/pyclibrary/badge.svg?branch=master)](https://coveralls.io/r/MatthieuDartiailh/pyclibrary?branch=master)
+[![Documentation Status](https://readthedocs.org/projects/pyclibrary/badge/?version=latest)](https://readthedocs.org/projects/pyclibrary/?badge=latest)
+[![Latest Version](https://pypip.in/version/pyclibrary/badge.svg)](https://pypi.python.org/pypi/pyclibrary/)
+[![Downloads](https://pypip.in/download/pyclibrary/badge.svg)](https://pypi.python.org/pypi/pyclibrary/)
+[![Supported Python versions](https://pypip.in/py_versions/pyclibrary/badge.svg)](https://pypi.python.org/pypi/pyclibrary/)
+[![Wheel Status](https://pypip.in/wheel/pyclibrary/badge.svg)](https://pypi.python.org/pypi/pyclibrary/)
+[![License](https://pypip.in/license/pyclibrary/badge.svg)](https://pypi.python.org/pypi/pyclibrary/)
 
 C parser and bindings automation for Python.
 

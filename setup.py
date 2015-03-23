@@ -42,6 +42,7 @@ cdll/windll.''',
         ],
     zip_safe = False,
     packages = ['pyclibrary', 'pyclibrary.backends', 'pyclibrary.thirdparty'],
+	package_data = {'pyclibrary': ['headers/*']},
     requires = ['future'],
     install_requires = ['future'],
 )

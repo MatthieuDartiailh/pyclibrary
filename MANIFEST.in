@@ -1,0 +1,5 @@
+include README
+
+# Include also the header folder which contains the cached
+# windows headers.
+include pyclibrary/headers/*
