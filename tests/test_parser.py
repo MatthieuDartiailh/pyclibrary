@@ -16,6 +16,7 @@ import os
 import sys
 from pytest import raises
 from pyclibrary.c_parser import CParser
+import pyclibrary.utils
 
 
 H_DIRECTORY = os.path.join(os.path.dirname(__file__), 'headers')
@@ -39,6 +40,27 @@ class TestFileHandling(object):
     def setup(self):
 
         self.parser = CParser(process_all=False)
+
+    def test_init(self):
+        parser = CParser(os.path.join(self.h_dir, 'replace.h'))
+        assert parser.files is not None
+
+    def test_find_file(self):
+
+        saved_headers = pyclibrary.utils.HEADER_DIRS
+        try:
+            pyclibrary.utils.add_header_locations([self.h_dir])
+            assert self.h_dir in pyclibrary.utils.HEADER_DIRS
+            assert self.parser.find_headers(['replace.h']) == \
+                   [os.path.join(self.h_dir, 'replace.h')]
+        finally:
+            pyclibrary.utils.HEADER_DIRS = saved_headers
+
+        abs_hdr_path = os.path.join(self.h_dir, 'replace.h')
+        assert self.parser.find_headers([abs_hdr_path]) == [abs_hdr_path]
+        abs_hdr_path2 = os.path.join(self.h_dir, 'c_comments.h')
+        assert len(self.parser.find_headers([abs_hdr_path, abs_hdr_path2])) == 2
+
 
     def test_load_file(self):
 
