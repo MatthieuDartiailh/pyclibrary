@@ -1412,7 +1412,6 @@ call_conv = None
 type_qualifier = None
 extra_modifier = None
 fund_type = None
-pointer_operator = None
 
 
 # Define some common language elements when initialising.
@@ -1421,7 +1420,7 @@ def _init_cparser(extra_types=None, extra_modifiers=None):
     global call_conv, ident
     global base_types
     global type_qualifier, extra_modifier
-    global fund_type, pointer_operator
+    global fund_type
 
     # Some basic definitions
     num_types = ['int', 'float', 'double']
@@ -1448,11 +1447,6 @@ def _init_cparser(extra_types=None, extra_modifiers=None):
                           WordEnd(wordchars)).setParseAction(lambda t: t[0])
     type_qualifier = ZeroOrMore((underscore_2_ident + Optional(nestedExpr())) |
                                 kwl(qualifiers)).suppress()
-
-    pointer_operator = ('*' + type_qualifier |
-                        '&' + type_qualifier |
-                        '::' + ident + type_qualifier
-                        )
 
     if extra_modifiers:
         extra_modifier = ZeroOrMore(kwl(extra_modifiers) +
