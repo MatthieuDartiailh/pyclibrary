@@ -364,7 +364,7 @@ class CParser(object):
         hs = []
         for header in headers:
             if os.path.isfile(header):
-                hs.append(hs)
+                hs.append(header)
             else:
                 h = find_header(header)
                 if not h:
