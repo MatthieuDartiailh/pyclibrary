@@ -412,7 +412,7 @@ class TestParsing(object):
                 variables['str1'] == ("normal string", ('char', '*')))
         assert ('str2' in variables and
                 variables['str2'] == ("string with macro: INT",
-                                      ('char', '**')))
+                                      ('char', '*', '*')))
         assert ('str3' in variables and
                 variables['str3'] == ("string with comment: /*comment inside string*/",
                                       ('char', '*')))
@@ -435,7 +435,7 @@ class TestParsing(object):
         assert ('array' in variables and
                 variables['array'] == ([1, 3141500.0], ('float', [2])))
         assert ('intJunk' in variables and
-                variables['intJunk'] == (None, (u'int', u'*', u'**', [4])))
+                variables['intJunk'] == (None, (u'int', u'*', u'*', u'*', [4])))
 
     # No structure, no unions, no enum
     def test_typedef(self):
@@ -448,7 +448,7 @@ class TestParsing(object):
         variables = self.parser.defs['variables']
 
         # Test defining types from base types.
-        assert ('typeChar' in types and types['typeChar'] == ('char', '**'))
+        assert ('typeChar' in types and types['typeChar'] == ('char', '*', '*'))
         assert ('typeInt' in types and types['typeInt'] == ('int',))
         assert ('typeIntPtr' in types and types['typeIntPtr'] == ('int', '*'))
         assert ('typeIntArr' in types and types['typeIntArr'] == ('int', [10]))
@@ -601,7 +601,7 @@ class TestParsing(object):
         assert ('g' in functions and
                 functions['g'] == (('int',),
                                    (('ch', ('char', '*'), None),
-                                    ('str', ('char', '**'), None))))
+                                    ('str', ('char', '*', '*'), None))))
         assert ('fnPtr' in variables and
                 variables['fnPtr'] == (None, ('int',
                                               ((None, ('char',), None),

@@ -973,7 +973,7 @@ class CParser(object):
             toks.append(decl['call_conv'])
 
         if 'ptrs' in decl and len(decl['ptrs']) > 0:
-            toks.append('*' * len(decl['ptrs']))
+            toks += ('*',) * len(decl['ptrs'])
 
         if 'arrays' in decl and len(decl['arrays']) > 0:
             toks.append([self.eval_expr(x) for x in decl['arrays']])
