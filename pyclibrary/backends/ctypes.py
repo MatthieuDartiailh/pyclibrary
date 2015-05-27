@@ -295,14 +295,13 @@ class CTypesCLibrary(CLibrary):
         """Build an uninitialised pointer for the given type.
 
         """
-        if (arg_type == ['void', '**'] or
-                arg_type == ['void', '*', '*']):
+        if arg_type == ['void', '*', '*']:
             cls = c_void_p
         else:
             # Must be 2-part type, second part must be '*' or '**'
-            assert len(arg_type) == 2 and arg_type[1] in ('*', '**')
+            assert 2 <= len(arg_type) <= 3 and set(arg_type[1:]) == {'*'}
             cls = self._get_type(sig, pointers=False)
-            if arg_type[1] == '*':
+            if arg_type[1:] == ('*',):
                 return pointer(cls(0))
             else:
                 return pointer(pointer(cls(0)))
