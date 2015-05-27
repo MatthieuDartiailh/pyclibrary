@@ -437,6 +437,14 @@ class TestParsing(object):
         assert ('intJunk' in variables and
                 variables['intJunk'] == (None, (u'int', u'*', u'*', u'*', [4])))
 
+        # test type qualifiers
+        assert variables.get('typeQualedIntPtrPtr') == (None, ('int', '*', '*'))
+
+        # test type definition precedence
+        assert variables.get('prec_ptr_of_arr') == (None, ('int', [1], '*'))
+        assert variables.get('prec_arr_of_ptr') == (None, ('int', '*', [1]))
+        assert variables.get('prec_arr_of_ptr2') == (None, ('int', '*', [1]))
+
     # No structure, no unions, no enum
     def test_typedef(self):
 
@@ -612,3 +620,8 @@ class TestParsing(object):
 
         assert ('function2' in functions and
                 functions['function2'] == (('int',), ()))
+
+        assert 'externFunc' in functions
+
+        assert functions.get('typeQualedFunc') == \
+               (('int',), ((None, ('int', '*', '*'), None),))

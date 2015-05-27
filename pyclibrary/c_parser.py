@@ -845,7 +845,8 @@ class CParser(object):
         #     *( )(int, int)[10]
         #     ...etc...
         self.abstract_declarator << Group(
-            type_qualifier + Group(ZeroOrMore('*'))('ptrs') + type_qualifier +
+            type_qualifier +
+            Group(ZeroOrMore(Literal('*') + type_qualifier))('ptrs') +
             ((Optional('&')('ref')) |
              (lparen + self.abstract_declarator + rparen)('center')) +
             Optional(lparen +
@@ -868,8 +869,8 @@ class CParser(object):
         #     * fnName(int arg1=0)[10]
         #     ...etc...
         self.declarator << Group(
-            type_qualifier + call_conv + Group(ZeroOrMore('*'))('ptrs') +
-            type_qualifier +
+            type_qualifier + call_conv +
+            Group(ZeroOrMore(Literal('*') + type_qualifier))('ptrs') +
             ((Optional('&')('ref') + ident('name')) |
              (lparen + self.declarator + rparen)('center')) +
             Optional(lparen +
@@ -894,7 +895,8 @@ class CParser(object):
 
         # Variable declaration
         self.variable_decl = (
-            Group(self.type_spec('type') +
+            Group(storage_class_spec +
+                  self.type_spec('type') +
                   Optional(self.declarator_list('decl_list')) +
                   Optional(Literal('=').suppress() +
                            (expression('value') |
@@ -911,7 +913,8 @@ class CParser(object):
         # Function definition
         self.typeless_function_decl = (self.declarator('decl') +
                                        nestedExpr('{', '}').suppress())
-        self.function_decl = (self.type_spec('type') +
+        self.function_decl = (storage_class_spec +
+                              self.type_spec('type') +
                               self.declarator('decl') +
                               nestedExpr('{', '}').suppress())
         self.function_decl.setParseAction(self.process_function)
@@ -1410,6 +1413,7 @@ base_types = None
 ident = None
 call_conv = None
 type_qualifier = None
+storage_class_spec = None
 extra_modifier = None
 fund_type = None
 
@@ -1419,15 +1423,15 @@ def _init_cparser(extra_types=None, extra_modifiers=None):
     global expression
     global call_conv, ident
     global base_types
-    global type_qualifier, extra_modifier
+    global type_qualifier, storage_class_spec, extra_modifier
     global fund_type
 
     # Some basic definitions
     num_types = ['int', 'float', 'double']
     extra_types = [] if extra_types is None else list(extra_types)
     base_types = ['char', 'bool', 'void'] + num_types + extra_types
-    qualifiers = ['const', 'static', 'volatile', 'inline', 'restrict', 'near',
-                  'far']
+    storage_classes = ['inline', 'static', 'extern']
+    qualifiers = ['const', 'volatile', 'restrict', 'near', 'far']
 
     keywords = (['struct', 'enum', 'union', '__stdcall', '__cdecl'] +
                 qualifiers + base_types + size_modifiers + sign_modifiers)
@@ -1447,6 +1451,8 @@ def _init_cparser(extra_types=None, extra_modifiers=None):
                           WordEnd(wordchars)).setParseAction(lambda t: t[0])
     type_qualifier = ZeroOrMore((underscore_2_ident + Optional(nestedExpr())) |
                                 kwl(qualifiers)).suppress()
+
+    storage_class_spec = Optional(kwl(storage_classes))
 
     if extra_modifiers:
         extra_modifier = ZeroOrMore(kwl(extra_modifiers) +

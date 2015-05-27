@@ -49,3 +49,8 @@ int x2 = (typeCast)0x544 <<16;
 // Test array
 float array[2] = {0x1, 3.1415e6};
 static const int * const (**intJunk[4]);
+
+int const * volatile * typeQualedIntPtrPtr;
+
+// Test type definition precedence
+int (*prec_ptr_of_arr)[1], *(prec_arr_of_ptr[1]), *prec_arr_of_ptr2[1];
