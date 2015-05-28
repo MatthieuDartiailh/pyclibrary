@@ -4,6 +4,8 @@ PyCLibrary Changelog
 next release
 ------------
 
+- python representations of C types are stored in the new Type object now,
+  instead of standard python tuple
 - Pointers are represented as multiple 1-character ('*', '*', ...) entries
   in type-tuple instead of a single entry of multiple characters ('**...')
 - BUGFIX: Type-qualifiers can now be specified in between pointer specifiers

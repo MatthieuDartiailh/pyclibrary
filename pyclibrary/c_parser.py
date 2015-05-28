@@ -31,6 +31,158 @@ logger = logging.getLogger(__name__)
 __all__ = ['win_defs', 'CParser']
 
 
+class Type(tuple):
+    """
+    Representation of a C type. CParser uses this class to store the parsed
+    typedefs and the types of variable/func.
+
+    **ATTENTION:** Due to compatibility issues with 0.1.0 this class derives
+    from tuple and can be accessed like the tuples from 0.1.0.
+
+    Parameters
+    ----------
+    type_spec : str
+        a string referring the base type of this type defintion. This may either
+        be a fundametal type (i.e. 'int', 'enum x') or a type definition made by
+        a typedef-statement
+
+    declarators : str or list of tuple
+        all following parameters are deriving a type from the type defined until
+        now. Types can be derived by:
+
+        - The string '*': define a pointer to the base type
+          (i.E. Type('int', '*'))
+        - The string '&': a reference. T.B.D.
+        - A list of integers of len 1: define an array with N elements
+          (N is the first and single entry in the list of integers). If N is -1,
+          the array definition is seen as 'int x[]'
+          (i.E. Type('int', [1])
+        - a N-tuple of 3-tuples: defines a function of N parameters. Every
+          parameter is a 3 tuple of the form:
+          (<parameter-name-or-None>, <param-type>, None).
+          Due to compatibility reasons the return value of the function is
+          stored in Type.type_spec parameter
+          (This is **not** the case for function pointers):
+          (i.E. Type(Type('int', '*'), ( ('param1', Type('int'), None), ) ) )
+
+    To build more complex types any number of declarators can be combined. i.E.
+
+        int * (*a[2])(char *, signed c[]);
+
+    if represented as:
+
+        Type('int', '*',
+            ( (None, Type('char', '*'), None),
+              ('c', Type('signed', [-1]), None) )),
+            '*', [2])
+
+    """
+
+    def __new__(cls, type_spec, *declarators):
+        return super(Type, cls).__new__(cls, (type_spec,) + declarators)
+
+    def __init__(self, type_spec, *declarators):
+        super(Type, self).__init__()
+    
+    @property
+    def declarators(self):
+        """Return a tuple of all declarators.
+
+        """
+        return tuple(self[1:])
+
+    @property
+    def type_spec(self):
+        """Return the base type of this type.
+
+        """
+        return self[0]
+
+    def is_fund_type(self):
+        """Returns True, if this type is a fundamental type.
+        Fundamental types are all types, that are not defined via typedef
+
+        """
+
+        if (self[0].startswith('struct ') or self[0].startswith('union ') or
+            self[0].startswith('enum ') ):
+            return True
+
+        names = (num_types + nonnum_types + size_modifiers + sign_modifiers +
+                 extra_type_list)
+        for w in self[0].split():
+            if w not in names:
+                return False
+        return True
+
+    def eval(self, type_map, used=None):
+        """Resolves the type_spec of this type recursively if it is referring
+        to a typedef. For resolving the type type_map is used for lookup.
+        Returns a new Type object.
+
+        Parameters
+        ----------
+        type_map : dict of str to Type
+            All typedefs that shall be resolved have to be stored in this
+            type_map.
+
+        used : list of str
+            For internal use only to prevent circular typedefs
+
+        """
+        used = used or []
+
+        if self.is_fund_type():
+            # Remove 'signed' before returning evaluated type
+            return Type(re.sub(r'\bsigned\b', '', self.type_spec).strip(),
+                        *self.declarators)
+
+        parent = self.type_spec
+        if parent in used:
+            m = 'Recursive loop while evaluating types. (typedefs are {})'
+            raise DefinitionError(m.format(' -> '.join(used+[parent])))
+
+        used.append(parent)
+        if parent not in type_map:
+            m = 'Unknown type "{}" (typedefs are {})'
+            raise DefinitionError(m.format(parent, ' -> '.join(used)))
+
+        pt = type_map[parent]
+        evaled_type = Type(pt.type_spec, *(pt.declarators + self.declarators))
+        return evaled_type.eval(type_map, used)
+
+    def add_compatibility_hack(self):
+        """If This Type is refering to a function (**not** a function pointer)
+        a new type is returned, that matches the hack from version 0.1.0.
+        This hack enforces the return value be encapsulated in a separated Type
+        object:
+
+            Type('int', '*', ())
+
+        is converted to
+
+            Type(Type('int', '*'), ())
+        """
+        if type(self[-1]) == tuple:
+            return Type(Type(*self[:-1]), self[-1])
+        else:
+            return self
+
+    def remove_compatibility_hack(self):
+        """Returns a Type object, where the hack from .add_compatibility_hack()
+        is removed
+
+        """
+        if len(self) == 2 and isinstance(self[0], Type):
+            return Type(*(self[0] + (self[1],)))
+        else:
+            return self
+
+    def __repr__(self):
+        return type(self).__name__ + '(' + ', '.join(map(repr, self)) + ')'
+
+
+
 def win_defs(version='800'):
     """Loads selection of windows headers included with PyCLibrary.
 
@@ -1032,7 +1184,7 @@ class CParser(object):
         """
         logger.debug("PROCESS TYPE/DECL: {}/{}".format(typ, decl))
         (name, decl) = self.process_declarator(decl)
-        return (name, tuple([typ] + decl))
+        return (name, Type(typ, *decl))
 
     def process_enum(self, s, l, t):
         """
@@ -1064,7 +1216,7 @@ class CParser(object):
                     i += 1
                 logger.debug("  members: {}".format(enum))
                 self.add_def('enums', name, enum)
-                self.add_def('types', 'enum '+name, ('enum', name))
+                self.add_def('types', 'enum '+name, Type('enum', name))
             return ('enum ' + name)
         except:
             logger.exception("Error processing enum: {}".format(t))
@@ -1083,7 +1235,7 @@ class CParser(object):
                 raise DefinitionError(mess)
             logger.debug("  name: {}".format(name))
             logger.debug("  sig: {}".format(decl))
-            self.add_def('functions', name, (decl[:-1], decl[-1]))
+            self.add_def('functions', name, decl.add_compatibility_hack())
 
         except Exception:
             logger.exception("Error processing function: {}".format(t))
@@ -1135,7 +1287,7 @@ class CParser(object):
                                  m, m[0].keys(), m[0].decl_list))
 
                     if len(m[0].decl_list) == 0:  # anonymous member
-                        member = [None, (typ,), None]
+                        member = [None, Type(typ), None]
                         if m[0].bit:
                             member.append(int(m[0].bit))
                         struct.append(tuple(member))
@@ -1151,7 +1303,7 @@ class CParser(object):
 
                 self.add_def(str_typ+'s', sname,
                              {'pack': packing, 'members': struct})
-                self.add_def('types', str_typ+' '+sname, (str_typ, sname))
+                self.add_def('types', str_typ+' '+sname, Type(str_typ, sname))
             return str_typ + ' ' + sname
 
         except Exception:
@@ -1169,7 +1321,7 @@ class CParser(object):
                 if type(typ[-1]) is tuple:
                     logger.debug("  Add function prototype: {} {} {}".format(
                                  name, typ, val))
-                    self.add_def('functions', name, (typ[:-1], typ[-1]))
+                    self.add_def('functions', name, typ.add_compatibility_hack())
                 # This is a variable
                 else:
                     logger.debug("  Add variable: {} {} {}".format(name,
@@ -1258,40 +1410,22 @@ class CParser(object):
         """Return True if this type is a fundamental C type, struct, or
         union.
 
-        """
-        if (typ[0][:7] == 'struct ' or typ[0][:6] == 'union ' or
-                typ[0][:5] == 'enum '):
-            return True
+        **ATTENTION: This function is legacy and should be replaced by
+        Type.is_fund_type()**
 
-        names = base_types + size_modifiers + sign_modifiers
-        for w in typ[0].split():
-            if w not in names:
-                return False
-        return True
+        """
+        return Type(typ).is_fund_type()
 
     def eval_type(self, typ):
         """Evaluate a named type into its fundamental type.
 
+        **ATTENTION: This function is legacy and should be replaced by
+        Type.eval()**
+
         """
-        used = []
-        typ = list(typ)
-        while True:
-            if self.is_fund_type(typ):
-                # Remove 'signed' before returning evaluated type
-                typ[0] = re.sub(r'\bsigned\b', '', typ[0]).strip()
-                return tuple(typ)
-
-            parent = typ[0]
-            if parent in used:
-                m = 'Recursive loop while evaluating types. (typedefs are {})'
-                raise DefinitionError(m.format(' -> '.join(used+[parent])))
-
-            used.append(parent)
-            if parent not in self.defs['types']:
-                m = 'Unknown type "{}" (typedefs are {})'
-                raise DefinitionError(m.format(parent, ' -> '.join(used)))
-            pt = list(self.defs['types'][parent])
-            typ = pt + typ[1:]
+        if not isinstance(typ, Type):
+            typ = Type(*typ)
+        return typ.eval(self.defs['types'])
 
     def find(self, name):
         """Search all definitions for the given name.
@@ -1416,7 +1550,10 @@ type_qualifier = None
 storage_class_spec = None
 extra_modifier = None
 fund_type = None
+extra_type_list = []
 
+num_types = ['int', 'float', 'double']
+nonnum_types = ['char', 'bool', 'void']
 
 # Define some common language elements when initialising.
 def _init_cparser(extra_types=None, extra_modifiers=None):
@@ -1425,11 +1562,11 @@ def _init_cparser(extra_types=None, extra_modifiers=None):
     global base_types
     global type_qualifier, storage_class_spec, extra_modifier
     global fund_type
+    global extra_type_list
 
     # Some basic definitions
-    num_types = ['int', 'float', 'double']
-    extra_types = [] if extra_types is None else list(extra_types)
-    base_types = ['char', 'bool', 'void'] + num_types + extra_types
+    extra_type_list = [] if extra_types is None else list(extra_types)
+    base_types = nonnum_types + num_types + extra_type_list
     storage_classes = ['inline', 'static', 'extern']
     qualifiers = ['const', 'volatile', 'restrict', 'near', 'far']
 
