@@ -37,7 +37,8 @@ class Type(tuple):
     typedefs and the types of variable/func.
 
     **ATTENTION:** Due to compatibility issues with 0.1.0 this class derives
-    from tuple and can be accessed like the tuples from 0.1.0.
+    from tuple and can be seen as the tuples from 0.1.0. In future this might
+    change to a tuple-like object!!!
 
     Parameters
     ----------
@@ -67,14 +68,14 @@ class Type(tuple):
 
     To build more complex types any number of declarators can be combined. i.E.
 
-        int * (*a[2])(char *, signed c[]);
+    >>> int * (*a[2])(char *, signed c[]);
 
     if represented as:
 
-        Type('int', '*',
-            ( (None, Type('char', '*'), None),
-              ('c', Type('signed', [-1]), None) )),
-            '*', [2])
+    >>> Type('int', '*',
+    >>>      ( (None, Type('char', '*'), None),
+    >>>        ('c', Type('signed', [-1]), None) )),
+    >>>      '*', [2])
 
     """
 
@@ -180,6 +181,62 @@ class Type(tuple):
 
     def __repr__(self):
         return type(self).__name__ + '(' + ', '.join(map(repr, self)) + ')'
+
+
+class Compound(dict):
+
+    def __init__(self, *members, **argv):
+        self.members = list(members)
+        self.pack = argv.pop('pack', None)
+        assert len(argv) == 0
+
+        super(Compound, self).__init__(
+            dict(members=self.members, pack=self.pack))
+
+    def __repr__(self):
+        packParam = ', pack='+repr(self.pack) if self.pack is not None else ''
+        return (type(self).__name__ + '(' +
+                ', '.join(map(repr, self.members)) + packParam + ')')
+
+
+class Struct(Compound):
+    """Representation of a C struct. CParser uses this class to store the parsed
+    structs.
+
+    **ATTENTION:** Due to compatibility issues with 0.1.0 this class derives
+    from dict and can be seen as the dicts from 0.1.0. In future this might
+    change to a dict-like object!!!
+    """
+    pass
+
+
+class Union(Compound):
+    """Representation of a C union. CParser uses this class to store the parsed
+    unions.
+
+    **ATTENTION:** Due to compatibility issues with 0.1.0 this class derives
+    from dict and can be seen as the dicts from 0.1.0. In future this might
+    change to a dict-like object!!!
+    """
+    pass
+
+
+class Enum(dict):
+    """Representation of a C enum. CParser uses this class to store the parsed
+    enums.
+
+    **ATTENTION:** Due to compatibility issues with 0.1.0 this class derives
+    from dict and can be seen as the dicts from 0.1.0. In future this might
+    change to a dict-like object!!!
+    """
+
+    def __init__(self, **args):
+        super(Enum, self).__init__(args)
+
+    def __repr__(self):
+        return (type(self).__name__ + '(' +
+                ', '.join(nm+'='+repr(val) for nm,val in sorted(self.items())) +
+                ')')
 
 
 
@@ -1301,8 +1358,8 @@ class CParser(object):
                         logger.debug("      {} {} {} {}".format(name, decl,
                                      val, m[0].bit))
 
-                self.add_def(str_typ+'s', sname,
-                             {'pack': packing, 'members': struct})
+                str_cls = (Struct if str_typ == 'struct' else Union)
+                self.add_def(str_typ+'s', sname, str_cls(*struct, pack=packing))
                 self.add_def('types', str_typ+' '+sname, Type(str_typ, sname))
             return str_typ + ' ' + sname
 

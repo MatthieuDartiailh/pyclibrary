@@ -15,7 +15,7 @@ from __future__ import (division, unicode_literals, print_function,
 import os
 import sys
 from pytest import raises
-from pyclibrary.c_parser import CParser, Type
+from pyclibrary.c_parser import CParser, Type, Struct, Union, Enum
 import pyclibrary.utils
 
 
@@ -35,7 +35,7 @@ class TestType(object):
     def test_tuple_equality(self):
         assert Type('int') == ('int',)
         assert ('int',) == Type('int')
-        assert isinstance(Type('int'), tuple)
+        assert issubclass(Type, tuple)
 
     def test_getters(self):
         assert Type('int', '*').type_spec == 'int'
@@ -76,6 +76,47 @@ class TestType(object):
 
     def test_repr(self):
         assert repr(Type('int', '*')) == "Type({!r}, {!r})".format('int', '*')
+
+
+class TestStructUnion(object):
+
+    TEST_MEMBERS = [ ('a', Type('int'), None),
+                     ('b', Type('char', '*'), None)]
+
+    def test_init(self):
+        assert Struct().members == []
+        assert Struct().pack == None
+        assert Struct(*self.TEST_MEMBERS).members == self.TEST_MEMBERS
+        assert Struct(pack=2).pack == 2
+
+        assert Union(*self.TEST_MEMBERS).members == self.TEST_MEMBERS
+
+    def test_list_equality(self):
+        assert Struct(*self.TEST_MEMBERS, pack=2) == {
+            'members': [ ('a', Type('int'), None),
+                         ('b', Type('char', '*'), None)],
+            'pack': 2 }
+        assert issubclass(Struct, dict)
+
+        assert Union(*self.TEST_MEMBERS)['members'] == self.TEST_MEMBERS
+
+    def test_repr(self):
+        assert repr(Struct()) == 'Struct()'
+        assert repr(Struct(*self.TEST_MEMBERS, pack=2)) == \
+               ( 'Struct(' + repr(self.TEST_MEMBERS[0]) + ', ' +
+                 repr(self.TEST_MEMBERS[1]) + ', pack=2)' )
+        assert repr(Union()) == 'Union()'
+
+
+class TestEnum(object):
+
+    def test_dict_equality(self):
+        assert Enum(a=1, b=2) == {'a':1, 'b':2}
+        assert issubclass(Enum, dict)
+
+
+    def test_repr(self):
+        assert repr(Enum(a=1, b=2)) == 'Enum(a=1, b=2)'
 
 
 class TestFileHandling(object):
@@ -579,10 +620,10 @@ class TestParsing(object):
 
         # Test creating a structure using only base types.
         assert ('struct_name' in structs and 'struct struct_name' in types)
-        assert {'members': [('x', Type('int'), 1),
-                            ('y', Type('type_type_int'), None, 2),
-                            ('str', Type('char', [10]), None)],
-                'pack': None} == structs['struct_name']
+        assert structs['struct_name'] == \
+               Struct(('x', Type('int'), 1),
+                      ('y', Type('type_type_int'), None, 2),
+                      ('str', Type('char', [10]), None))
         assert ('struct_inst' in variables and
                 variables['struct_inst'] == (None, Type('struct struct_name')))
 
@@ -596,8 +637,8 @@ class TestParsing(object):
         # Test declaring a recursive structure.
         assert ('recursive_struct' in structs and
                 'struct recursive_struct' in types)
-        assert {'members': [('next', Type('struct recursive_struct', '*'), None)],
-                'pack': None} == structs['recursive_struct']
+        assert structs['recursive_struct'] == \
+               Struct(('next', Type('struct recursive_struct', '*'), None))
 
         # Test declaring near and far pointers.
         assert 'tagWNDCLASSEXA' in structs
@@ -606,10 +647,11 @@ class TestParsing(object):
 
         # Test altering the packing of a structure.
         assert ('struct_name_p' in structs and 'struct struct_name_p' in types)
-        assert {'members': [('x', Type('int'), None),
-                            ('y', Type('type_type_int'), None),
-                            ('str', Type('char', [10]), "brace }  \0")],
-                'pack': 16} == structs['struct_name_p']
+        assert structs['struct_name_p'] == \
+               Struct(('x', Type('int'), None),
+                      ('y', Type('type_type_int'), None),
+                      ('str', Type('char', [10]), "brace }  \0"),
+                      pack=16)
 
     def test_unions(self):
 
@@ -624,9 +666,10 @@ class TestParsing(object):
 
         # Test declaring an union.
         assert 'union_name' in unions and 'union union_name' in types
-        assert {'members': [('x', Type('int'), 1),
-                            ('y', Type('int'), None)],
-                'pack': None} == unions['union_name']
+        assert unions['union_name'] == \
+               Union(('x', Type('int'), 1),
+                     ('y', Type('int'), None),
+                     pack=None)
         assert ('union_name_ptr' in types and
                 types['union_name_ptr'] == Type('union union_name', '*'))
 
@@ -637,10 +680,10 @@ class TestParsing(object):
 
         # Test defining a structure using an unnamed union internally.
         assert ('tagRID_DEVICE_INFO' in structs and
-                {'members': [('cbSize', Type('DWORD'), None),
-                             ('dwType', Type('DWORD'), None),
-                             (None, Type('union anon_union1'), None)],
-                 'pack': None} == structs['tagRID_DEVICE_INFO'])
+                structs['tagRID_DEVICE_INFO'] == \
+                Struct(('cbSize', Type('DWORD'), None),
+                       ('dwType', Type('DWORD'), None),
+                       (None, Type('union anon_union1'), None)))
 
         assert ('RID_DEVICE_INFO' in types and
                 types['RID_DEVICE_INFO'] == Type('struct tagRID_DEVICE_INFO'))
