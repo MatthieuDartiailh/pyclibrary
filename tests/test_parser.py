@@ -75,7 +75,7 @@ class TestType(object):
                Type('int', '*', ())
 
     def test_repr(self):
-        assert repr(Type('int', '*')) == "Type('int', '*')"
+        assert repr(Type('int', '*')) == "Type({!r}, {!r})".format('int', '*')
 
 
 class TestFileHandling(object):
