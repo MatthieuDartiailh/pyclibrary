@@ -32,14 +32,30 @@ def compare_lines(lines, lines2):
 
 class TestType(object):
 
+    def test_init(self):
+        with raises(ValueError):
+            Type('int', '*', type_quals=(('volatile',),))
+
     def test_tuple_equality(self):
         assert Type('int') == ('int',)
         assert ('int',) == Type('int')
+
+        assert Type('int', '*', type_quals=[['const'], ['volatile']]) == \
+               ('int', '*')
+
         assert issubclass(Type, tuple)
+
+    def test_Type_equality(self):
+        assert Type('int', '*', type_quals=(('const',), ('volatile',))) == \
+               Type('int', '*', type_quals=(('const',), ('volatile',)))
+        assert Type('int', '*', type_quals=(('const',), ())) != \
+               Type('int', '*', type_quals=(('const',), ('volatile',)))
 
     def test_getters(self):
         assert Type('int', '*').type_spec == 'int'
         assert Type('int', '*', [1]).declarators == ('*', [1])
+        assert Type('int', '*', type_quals=(('volatile',), ())).type_quals == \
+               (('volatile',), ())
 
     def test_is_fund_type(self):
         assert not Type('custom_typedef').is_fund_type()
@@ -48,14 +64,17 @@ class TestType(object):
         assert Type('int', '*').is_fund_type()
         assert Type('int', [1]).is_fund_type()
         assert Type('int', ()).is_fund_type()
+        assert Type('int', type_quals=(('volatile',))).is_fund_type()
 
         assert Type('unsigned').is_fund_type()
         assert Type('short').is_fund_type()
         assert Type('unsigned short int').is_fund_type()
         assert Type('struct test').is_fund_type()
 
-    def test_resolve(self):
+    def test_eval(self):
         type_map = {
+            'tq_parent_type': Type('int', '*',
+                                   type_quals=(('__tq1',), ('__tq2',))),
             'parent_type': Type('int', '*', '*', [2]),
             'child_type': Type('parent_type', '*', [3]) }
 
@@ -63,12 +82,21 @@ class TestType(object):
                Type('int', '*', '*', [2], '*', [1])
         assert Type('child_type', (), '*').eval(type_map) == \
                Type('int', '*', '*', [2], '*', [3], (), '*')
+        assert Type('tq_parent_type', [1],
+                    type_quals=(('__tq3',), ('__tq4',))).eval(type_map) == \
+               Type('int', '*', [1],
+                    type_quals=(('__tq1',), ('__tq2', '__tq3'), ('__tq4',)))
 
     def test_compatibility_hack(self):
         assert Type('int', '*', ()).add_compatibility_hack() == \
                Type(Type('int', '*'), ())
         assert Type('int', '*', (), '*').add_compatibility_hack() == \
                Type('int', '*', (), '*')
+        assert Type('int', (), type_quals=(('const',), ('__interrupt',)))\
+                   .add_compatibility_hack() == \
+               Type(Type('int', type_quals=(('const',),)), (),
+                    type_quals=((), ('__interrupt',),))
+
         assert Type(Type('int', '*'), ()).remove_compatibility_hack() == \
                Type('int', '*', ())
         assert Type('int', '*', ()).remove_compatibility_hack() == \
@@ -76,6 +104,9 @@ class TestType(object):
 
     def test_repr(self):
         assert repr(Type('int', '*')) == "Type({!r}, {!r})".format('int', '*')
+        assert repr(Type('int', '*', type_quals=(('volatile',), ()))) == \
+               ('Type({!r}, {!r}, type_quals=(({!r},), ()))'
+                .format('int', '*', 'volatile'))
 
 
 class TestStructUnion(object):
@@ -490,11 +521,13 @@ class TestParsing(object):
 
         # Const and static modif
         assert ('int_const' in variables and
-                variables['int_const'] == (4, Type('int')))
+                variables['int_const'] == (4, Type('int',
+                                                   type_quals=(('const',),))))
         assert ('int_stat' in variables and
                 variables['int_stat'] == (4, Type('int')))
         assert ('int_con_stat' in variables and
-                variables['int_con_stat'] == (4, Type('int')))
+                variables['int_con_stat'] == (4, Type('int',
+                                                      type_quals=(('const',),))))
         assert ('int_extern' in variables and
                 variables['int_extern'] == (4, Type('int')))
 
@@ -506,7 +539,7 @@ class TestParsing(object):
                                       Type('char', '*', '*')))
         assert ('str3' in variables and
                 variables['str3'] == ("string with comment: /*comment inside string*/",
-                                      Type('char', '*')))
+                                      Type('char', '*', type_quals=(('const',), ('const',)))))
         assert ('str4' in variables and
                 variables['str4'] == ("string with define #define MACRO5 macro5_in_string ",
                                       Type('char', '*')))
@@ -526,12 +559,17 @@ class TestParsing(object):
         assert ('array' in variables and
                 variables['array'] == ([1, 3141500.0], Type('float', [2])))
         assert ('intJunk' in variables and
-                variables['intJunk'] == (None,
-                                         Type(u'int', u'*', u'*', u'*', [4])))
+                variables['intJunk'] == (
+                    None,
+                    Type('int', '*', '*', '*', [4],
+                         type_quals=(('const',), ('const',), (), (), ())) ) )
 
         # test type qualifiers
         assert variables.get('typeQualedIntPtrPtr') == \
-               (None, Type('int', '*', '*'))
+               (None, Type('int', '*', '*',
+                           type_quals=(('const',), ('volatile',), ())) )
+        assert variables.get('typeQualedIntPtr') == \
+               (None, Type('int', '*', type_quals=(('const', 'volatile',), ())))
 
         # test type definition precedence
         assert variables.get('prec_ptr_of_arr') == \
@@ -569,8 +607,10 @@ class TestParsing(object):
         assert ('ULONG' in types and types['ULONG'] == Type('unsigned long'))
 
         # Test annotated types
-        assert ('voidpc' in types and types['voidpc'] == Type('void', '*'))
-        assert ('charf' in types and types['charf'] == Type('char'))
+        assert ('voidpc' in types and types['voidpc'] ==
+                Type('void', '*', type_quals=(('const',), ())))
+        assert ('charf' in types and types['charf'] ==
+                Type('char', type_quals=(('far',),)))
 
         # Test using custom type.
         assert ('ttip5' in variables and
@@ -645,7 +685,8 @@ class TestParsing(object):
         # Test declaring near and far pointers.
         assert 'tagWNDCLASSEXA' in structs
         assert ('NPWNDCLASSEXA' in types and
-                types['NPWNDCLASSEXA'] == Type('struct tagWNDCLASSEXA', '*'))
+                ( types['NPWNDCLASSEXA'] ==
+                 Type('struct tagWNDCLASSEXA', '*', type_quals=(('near',), ()))))
 
         # Test altering the packing of a structure.
         assert ('struct_name_p' in structs and 'struct struct_name_p' in types)
@@ -719,11 +760,13 @@ class TestParsing(object):
                            ( (None, Type('char'), None),
                              (None, Type('float'), None) ),
                            '*'))
-        assert functions.get('function1') == Type(Type('int', '__stdcall'), ())
+        assert functions.get('function1') == \
+               Type(Type('int', '__stdcall', type_quals=((), None)), ())
 
         assert functions.get('function2') == Type(Type('int'), ())
 
         assert 'externFunc' in functions
 
+        ptyp = Type('int', '*', '*', type_quals=(('volatile',), ('const',), ()))
         assert functions.get('typeQualedFunc') == \
-               Type(Type('int'), ((None, Type('int', '*', '*'), None),))
+               Type(Type('int'), ((None, ptyp, None),))

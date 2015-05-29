@@ -66,6 +66,12 @@ class Type(tuple):
           (This is **not** the case for function pointers):
           (i.E. Type(Type('int', '*'), ( ('param1', Type('int'), None), ) ) )
 
+    type_quals : dict of int to list of str (optional)
+        this optional (keyword-)argument allows to optionally add type
+        qualifiers for every declarator level. The key 0 refers the type
+        qualifier of type_spec, while 1 refers to declarators[0], 2 refers to
+        declarators[1] and so on.
+
     To build more complex types any number of declarators can be combined. i.E.
 
     >>> int * (*a[2])(char *, signed c[]);
@@ -79,12 +85,26 @@ class Type(tuple):
 
     """
 
-    def __new__(cls, type_spec, *declarators):
+    def __new__(cls, type_spec, *declarators, **argv):
         return super(Type, cls).__new__(cls, (type_spec,) + declarators)
 
-    def __init__(self, type_spec, *declarators):
+    def __init__(self, type_spec, *declarators, **argv):
         super(Type, self).__init__()
-    
+        self.type_quals = argv.pop('type_quals', None) or \
+                          ((),) * (1 + len(declarators))
+        if len(self.type_quals) != 1 + len(declarators):
+            raise ValueError("wrong number of type qualifiers")
+        assert len(argv) == 0, 'Invalid Parameter'
+
+    def __eq__(self, other):
+        if isinstance(other, Type):
+            if self.type_quals != other.type_quals:
+                return False
+        return super(Type, self).__eq__(other)
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
     @property
     def declarators(self):
         """Return a tuple of all declarators.
@@ -136,7 +156,8 @@ class Type(tuple):
         if self.is_fund_type():
             # Remove 'signed' before returning evaluated type
             return Type(re.sub(r'\bsigned\b', '', self.type_spec).strip(),
-                        *self.declarators)
+                        *self.declarators,
+                        type_quals=self.type_quals)
 
         parent = self.type_spec
         if parent in used:
@@ -149,7 +170,10 @@ class Type(tuple):
             raise DefinitionError(m.format(parent, ' -> '.join(used)))
 
         pt = type_map[parent]
-        evaled_type = Type(pt.type_spec, *(pt.declarators + self.declarators))
+        evaled_type = Type(pt.type_spec, *(pt.declarators + self.declarators),
+                           type_quals=pt.type_quals[:-1] +
+                                      (pt.type_quals[-1] + self.type_quals[0],)+
+                                      self.type_quals[1:])
         return evaled_type.eval(type_map, used)
 
     def add_compatibility_hack(self):
@@ -165,7 +189,9 @@ class Type(tuple):
             Type(Type('int', '*'), ())
         """
         if type(self[-1]) == tuple:
-            return Type(Type(*self[:-1]), self[-1])
+            return Type(Type(*self[:-1], type_quals=self.type_quals[:-1]),
+                        self[-1],
+                        type_quals=((), self.type_quals[-1]))
         else:
             return self
 
@@ -180,7 +206,10 @@ class Type(tuple):
             return self
 
     def __repr__(self):
-        return type(self).__name__ + '(' + ', '.join(map(repr, self)) + ')'
+        type_qual_str = ('' if not any(self.type_quals) else
+                         ', type_quals='+repr(self.type_quals))
+        return (type(self).__name__ + '(' +
+                ', '.join(map(repr, self)) + type_qual_str + ')')
 
 
 class Compound(dict):
@@ -1031,16 +1060,15 @@ class CParser(object):
 
         self.struct_type = Forward()
         self.enum_type = Forward()
-        type_ = (type_qualifier +
-                 (fund_type |
-                  Optional(kwl(size_modifiers + sign_modifiers)) + ident |
-                  self.struct_type |
-                  self.enum_type
-                  )
-                 + type_qualifier)
+        type_ = (fund_type |
+                 Optional(kwl(size_modifiers + sign_modifiers)) + ident |
+                 self.struct_type |
+                 self.enum_type)
         if extra_modifier is not None:
             type_ += extra_modifier
-        self.type_spec = type_.setParseAction(recombine)
+        type_.setParseAction(recombine)
+        self.type_spec = (type_qualifier('pre_qual') +
+                          type_("name"))
 
         # --- Abstract declarators for use in function pointer arguments
         #   Thus begins the extremely hairy business of parsing C declarators.
@@ -1061,8 +1089,8 @@ class CParser(object):
         #     *( )(int, int)[10]
         #     ...etc...
         self.abstract_declarator << Group(
-            type_qualifier +
-            Group(ZeroOrMore(Literal('*') + type_qualifier))('ptrs') +
+            type_qualifier('first_typequal') +
+            Group(ZeroOrMore(Group(Suppress('*') + type_qualifier)))('ptrs') +
             ((Optional('&')('ref')) |
              (lparen + self.abstract_declarator + rparen)('center')) +
             Optional(lparen +
@@ -1085,8 +1113,8 @@ class CParser(object):
         #     * fnName(int arg1=0)[10]
         #     ...etc...
         self.declarator << Group(
-            type_qualifier + call_conv +
-            Group(ZeroOrMore(Literal('*') + type_qualifier))('ptrs') +
+            type_qualifier('first_typequal') + call_conv +
+            Group(ZeroOrMore(Group(Suppress('*') + type_qualifier)))('ptrs') +
             ((Optional('&')('ref') + ident('name')) |
              (lparen + self.declarator + rparen)('center')) +
             Optional(lparen +
@@ -1186,38 +1214,47 @@ class CParser(object):
 
         """
         toks = []
+        quals = [tuple(decl.get('first_typequal', []))]
         name = None
         logger.debug("DECL: {}".format(decl))
+
         if 'call_conv' in decl and len(decl['call_conv']) > 0:
             toks.append(decl['call_conv'])
+            quals.append(None)
 
         if 'ptrs' in decl and len(decl['ptrs']) > 0:
             toks += ('*',) * len(decl['ptrs'])
+            quals += map(tuple, decl['ptrs'])
 
         if 'arrays' in decl and len(decl['arrays']) > 0:
             toks.extend([self.eval_expr(x)] for x in decl['arrays'])
+            quals += [()] * len(decl['arrays'])
 
         if 'args' in decl and len(decl['args']) > 0:
             if decl['args'][0] is None:
                 toks.append(())
             else:
-                toks.append(tuple([self.process_type(a['type'], a['decl']) +
+                toks.append(tuple([self.process_type(a['type'],
+                                                     a['decl']) +
                                    (a['val'][0],) for a in decl['args']]
                                   )
                             )
+            quals.append(())
         if 'ref' in decl:
             toks.append('&')
+            quals.append(())
 
         if 'center' in decl:
-            (n, t) = self.process_declarator(decl['center'][0])
+            (n, t, q) = self.process_declarator(decl['center'][0])
             if n is not None:
                 name = n
             toks.extend(t)
+            quals = quals[:-1] + [quals[-1] + q[0]] + list(q[1:])
 
         if 'name' in decl:
             name = decl['name']
 
-        return (name, toks)
+        return (name, toks, tuple(quals))
 
     def process_type(self, typ, decl):
         """Take a declarator + base type and return a serialized name/type
@@ -1246,9 +1283,11 @@ class CParser(object):
             (None, ["struct s", ((None, ['int']), (None, ['int', '*'])), '*'])
 
         """
-        logger.debug("PROCESS TYPE/DECL: {}/{}".format(typ, decl))
-        (name, decl) = self.process_declarator(decl)
-        return (name, Type(typ, *decl))
+        logger.debug("PROCESS TYPE/DECL: {}/{}".format(typ['name'], decl))
+        (name, decl, quals) = self.process_declarator(decl)
+        pre_typequal = tuple(typ.get('pre_qual',[]))
+        return (name, Type(typ['name'], *decl,
+                           type_quals=(pre_typequal + quals[0],) + quals[1:]))
 
     def process_enum(self, s, l, t):
         """
@@ -1351,7 +1390,7 @@ class CParser(object):
                                  m, m[0].keys(), m[0].decl_list))
 
                     if len(m[0].decl_list) == 0:  # anonymous member
-                        member = [None, Type(typ), None]
+                        member = [None, Type(typ[0]), None]
                         if m[0].bit:
                             member.append(int(m[0].bit))
                         struct.append(tuple(member))
@@ -1527,7 +1566,7 @@ from .thirdparty.pyparsing import \
      WordEnd, Keyword, Regex, Literal, SkipTo, ZeroOrMore, OneOrMore,
      Group, LineEnd, stringStart, quotedString, oneOf, nestedExpr,
      delimitedList, restOfLine, cStyleComment, alphas, alphanums, hexnums,
-     lineno)
+     lineno, Suppress)
 ParserElement.enablePackrat()
 
 # --- Basic parsing elements.
@@ -1651,7 +1690,7 @@ def _init_cparser(extra_types=None, extra_modifiers=None):
                           Word(alphanums, alphanums+"_$") +
                           WordEnd(wordchars)).setParseAction(lambda t: t[0])
     type_qualifier = ZeroOrMore((underscore_2_ident + Optional(nestedExpr())) |
-                                kwl(qualifiers)).suppress()
+                                kwl(qualifiers))
 
     storage_class_spec = Optional(kwl(storage_classes))
 
