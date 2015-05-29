@@ -186,17 +186,24 @@ class Type(tuple):
 class Compound(dict):
 
     def __init__(self, *members, **argv):
-        self.members = list(members)
-        self.pack = argv.pop('pack', None)
+        members = list(members)
+        pack = argv.pop('pack', None)
         assert len(argv) == 0
 
-        super(Compound, self).__init__(
-            dict(members=self.members, pack=self.pack))
+        super(Compound, self).__init__(dict(members=members, pack=pack))
 
     def __repr__(self):
         packParam = ', pack='+repr(self.pack) if self.pack is not None else ''
         return (type(self).__name__ + '(' +
                 ', '.join(map(repr, self.members)) + packParam + ')')
+
+    @property
+    def members(self):
+        return self['members']
+
+    @property
+    def pack(self):
+        return self['pack']
 
 
 class Struct(Compound):
