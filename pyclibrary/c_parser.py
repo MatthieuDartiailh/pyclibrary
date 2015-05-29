@@ -1195,7 +1195,7 @@ class CParser(object):
             toks += ('*',) * len(decl['ptrs'])
 
         if 'arrays' in decl and len(decl['arrays']) > 0:
-            toks.append([self.eval_expr(x) for x in decl['arrays']])
+            toks.extend([self.eval_expr(x)] for x in decl['arrays'])
 
         if 'args' in decl and len(decl['args']) > 0:
             if decl['args'][0] is None:

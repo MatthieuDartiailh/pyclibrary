@@ -560,6 +560,8 @@ class TestParsing(object):
                 Type('int', '*'))
         assert ('typeIntArr' in types and types['typeIntArr'] ==
                 Type('int', [10]))
+        assert ('typeIntDArr' in types and types['typeIntDArr'] ==
+                Type('int', [5], [6]))
         assert ('typeTypeInt' in types and
                 types['typeTypeInt'] == Type('typeInt'))
         assert not self.parser.is_fund_type('typeTypeInt')
