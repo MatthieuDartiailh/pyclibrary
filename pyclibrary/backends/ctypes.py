@@ -301,10 +301,11 @@ class CTypesCLibrary(CLibrary):
             # Must be 2-part type, second part must be '*' or '**'
             assert 2 <= len(arg_type) <= 3 and set(arg_type[1:]) == {'*'}
             cls = self._get_type(sig, pointers=False)
-            if arg_type[1:] == ('*',):
-                return pointer(cls(0))
-            else:
-                return pointer(pointer(cls(0)))
+            pt = cls(0)
+            for pointer_decl in arg_type[1:]:
+                pt = pointer(pt)
+
+            return pt
 
     def _cast_to(self, obj, typ):
         """Cast an object to a new type (new type must be a pointer).
