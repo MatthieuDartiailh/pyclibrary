@@ -4,6 +4,8 @@ PyCLibrary Changelog
 next release
 ------------
 
+- Arrays are represented as multiple '[i]'entries in type-tuple instead of a
+  single entry of with multiple such declarations '[i][j]'
 - python representations of C types/struct/enums and unions are stored in the
   special python classes now, instead of standard python tuples/dicts
 - Pointers are represented as multiple 1-character ('*', '*', ...) entries
@@ -14,7 +16,7 @@ next release
   constructor
 
 
-0.1.0 
+0.1.0
 -----
 
 - First numbered version
