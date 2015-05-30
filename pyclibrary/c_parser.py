@@ -25,6 +25,16 @@ from traceback import format_exc
 
 from .errors import DefinitionError
 from .utils import find_header
+
+# Import parsing elements
+from .thirdparty.pyparsing import \
+    (ParserElement, ParseResults, Forward, Optional, Word, WordStart,
+     WordEnd, Keyword, Regex, Literal, SkipTo, ZeroOrMore, OneOrMore,
+     Group, LineEnd, stringStart, quotedString, oneOf, nestedExpr,
+     delimitedList, restOfLine, cStyleComment, alphas, alphanums, hexnums,
+     lineno, Suppress)
+ParserElement.enablePackrat()
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,20 +53,20 @@ class Type(tuple):
     Parameters
     ----------
     type_spec : str
-        a string referring the base type of this type defintion. This may either
-        be a fundametal type (i.e. 'int', 'enum x') or a type definition made by
-        a typedef-statement
+        a string referring the base type of this type defintion. This may
+        either be a fundametal type (i.e. 'int', 'enum x') or a type definition
+        made by a typedef-statement
 
     declarators : str or list of tuple
-        all following parameters are deriving a type from the type defined until
-        now. Types can be derived by:
+        all following parameters are deriving a type from the type defined
+        until now. Types can be derived by:
 
         - The string '*': define a pointer to the base type
           (i.E. Type('int', '*'))
         - The string '&': a reference. T.B.D.
         - A list of integers of len 1: define an array with N elements
-          (N is the first and single entry in the list of integers). If N is -1,
-          the array definition is seen as 'int x[]'
+          (N is the first and single entry in the list of integers). If N is
+          -1, the array definition is seen as 'int x[]'
           (i.E. Type('int', [1])
         - a N-tuple of 3-tuples: defines a function of N parameters. Every
           parameter is a 3 tuple of the form:
@@ -84,14 +94,14 @@ class Type(tuple):
     >>>      '*', [2])
 
     """
-
+    # Cannot slot a subclass of tuple.
     def __new__(cls, type_spec, *declarators, **argv):
         return super(Type, cls).__new__(cls, (type_spec,) + declarators)
 
     def __init__(self, type_spec, *declarators, **argv):
         super(Type, self).__init__()
-        self.type_quals = argv.pop('type_quals', None) or \
-                          ((),) * (1 + len(declarators))
+        self.type_quals = (argv.pop('type_quals', None) or
+                           ((),) * (1 + len(declarators)))
         if len(self.type_quals) != 1 + len(declarators):
             raise ValueError("wrong number of type qualifiers")
         assert len(argv) == 0, 'Invalid Parameter'
@@ -126,7 +136,7 @@ class Type(tuple):
         """
 
         if (self[0].startswith('struct ') or self[0].startswith('union ') or
-            self[0].startswith('enum ') ):
+                self[0].startswith('enum ')):
             return True
 
         names = (num_types + nonnum_types + size_modifiers + sign_modifiers +
@@ -171,9 +181,12 @@ class Type(tuple):
 
         pt = type_map[parent]
         evaled_type = Type(pt.type_spec, *(pt.declarators + self.declarators),
-                           type_quals=pt.type_quals[:-1] +
-                                      (pt.type_quals[-1] + self.type_quals[0],)+
-                                      self.type_quals[1:])
+                           type_quals=(pt.type_quals[:-1] +
+                                       (pt.type_quals[-1] +
+                                        self.type_quals[0],) +
+                                       self.type_quals[1:])
+                           )
+
         return evaled_type.eval(type_map, used)
 
     def add_compatibility_hack(self):
@@ -213,6 +226,10 @@ class Type(tuple):
 
 
 class Compound(dict):
+    """Base class for representing object using a dict-like interface.
+
+    """
+    __slots__ = ()
 
     def __init__(self, *members, **argv):
         members = list(members)
@@ -243,7 +260,7 @@ class Struct(Compound):
     from dict and can be seen as the dicts from 0.1.0. In future this might
     change to a dict-like object!!!
     """
-    pass
+    __slots__ = ()
 
 
 class Union(Compound):
@@ -254,7 +271,7 @@ class Union(Compound):
     from dict and can be seen as the dicts from 0.1.0. In future this might
     change to a dict-like object!!!
     """
-    pass
+    __slots__ = ()
 
 
 class Enum(dict):
@@ -265,15 +282,16 @@ class Enum(dict):
     from dict and can be seen as the dicts from 0.1.0. In future this might
     change to a dict-like object!!!
     """
+    __slots__ = ()
 
     def __init__(self, **args):
         super(Enum, self).__init__(args)
 
     def __repr__(self):
         return (type(self).__name__ + '(' +
-                ', '.join(nm+'='+repr(val) for nm,val in sorted(self.items())) +
+                ', '.join(nm + '=' + repr(val)
+                          for nm, val in sorted(self.items())) +
                 ')')
-
 
 
 def win_defs(version='800'):
@@ -1285,7 +1303,7 @@ class CParser(object):
         """
         logger.debug("PROCESS TYPE/DECL: {}/{}".format(typ['name'], decl))
         (name, decl, quals) = self.process_declarator(decl)
-        pre_typequal = tuple(typ.get('pre_qual',[]))
+        pre_typequal = tuple(typ.get('pre_qual', []))
         return (name, Type(typ['name'], *decl,
                            type_quals=(pre_typequal + quals[0],) + quals[1:]))
 
@@ -1405,7 +1423,8 @@ class CParser(object):
                                      val, m[0].bit))
 
                 str_cls = (Struct if str_typ == 'struct' else Union)
-                self.add_def(str_typ+'s', sname, str_cls(*struct, pack=packing))
+                self.add_def(str_typ + 's', sname,
+                             str_cls(*struct, pack=packing))
                 self.add_def('types', str_typ+' '+sname, Type(str_typ, sname))
             return str_typ + ' ' + sname
 
@@ -1424,7 +1443,8 @@ class CParser(object):
                 if type(typ[-1]) is tuple:
                     logger.debug("  Add function prototype: {} {} {}".format(
                                  name, typ, val))
-                    self.add_def('functions', name, typ.add_compatibility_hack())
+                    self.add_def('functions', name,
+                                 typ.add_compatibility_hack())
                 # This is a variable
                 else:
                     logger.debug("  Add variable: {} {} {}".format(name,
@@ -1561,16 +1581,7 @@ class CParser(object):
         return res
 
 
-from .thirdparty.pyparsing import \
-    (ParserElement, ParseResults, Forward, Optional, Word, WordStart,
-     WordEnd, Keyword, Regex, Literal, SkipTo, ZeroOrMore, OneOrMore,
-     Group, LineEnd, stringStart, quotedString, oneOf, nestedExpr,
-     delimitedList, restOfLine, cStyleComment, alphas, alphanums, hexnums,
-     lineno, Suppress)
-ParserElement.enablePackrat()
-
 # --- Basic parsing elements.
-
 
 def kwl(strs):
     """Generate a match-first list of keywords given a list of strings."""
@@ -1657,6 +1668,7 @@ extra_type_list = []
 
 num_types = ['int', 'float', 'double']
 nonnum_types = ['char', 'bool', 'void']
+
 
 # Define some common language elements when initialising.
 def _init_cparser(extra_types=None, extra_modifiers=None):
