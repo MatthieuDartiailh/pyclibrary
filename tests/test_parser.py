@@ -15,7 +15,7 @@ from __future__ import (division, unicode_literals, print_function,
 import os
 import sys
 from pytest import raises
-from pyclibrary.c_parser import CParser
+from pyclibrary.c_parser import CParser, Type, Struct, Union, Enum
 import pyclibrary.utils
 
 
@@ -28,6 +28,126 @@ def compare_lines(lines, lines2):
     """
     for l, l_test in zip(lines, lines2):
         assert l.strip() == l_test.strip()
+
+
+class TestType(object):
+
+    def test_init(self):
+        with raises(ValueError):
+            Type('int', '*', type_quals=(('volatile',),))
+
+    def test_tuple_equality(self):
+        assert Type('int') == ('int',)
+        assert ('int',) == Type('int')
+
+        assert Type('int', '*', type_quals=[['const'], ['volatile']]) == \
+               ('int', '*')
+
+        assert issubclass(Type, tuple)
+
+    def test_Type_equality(self):
+        assert Type('int', '*', type_quals=(('const',), ('volatile',))) == \
+               Type('int', '*', type_quals=(('const',), ('volatile',)))
+        assert Type('int', '*', type_quals=(('const',), ())) != \
+               Type('int', '*', type_quals=(('const',), ('volatile',)))
+
+    def test_getters(self):
+        assert Type('int', '*').type_spec == 'int'
+        assert Type('int', '*', [1]).declarators == ('*', [1])
+        assert Type('int', '*', type_quals=(('volatile',), ())).type_quals == \
+               (('volatile',), ())
+
+    def test_is_fund_type(self):
+        assert not Type('custom_typedef').is_fund_type()
+
+        assert Type('int').is_fund_type()
+        assert Type('int', '*').is_fund_type()
+        assert Type('int', [1]).is_fund_type()
+        assert Type('int', ()).is_fund_type()
+        assert Type('int', type_quals=(('volatile',))).is_fund_type()
+
+        assert Type('unsigned').is_fund_type()
+        assert Type('short').is_fund_type()
+        assert Type('unsigned short int').is_fund_type()
+        assert Type('struct test').is_fund_type()
+
+    def test_eval(self):
+        type_map = {
+            'tq_parent_type': Type('int', '*',
+                                   type_quals=(('__tq1',), ('__tq2',))),
+            'parent_type': Type('int', '*', '*', [2]),
+            'child_type': Type('parent_type', '*', [3]) }
+
+        assert Type('parent_type', '*', [1]).eval(type_map) == \
+               Type('int', '*', '*', [2], '*', [1])
+        assert Type('child_type', (), '*').eval(type_map) == \
+               Type('int', '*', '*', [2], '*', [3], (), '*')
+        assert Type('tq_parent_type', [1],
+                    type_quals=(('__tq3',), ('__tq4',))).eval(type_map) == \
+               Type('int', '*', [1],
+                    type_quals=(('__tq1',), ('__tq2', '__tq3'), ('__tq4',)))
+
+    def test_compatibility_hack(self):
+        assert Type('int', '*', ()).add_compatibility_hack() == \
+               Type(Type('int', '*'), ())
+        assert Type('int', '*', (), '*').add_compatibility_hack() == \
+               Type('int', '*', (), '*')
+        assert Type('int', (), type_quals=(('const',), ('__interrupt',)))\
+                   .add_compatibility_hack() == \
+               Type(Type('int', type_quals=(('const',),)), (),
+                    type_quals=((), ('__interrupt',),))
+
+        assert Type(Type('int', '*'), ()).remove_compatibility_hack() == \
+               Type('int', '*', ())
+        assert Type('int', '*', ()).remove_compatibility_hack() == \
+               Type('int', '*', ())
+
+    def test_repr(self):
+        assert repr(Type('int', '*')) == "Type({!r}, {!r})".format('int', '*')
+        assert repr(Type('int', '*', type_quals=(('volatile',), ()))) == \
+               ('Type({!r}, {!r}, type_quals=(({!r},), ()))'
+                .format('int', '*', 'volatile'))
+
+
+class TestStructUnion(object):
+
+    TEST_MEMBERS = [ ('a', Type('int'), None),
+                     ('b', Type('char', '*'), None)]
+
+    def test_init(self):
+        assert Struct().members == []
+        assert Struct().pack == None
+        assert Struct(*self.TEST_MEMBERS).members == self.TEST_MEMBERS
+        assert Struct(pack=2).pack == 2
+
+        assert Union(*self.TEST_MEMBERS).members == self.TEST_MEMBERS
+
+    def test_list_equality(self):
+        assert Struct(*self.TEST_MEMBERS, pack=2) == {
+            'members': [ ('a', Type('int'), None),
+                         ('b', Type('char', '*'), None)],
+            'pack': 2 }
+        assert issubclass(Struct, dict)
+
+        assert Union(*self.TEST_MEMBERS)['members'] == self.TEST_MEMBERS
+
+    def test_repr(self):
+        assert repr(Struct()) == 'Struct()'
+        assert repr(Struct(*self.TEST_MEMBERS, pack=2)) == \
+               ( 'Struct(' + repr(self.TEST_MEMBERS[0]) + ', ' +
+                 repr(self.TEST_MEMBERS[1]) + ', pack=2)' )
+        assert repr(Union()) == 'Union()'
+
+
+class TestEnum(object):
+
+    def test_dict_equality(self):
+        assert Enum(a=1, b=2) == {'a':1, 'b':2}
+        assert issubclass(Enum, dict)
+
+
+    def test_repr(self):
+        assert repr(Enum(a=1, b=2)) == 'Enum(a=1, b=2)'
 
 
 class TestFileHandling(object):
@@ -355,87 +475,109 @@ class TestParsing(object):
 
         # Integers
         assert ('short1' in variables and
-                variables['short1'] == (1, ('signed short',)))
+                variables['short1'] == (1, Type('signed short')))
         assert ('short_int' in variables and
-                variables['short_int'] == (1, ('short int',)))
+                variables['short_int'] == (1, Type('short int')))
         assert ('short_un' in variables and
-                variables['short_un'] == (1, ('unsigned short',)))
+                variables['short_un'] == (1, Type('unsigned short')))
         assert ('short_int_un' in variables and
-                variables['short_int_un'] == (1, ('unsigned short int',)))
+                variables['short_int_un'] == (1, Type('unsigned short int')))
         assert ('int1' in variables and
-                variables['int1'] == (1, ('int',)))
+                variables['int1'] == (1, Type('int')))
         assert ('un' in variables and
-                variables['un'] == (1, ('unsigned',)))
+                variables['un'] == (1, Type('unsigned')))
         assert ('int_un' in variables and
-                variables['int_un'] == (1, ('unsigned int',)))
+                variables['int_un'] == (1, Type('unsigned int')))
         assert ('long1' in variables and
-                variables['long1'] == (1, ('long',)))
+                variables['long1'] == (1, Type('long')))
         assert ('long_int' in variables and
-                variables['long_int'] == (1, ('long int',)))
+                variables['long_int'] == (1, Type('long int')))
         assert ('long_un' in variables and
-                variables['long_un'] == (1, ('unsigned long',)))
+                variables['long_un'] == (1, Type('unsigned long')))
         assert ('long_int_un' in variables and
-                variables['long_int_un'] == (1, ('unsigned long int',)))
+                variables['long_int_un'] == (1, Type('unsigned long int')))
         if sys.platform == 'win32':
             assert ('int64' in variables and
-                    variables['int64'] == (1, ('__int64',)))
+                    variables['int64'] == (1, Type('__int64')))
             assert ('int64_un' in variables and
-                    variables['int64_un'] == (1, ('unsigned __int64',)))
+                    variables['int64_un'] == (1, Type('unsigned __int64')))
         assert ('long_long' in variables and
-                variables['long_long'] == (1, ('long long',)))
+                variables['long_long'] == (1, Type('long long')))
         assert ('long_long_int' in variables and
-                variables['long_long_int'] == (1, ('long long int',)))
+                variables['long_long_int'] == (1, Type('long long int')))
         assert ('long_long_un' in variables and
-                variables['long_long_un'] == (1, ('unsigned long long',)))
+                variables['long_long_un'] == (1, Type('unsigned long long')))
         assert ('long_long_int_un' in variables and
-                variables['long_long_int_un'] == (1,
-                                                  ('unsigned long long int',)))
+                variables['long_long_int_un'] == (1, Type('unsigned long '
+                                                          'long int')))
 
         # Floating point number
-        assert ('fl' in variables and variables['fl'] == (1., ('float',)))
-        assert ('db' in variables and variables['db'] == (0.1, ('double',)))
+        assert ('fl' in variables and variables['fl'] ==
+                (1., Type('float')))
+        assert ('db' in variables and variables['db'] ==
+                (0.1, Type('double')))
         assert ('dbl' in variables and
-                variables['dbl'] == (-10., ('long double',)))
+                variables['dbl'] == (-10., Type('long double')))
 
         # Const and static modif
         assert ('int_const' in variables and
-                variables['int_const'] == (4, ('int',)))
+                variables['int_const'] == (4, Type('int',
+                                                   type_quals=(('const',),))))
         assert ('int_stat' in variables and
-                variables['int_stat'] == (4, ('int',)))
+                variables['int_stat'] == (4, Type('int')))
         assert ('int_con_stat' in variables and
-                variables['int_con_stat'] == (4, ('int',)))
+                variables['int_con_stat'] == (4, Type('int',
+                                                      type_quals=(('const',),))))
         assert ('int_extern' in variables and
-                variables['int_extern'] == (4, ('int',)))
+                variables['int_extern'] == (4, Type('int')))
 
         # String
         assert ('str1' in variables and
-                variables['str1'] == ("normal string", ('char', '*')))
+                variables['str1'] == ("normal string", Type('char', '*')))
         assert ('str2' in variables and
                 variables['str2'] == ("string with macro: INT",
-                                      ('char', '**')))
+                                      Type('char', '*', '*')))
         assert ('str3' in variables and
                 variables['str3'] == ("string with comment: /*comment inside string*/",
-                                      ('char', '*')))
+                                      Type('char', '*', type_quals=(('const',), ('const',)))))
         assert ('str4' in variables and
                 variables['str4'] == ("string with define #define MACRO5 macro5_in_string ",
-                                      ('char', '*')))
+                                      Type('char', '*')))
         assert ('str5' in variables and
                 variables['str5'] == ("string with \"escaped quotes\" ",
-                                      ('char', '*')))
+                                      Type('char', '*')))
 
         # Test complex evaluation
         assert ('x1' in variables and
-                variables['x1'] == (1., ('float',)))
+                variables['x1'] == (1., Type('float')))
 
         # Test type casting handling.
         assert ('x2' in variables and
-                variables['x2'] == (88342528, ('int',)))
+                variables['x2'] == (88342528, Type('int')))
 
         # Test array handling
         assert ('array' in variables and
-                variables['array'] == ([1, 3141500.0], ('float', [2])))
+                variables['array'] == ([1, 3141500.0], Type('float', [2])))
         assert ('intJunk' in variables and
-                variables['intJunk'] == (None, (u'int', u'*', u'**', [4])))
+                variables['intJunk'] == (
+                    None,
+                    Type('int', '*', '*', '*', [4],
+                         type_quals=(('const',), ('const',), (), (), ())) ) )
+
+        # test type qualifiers
+        assert variables.get('typeQualedIntPtrPtr') == \
+               (None, Type('int', '*', '*',
+                           type_quals=(('const',), ('volatile',), ())) )
+        assert variables.get('typeQualedIntPtr') == \
+               (None, Type('int', '*', type_quals=(('const', 'volatile',), ())))
+
+        # test type definition precedence
+        assert variables.get('prec_ptr_of_arr') == \
+               (None, Type('int', [1], '*'))
+        assert variables.get('prec_arr_of_ptr') == \
+               (None, Type('int', '*', [1]))
+        assert variables.get('prec_arr_of_ptr2') == \
+               (None, Type('int', '*', [1]))
 
     # No structure, no unions, no enum
     def test_typedef(self):
@@ -448,38 +590,47 @@ class TestParsing(object):
         variables = self.parser.defs['variables']
 
         # Test defining types from base types.
-        assert ('typeChar' in types and types['typeChar'] == ('char', '**'))
-        assert ('typeInt' in types and types['typeInt'] == ('int',))
-        assert ('typeIntPtr' in types and types['typeIntPtr'] == ('int', '*'))
-        assert ('typeIntArr' in types and types['typeIntArr'] == ('int', [10]))
+        assert ('typeChar' in types and types['typeChar'] ==
+                Type('char', '*', '*'))
+        assert ('typeInt' in types and types['typeInt'] ==
+                Type('int'))
+        assert ('typeIntPtr' in types and types['typeIntPtr'] ==
+                Type('int', '*'))
+        assert ('typeIntArr' in types and types['typeIntArr'] ==
+                Type('int', [10]))
+        assert ('typeIntDArr' in types and types['typeIntDArr'] ==
+                Type('int', [5], [6]))
         assert ('typeTypeInt' in types and
-                types['typeTypeInt'] == ('typeInt',))
+                types['typeTypeInt'] == Type('typeInt'))
         assert not self.parser.is_fund_type('typeTypeInt')
-        assert self.parser.eval_type(['typeTypeInt']) == ('int',)
-        assert ('ULONG' in types and types['ULONG'] == ('unsigned long',))
+        assert self.parser.eval_type(['typeTypeInt']) == Type('int')
+        assert ('ULONG' in types and types['ULONG'] == Type('unsigned long'))
 
         # Test annotated types
-        assert ('voidpc' in types and types['voidpc'] == ('void', '*'))
-        assert ('charf' in types and types['charf'] == ('char',))
+        assert ('voidpc' in types and types['voidpc'] ==
+                Type('void', '*', type_quals=(('const',), ())))
+        assert ('charf' in types and types['charf'] ==
+                Type('char', type_quals=(('far',),)))
 
         # Test using custom type.
         assert ('ttip5' in variables and
-                variables['ttip5'] == (None, ('typeTypeInt', '*', [5])))
+                variables['ttip5'] == (None, Type('typeTypeInt', '*', [5])))
 
         # Handling undefined types
         assert ('SomeOtherType' in types and
-                types['SomeOtherType'] == ('someType',))
-        assert ('x' in variables and variables['x'] == (None, ('undefined',)))
+                types['SomeOtherType'] == Type('someType'))
+        assert ('x' in variables and variables['x'] ==
+                (None, Type('undefined')))
         assert not self.parser.is_fund_type('SomeOtherType')
         with raises(Exception):
-            self.parser.eval_type(('undefined',))
+            self.parser.eval_type(Type('undefined'))
 
         # Testing recursive defs
         assert 'recType1' in types
         assert 'recType2' in types
         assert 'recType3' in types
         with raises(Exception):
-            self.parser.eval_type(('recType3',))
+            self.parser.eval_type(Type('recType3'))
 
     def test_enums(self):
 
@@ -493,9 +644,9 @@ class TestParsing(object):
         assert ('enum_name' in enums and 'enum enum_name' in types)
         assert enums['enum_name'] == {'enum1': 2, 'enum2': 6, 'enum3': 7,
                                       'enum4': 8}
-        assert types['enum enum_name'] == ('enum', 'enum_name',)
+        assert types['enum enum_name'] == Type('enum', 'enum_name',)
         assert ('enum_inst' in variables and
-                variables['enum_inst'] == (None, ('enum enum_name',)))
+                variables['enum_inst'] == (None, Type('enum enum_name',)))
 
         assert 'anon_enum0' in enums
 
@@ -511,38 +662,39 @@ class TestParsing(object):
 
         # Test creating a structure using only base types.
         assert ('struct_name' in structs and 'struct struct_name' in types)
-        assert {'members': [('x', ('int',), 1),
-                            ('y', ('type_type_int',), None, 2),
-                            ('str', ('char', [10]), None)],
-                'pack': None} == structs['struct_name']
+        assert structs['struct_name'] == \
+               Struct(('x', Type('int'), 1),
+                      ('y', Type('type_type_int'), None, 2),
+                      ('str', Type('char', [10]), None))
         assert ('struct_inst' in variables and
-                variables['struct_inst'] == (None, ('struct struct_name',)))
+                variables['struct_inst'] == (None, Type('struct struct_name')))
 
         # Test creating a pointer type from a structure.
         assert ('struct_name_ptr' in types and
-                types['struct_name_ptr'] == ('struct struct_name', '*'))
+                types['struct_name_ptr'] == Type('struct struct_name', '*'))
 
         assert ('struct_name2_ptr' in types and
-                types['struct_name2_ptr'] == ('struct anon_struct0',
-                                              '*'))
+                types['struct_name2_ptr'] == Type('struct anon_struct0', '*'))
 
         # Test declaring a recursive structure.
         assert ('recursive_struct' in structs and
                 'struct recursive_struct' in types)
-        assert {'members': [('next', ('struct recursive_struct', '*'), None)],
-                'pack': None} == structs['recursive_struct']
+        assert structs['recursive_struct'] == \
+               Struct(('next', Type('struct recursive_struct', '*'), None))
 
         # Test declaring near and far pointers.
         assert 'tagWNDCLASSEXA' in structs
         assert ('NPWNDCLASSEXA' in types and
-                types['NPWNDCLASSEXA'] == ('struct tagWNDCLASSEXA', '*'))
+                ( types['NPWNDCLASSEXA'] ==
+                 Type('struct tagWNDCLASSEXA', '*', type_quals=(('near',), ()))))
 
         # Test altering the packing of a structure.
         assert ('struct_name_p' in structs and 'struct struct_name_p' in types)
-        assert {'members': [('x', ('int',), None),
-                            ('y', ('type_type_int',), None),
-                            ('str', ('char', [10]), "brace }  \0")],
-                'pack': 16} == structs['struct_name_p']
+        assert structs['struct_name_p'] == \
+               Struct(('x', Type('int'), None),
+                      ('y', Type('type_type_int'), None),
+                      ('str', Type('char', [10]), "brace }  \0"),
+                      pack=16)
 
     def test_unions(self):
 
@@ -557,32 +709,35 @@ class TestParsing(object):
 
         # Test declaring an union.
         assert 'union_name' in unions and 'union union_name' in types
-        assert {'members': [('x', ('int',), 1),
-                            ('y', ('int',), None)],
-                'pack': None} == unions['union_name']
+        assert unions['union_name'] == \
+               Union(('x', Type('int'), 1),
+                     ('y', Type('int'), None),
+                     pack=None)
         assert ('union_name_ptr' in types and
-                types['union_name_ptr'] == ('union union_name', '*'))
+                types['union_name_ptr'] == Type('union union_name', '*'))
 
         # Test defining an unnamed union
         assert ('no_name_union_inst' in variables and
                 variables['no_name_union_inst'] == (None,
-                                                    ('union anon_union0',)))
+                                                    Type('union anon_union0')))
 
         # Test defining a structure using an unnamed union internally.
         assert ('tagRID_DEVICE_INFO' in structs and
-                {'members': [('cbSize', ('DWORD',), None),
-                             ('dwType', ('DWORD',), None),
-                             (None, ('union anon_union1',), None)],
-                 'pack': None} == structs['tagRID_DEVICE_INFO'])
+                structs['tagRID_DEVICE_INFO'] == \
+                Struct(('cbSize', Type('DWORD'), None),
+                       ('dwType', Type('DWORD'), None),
+                       (None, Type('union anon_union1'), None)))
 
         assert ('RID_DEVICE_INFO' in types and
-                types['RID_DEVICE_INFO'] == ('struct tagRID_DEVICE_INFO',))
+                types['RID_DEVICE_INFO'] == Type('struct tagRID_DEVICE_INFO'))
         assert ('PRID_DEVICE_INFO' in types and
-                types['PRID_DEVICE_INFO'] == ('struct tagRID_DEVICE_INFO', '*')
+                types['PRID_DEVICE_INFO'] ==
+                    Type('struct tagRID_DEVICE_INFO', '*')
                 )
         assert ('LPRID_DEVICE_INFO' in types and
-                types['LPRID_DEVICE_INFO'] == ('struct tagRID_DEVICE_INFO',
-                                               '*')
+                ( types['LPRID_DEVICE_INFO'] ==
+                  Type('struct tagRID_DEVICE_INFO', '*')
+                  )
                 )
 
     def test_functions(self):
@@ -594,21 +749,24 @@ class TestParsing(object):
         functions = self.parser.defs['functions']
         variables = self.parser.defs['variables']
 
-        assert ('f' in functions and
-                functions['f'] == (('void',),
-                                   ((None, ('int',), None),
-                                    (None, ('int',), None))))
-        assert ('g' in functions and
-                functions['g'] == (('int',),
-                                   (('ch', ('char', '*'), None),
-                                    ('str', ('char', '**'), None))))
-        assert ('fnPtr' in variables and
-                variables['fnPtr'] == (None, ('int',
-                                              ((None, ('char',), None),
-                                               (None, ('float',), None)),
-                                              '*')))
-        assert ('function1' in functions and
-                functions['function1'] == (('int', '__stdcall'), ()))
+        assert functions.get('f') == \
+               Type(Type('void'), ( (None, Type('int'), None),
+                                    (None, Type('int'), None) ))
+        assert functions['g'] == \
+               Type(Type('int'), ( ('ch', Type('char', '*'), None),
+                                   ('str', Type('char', '*', '*'), None) ))
+        assert variables.get('fnPtr') == \
+               (None, Type('int',
+                           ( (None, Type('char'), None),
+                             (None, Type('float'), None) ),
+                           '*'))
+        assert functions.get('function1') == \
+               Type(Type('int', '__stdcall', type_quals=((), None)), ())
 
-        assert ('function2' in functions and
-                functions['function2'] == (('int',), ()))
+        assert functions.get('function2') == Type(Type('int'), ())
+
+        assert 'externFunc' in functions
+
+        ptyp = Type('int', '*', '*', type_quals=(('volatile',), ('const',), ()))
+        assert functions.get('typeQualedFunc') == \
+               Type(Type('int'), ((None, ptyp, None),))

@@ -3,7 +3,7 @@ struct and union will be treated later. */
 
 // Standard type defintion
 typedef char **typeChar;
-typedef int typeInt, *typeIntPtr, typeIntArr[10], typeIntDArr[5][5];
+typedef int typeInt, *typeIntPtr, typeIntArr[10], typeIntDArr[5][6];
 typedef typeInt typeTypeInt;
 typedef unsigned long ULONG;
 

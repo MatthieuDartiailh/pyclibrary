@@ -23,3 +23,8 @@ int __declspec(dllexport) __stdcall function1();
 #define EXPORT(x) x __declspec(dllexport)
 
 EXPORT(int) function2();
+
+extern int externFunc(void);
+
+//define typequals in abstract typedef
+int typeQualedFunc(int volatile * const *);

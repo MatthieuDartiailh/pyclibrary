@@ -92,7 +92,7 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
     """The CLibrary class is intended to automate much of the work in using
     ctypes by integrating header file definitions from CParser. This class
     serves as a proxy to a backend, adding a few features:
-    
+
         - allows easy access to values defined via CParser.
         - automatic type conversions for function calls using CParser function
           signatures.
@@ -552,21 +552,21 @@ class CallResult(object):
     Attributes
     ----------
     lib: CLibrary
-        Reference to the CLibrary to which the function that created this 
+        Reference to the CLibrary to which the function that created this
         object balongs.
-        
+
     rval :
         Value returned by the C function.
-        
+
     args : tuple
         Arguments passed to the C function.
-        
+
     sig :
         Signature of the function which created this object.
-        
+
     guessed : tuple
         Pointers that were created on the fly.
-         
+
     """
     def __init__(self, lib, rval, args, sig, guessed):
         self.lib = lib
@@ -605,7 +605,7 @@ class CallResult(object):
 
     def find_arg(self, arg):
         """Find argument based on name.
-        
+
         """
         for i, a in enumerate(self.sig[1]):
             if a[0] == arg:
@@ -620,9 +620,9 @@ class CallResult(object):
 
     def auto(self):
         """Return a list of all the auto-generated values.
-        
+
         Pointers are dereferenced.
-        
+
         """
         return [self[n] for n in self.guessed]
 
