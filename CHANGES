@@ -1,8 +1,8 @@
 PyCLibrary Changelog
 ====================
 
-next release
-------------
+0.1.1
+-----
 
 - Arrays are represented as multiple '[i]'entries in type-tuple instead of a
   single entry of with multiple such declarations '[i][j]'
@@ -14,6 +14,8 @@ next release
   (i.e. ```int * volatile * volatile a``` dies work now)
 - BUGFIX: CParser does not crash now, when passing a header-filename in the
   constructor
+
+Special thanks to Robert Hoelzl who provided those changes.
 
 
 0.1.0
