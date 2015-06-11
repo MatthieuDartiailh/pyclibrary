@@ -565,6 +565,8 @@ class TestParsing(object):
 
         types = self.parser.defs['types']
         variables = self.parser.defs['variables']
+        tdefs = self.parser.clib_intf.typedefs
+        vars = self.parser.clib_intf.vars
 
         # Test defining types from base types.
         assert ('typeChar' in types and types['typeChar'] ==
@@ -575,10 +577,10 @@ class TestParsing(object):
                 Type('int', '*'))
         assert ('typeIntArr' in types and types['typeIntArr'] ==
                 Type('int', [10]))
-        assert ('typeIntDArr' in types and types['typeIntDArr'] ==
-                Type('int', [5], [6]))
         assert ('typeTypeInt' in types and
                 types['typeTypeInt'] == Type('typeInt'))
+        assert (tdefs['typeIntDArr'] ==
+                cm.ArrayType(cm.ArrayType(cm.BuiltinType('int'), 6), 5))
         assert not self.parser.is_fund_type('typeTypeInt')
         assert self.parser.eval_type(['typeTypeInt']) == Type('int')
         assert ('ULONG' in types and types['ULONG'] == Type('unsigned long'))

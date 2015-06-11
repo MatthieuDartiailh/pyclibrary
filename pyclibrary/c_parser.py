@@ -1123,7 +1123,7 @@ class CParser(object):
                                        default=None)('val')
                               )), default=None) +
                      rparen)('args') +
-            Group(ZeroOrMore(lbrack + Optional(expression, default='0') +
+            Group(ZeroOrMore(lbrack + Optional(expression, default='') +
                   rbrack))('arrays')
         )
 
@@ -1149,7 +1149,7 @@ class CParser(object):
                                )),
                               default=None) +
                      rparen)('args') +
-            Group(ZeroOrMore(lbrack + Optional(expression, default='0') +
+            Group(ZeroOrMore(lbrack + Optional(expression, default='') +
                              rbrack))('arrays')
         )
         self.declarator_list = Group(delimitedList(self.declarator))
@@ -1256,13 +1256,12 @@ class CParser(object):
 
         if 'arrays' in decl and len(decl['arrays']) > 0:
             for x in decl['arrays']:
-                arrsize = self.eval_expr(x)
-                toks.append([arrsize if arrsize > 0 else -1])
+                arrsize = self.eval_expr(x) if x != '' else -1
+                toks.append([arrsize])
             quals += [()] * len(decl['arrays'])
-            for ast_arrsize in decl['arrays']:
-                arrsize = self.eval_expr(ast_arrsize)
-                if arrsize == 0:
-                    arrsize = None
+            for ast_arrsize in reversed(decl['arrays']):
+                arrsize = (self.eval_expr(ast_arrsize) if ast_arrsize != ''
+                           else None)
                 result_type = c_model.ArrayType(result_type, arrsize)
 
         if 'args' in decl and len(decl['args']) > 0:
