@@ -540,6 +540,8 @@ class CLibInterface(collections.Mapping):
         for map in (self.macros, self.funcs, self.vars, self.typedefs):
             if name in map:
                 return map[name]
+        else:
+            raise KeyError("")
 
     def __iter__(self):
         return iter(self.file_map)

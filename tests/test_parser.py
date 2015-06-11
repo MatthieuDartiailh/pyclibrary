@@ -17,6 +17,7 @@ import sys
 from pytest import raises
 from pyclibrary.c_parser import CParser, Type, Struct, Union, Enum
 import pyclibrary.utils
+import pyclibrary.c_model as cm
 
 
 H_DIRECTORY = os.path.join(os.path.dirname(__file__), 'headers')
@@ -471,65 +472,40 @@ class TestParsing(object):
         self.parser.load_file(path)
         self.parser.process_all()
 
-        variables = self.parser.defs['variables']
+        variables = self.parser.defs['variables']   # to be replaced by vars
+        vars = self.parser.clib_intf.vars
 
         # Integers
-        assert ('short1' in variables and
-                variables['short1'] == (1, Type('signed short')))
-        assert ('short_int' in variables and
-                variables['short_int'] == (1, Type('short int')))
-        assert ('short_un' in variables and
-                variables['short_un'] == (1, Type('unsigned short')))
-        assert ('short_int_un' in variables and
-                variables['short_int_un'] == (1, Type('unsigned short int')))
-        assert ('int1' in variables and
-                variables['int1'] == (1, Type('int')))
-        assert ('un' in variables and
-                variables['un'] == (1, Type('unsigned')))
-        assert ('int_un' in variables and
-                variables['int_un'] == (1, Type('unsigned int')))
-        assert ('long1' in variables and
-                variables['long1'] == (1, Type('long')))
-        assert ('long_int' in variables and
-                variables['long_int'] == (1, Type('long int')))
-        assert ('long_un' in variables and
-                variables['long_un'] == (1, Type('unsigned long')))
-        assert ('long_int_un' in variables and
-                variables['long_int_un'] == (1, Type('unsigned long int')))
-        if sys.platform == 'win32':
-            assert ('int64' in variables and
-                    variables['int64'] == (1, Type('__int64')))
-            assert ('int64_un' in variables and
-                    variables['int64_un'] == (1, Type('unsigned __int64')))
-        assert ('long_long' in variables and
-                variables['long_long'] == (1, Type('long long')))
-        assert ('long_long_int' in variables and
-                variables['long_long_int'] == (1, Type('long long int')))
-        assert ('long_long_un' in variables and
-                variables['long_long_un'] == (1, Type('unsigned long long')))
-        assert ('long_long_int_un' in variables and
-                variables['long_long_int_un'] == (1, Type('unsigned long '
-                                                          'long int')))
+        assert vars['short1'] == cm.BuiltinType('signed short')
+        assert vars['short_int'] == cm.BuiltinType('short int')
+        assert vars['short_un'] == cm.BuiltinType('unsigned short')
+        assert vars['short_int_un'] == cm.BuiltinType('unsigned short int')
+        assert vars['int1'] == cm.BuiltinType('int')
+        assert vars['un'] == cm.BuiltinType('unsigned')
+        assert vars['int_un'] == cm.BuiltinType('unsigned int')
+        assert vars['long1'] == cm.BuiltinType('long')
+        assert vars['long_int'] == cm.BuiltinType('long int')
+        assert vars['long_un'] == cm.BuiltinType('unsigned long')
+        assert vars['long_int_un'] == cm.BuiltinType('unsigned long int')
+        if sys.platform == 'win32':   ###TODO: this has to be dependend on CParser objects, not on hosting opering system
+            assert vars['int64'] == cm.BuiltinType('__int64')
+            assert vars['int64_un'] == cm.BuiltinType('unsigned __int64')
+        assert vars['long_long'] == cm.BuiltinType('long long')
+        assert vars['long_long_int'] == cm.BuiltinType('long long int')
+        assert vars['long_long_un'] == cm.BuiltinType('unsigned long long')
+        assert (vars['long_long_int_un'] ==
+                cm.BuiltinType('unsigned long long int'))
 
         # Floating point number
-        assert ('fl' in variables and variables['fl'] ==
-                (1., Type('float')))
-        assert ('db' in variables and variables['db'] ==
-                (0.1, Type('double')))
-        assert ('dbl' in variables and
-                variables['dbl'] == (-10., Type('long double')))
+        assert vars['fl'] == cm.BuiltinType('float')
+        assert vars['db'] == cm.BuiltinType('double')
+        assert vars['dbl'] == cm.BuiltinType('long double')
 
         # Const and static modif
-        assert ('int_const' in variables and
-                variables['int_const'] == (4, Type('int',
-                                                   type_quals=(('const',),))))
-        assert ('int_stat' in variables and
-                variables['int_stat'] == (4, Type('int')))
-        assert ('int_con_stat' in variables and
-                variables['int_con_stat'] == (4, Type('int',
-                                                      type_quals=(('const',),))))
-        assert ('int_extern' in variables and
-                variables['int_extern'] == (4, Type('int')))
+        assert vars['int_const'] == cm.BuiltinType('int', quals=['const'])
+        assert vars['int_stat'] == cm.BuiltinType('int')
+        assert vars['int_con_stat'] == cm.BuiltinType('int', quals=['const'])
+        assert vars['int_extern'] == cm.BuiltinType('int')
 
         # String
         assert ('str1' in variables and
@@ -578,6 +554,10 @@ class TestParsing(object):
                (None, Type('int', '*', [1]))
         assert variables.get('prec_arr_of_ptr2') == \
                (None, Type('int', '*', [1]))
+
+        # test filemap
+        assert (os.path.basename(self.parser.clib_intf.file_map['short1']) ==
+                'variables.h')
 
     # No structure, no unions, no enum
     def test_typedef(self):

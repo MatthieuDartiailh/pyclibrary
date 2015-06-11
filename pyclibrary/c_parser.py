@@ -409,6 +409,8 @@ class CParser(object):
     def __init__(self, files=None, copy_from=None, replace=None,
                  process_all=True, cache=None, **kwargs):
 
+        self.clib_intf = c_model.CLibInterface()
+
         if not self._init:
             logger.warning('Automatic initialisation based on OS detection')
             from .init import auto_init
@@ -1226,7 +1228,7 @@ class CParser(object):
                        self.function_decl)
         return self.parser
 
-    def process_declarator(self, decl):
+    def process_declarator(self, decl, base_type):
         """Process a declarator (without base type) and return a tuple
         (name, [modifiers])
 
@@ -1237,6 +1239,8 @@ class CParser(object):
         quals = [tuple(decl.get('first_typequal', []))]
         name = None
         logger.debug("DECL: {}".format(decl))
+        
+        result_type = base_type
 
         if 'call_conv' in decl and len(decl['call_conv']) > 0:
             toks.append(decl['call_conv'])
@@ -1254,10 +1258,9 @@ class CParser(object):
             if decl['args'][0] is None:
                 toks.append(())
             else:
-                toks.append(tuple([self.process_type(a['type'],
-                                                     a['decl']) +
-                                   (a['val'][0],) for a in decl['args']]
-                                  )
+                toks.append(tuple([(self.process_type(a['type'], a['decl'])[:-1] +
+                                    (a['val'][0],))
+                                   for a in decl['args']])
                             )
             quals.append(())
         if 'ref' in decl:
@@ -1265,7 +1268,7 @@ class CParser(object):
             quals.append(())
 
         if 'center' in decl:
-            (n, t, q) = self.process_declarator(decl['center'][0])
+            (n, t, q, result_type) = self.process_declarator(decl['center'][0], result_type)
             if n is not None:
                 name = n
             toks.extend(t)
@@ -1274,9 +1277,9 @@ class CParser(object):
         if 'name' in decl:
             name = decl['name']
 
-        return (name, toks, tuple(quals))
+        return (name, toks, tuple(quals), result_type)
 
-    def process_type(self, typ, decl):
+    def process_type(self, type_ast, decl):
         """Take a declarator + base type and return a serialized name/type
         description.
 
@@ -1303,11 +1306,14 @@ class CParser(object):
             (None, ["struct s", ((None, ['int']), (None, ['int', '*'])), '*'])
 
         """
-        logger.debug("PROCESS TYPE/DECL: {}/{}".format(typ['name'], decl))
-        (name, decl, quals) = self.process_declarator(decl)
-        pre_typequal = tuple(typ.get('pre_qual', []))
-        return (name, Type(typ['name'], *decl,
-                           type_quals=(pre_typequal + quals[0],) + quals[1:]))
+        logger.debug("PROCESS TYPE/DECL: {}/{}".format(type_ast['name'], decl))
+        base_type = c_model.BuiltinType(type_ast['name'])  ###TODO: has to be distinguish BuiltinType and CustomType
+        (name, decl, quals, type_) = self.process_declarator(decl, base_type)
+        type_.quals = list(type_ast.get('pre_qual', [])) + type_.quals
+        return (name,
+                Type(type_ast['name'], *decl,
+                     type_quals=(tuple(type_ast.get('pre_qual', [])) + quals[0],) + quals[1:]),
+                type_)
 
     def process_enum(self, s, l, t):
         """
@@ -1351,7 +1357,7 @@ class CParser(object):
         logger.debug("FUNCTION {} : {}".format(t, t.keys()))
 
         try:
-            (name, decl) = self.process_type(t.type, t.decl[0])
+            (name, decl, _) = self.process_type(t.type, t.decl[0])
             if len(decl) == 0 or type(decl[-1]) != tuple:
                 logger.error('{}'.format(t))
                 mess = "Incorrect declarator type for function definition."
@@ -1416,7 +1422,7 @@ class CParser(object):
                         struct.append(tuple(member))
 
                     for d in m[0].decl_list:
-                        (name, decl) = self.process_type(typ, d)
+                        (name, decl, _) = self.process_type(typ, d)
                         member = [name, decl, val]
                         if m[0].bit:
                             member.append(int(m[0].bit))
@@ -1440,7 +1446,7 @@ class CParser(object):
         try:
             val = self.eval_expr(t[0])
             for d in t[0].decl_list:
-                (name, typ) = self.process_type(t[0].type, d)
+                (name, typ, type_) = self.process_type(t[0].type, d)
                 # This is a function prototype
                 if type(typ[-1]) is tuple:
                     logger.debug("  Add function prototype: {} {} {}".format(
@@ -1450,9 +1456,10 @@ class CParser(object):
                 # This is a variable
                 else:
                     logger.debug("  Add variable: {} {} {}".format(name,
-                                 typ, val))
+                                 type_, val))
                     self.add_def('variables', name, (val, typ))
                     self.add_def('values', name, val)
+                    self.clib_intf.add_var(name, type_, self.current_file)
 
         except Exception:
             logger.exception('Error processing variable: {}'.format(t))
@@ -1463,7 +1470,7 @@ class CParser(object):
         logger.debug("TYPE: {}".format(t))
         typ = t.type
         for d in t.decl_list:
-            (name, decl) = self.process_type(typ, d)
+            (name, decl, _) = self.process_type(typ, d)
             logger.debug("  {} {}".format(name, decl))
             self.add_def('types', name, decl)
 
@@ -1776,6 +1783,6 @@ class NewCParser(object):
             if isinstance(hdr_file, basestring):
                 hdr_file = open(hdr_file, "rt")
 
-            # parse types, macrodefs and global objects of hdr_file into clibIntf
+            # parse types, macrodefs and global objects of hdr_file into clib_intf
 
         return clibIntf
