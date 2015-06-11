@@ -472,7 +472,6 @@ class TestParsing(object):
         self.parser.load_file(path)
         self.parser.process_all()
 
-        variables = self.parser.defs['variables']   # to be replaced by vars
         vars = self.parser.clib_intf.vars
 
         # Integers
@@ -508,52 +507,50 @@ class TestParsing(object):
         assert vars['int_extern'] == cm.BuiltinType('int')
 
         # String
-        assert ('str1' in variables and
-                variables['str1'] == ("normal string", Type('char', '*')))
-        assert ('str2' in variables and
-                variables['str2'] == ("string with macro: INT",
-                                      Type('char', '*', '*')))
-        assert ('str3' in variables and
-                variables['str3'] == ("string with comment: /*comment inside string*/",
-                                      Type('char', '*', type_quals=(('const',), ('const',)))))
-        assert ('str4' in variables and
-                variables['str4'] == ("string with define #define MACRO5 macro5_in_string ",
-                                      Type('char', '*')))
-        assert ('str5' in variables and
-                variables['str5'] == ("string with \"escaped quotes\" ",
-                                      Type('char', '*')))
+        assert vars['str1'] == cm.PointerType(cm.BuiltinType('char'))
+        assert (vars['str2'] ==
+                cm.PointerType(cm.PointerType(cm.BuiltinType('char'))))
+        assert (vars['str3'] ==
+                cm.PointerType(cm.BuiltinType('char', quals=['const']),
+                               quals=['const']))   ### test initial_val?
+        assert 'str4' in vars     ### test initial_val?
+        assert 'str5' in vars     ### test initial_val?
 
         # Test complex evaluation
-        assert ('x1' in variables and
-                variables['x1'] == (1., Type('float')))
+        assert 'x1' in vars    ### test initial_val == 1.0?
 
         # Test type casting handling.
-        assert ('x2' in variables and
-                variables['x2'] == (88342528, Type('int')))
+        assert 'x2' in vars    ### test initial_val == 88342528?
 
         # Test array handling
-        assert ('array' in variables and
-                variables['array'] == ([1, 3141500.0], Type('float', [2])))
-        assert ('intJunk' in variables and
-                variables['intJunk'] == (
-                    None,
-                    Type('int', '*', '*', '*', [4],
-                         type_quals=(('const',), ('const',), (), (), ())) ) )
+        assert vars['array'] == cm.ArrayType(cm.BuiltinType('float'), 2) ### test initial_val?
+        assert (vars['intJunk'] ==
+                cm.ArrayType(
+                    cm.PointerType(
+                        cm.PointerType(
+                            cm.PointerType(
+                                cm.BuiltinType('int', quals=['const']),
+                                quals=['const']))),
+                    4))
+        assert vars['undef_size_array'] == cm.ArrayType(cm.BuiltinType('int'))
 
         # test type qualifiers
-        assert variables.get('typeQualedIntPtrPtr') == \
-               (None, Type('int', '*', '*',
-                           type_quals=(('const',), ('volatile',), ())) )
-        assert variables.get('typeQualedIntPtr') == \
-               (None, Type('int', '*', type_quals=(('const', 'volatile',), ())))
+        assert (vars['typeQualedIntPtrPtr'] ==
+                cm.PointerType(
+                    cm.PointerType(
+                        cm.BuiltinType('int', quals=['const']),
+                        quals=['volatile'])))
+        assert (vars['typeQualedIntPtr'] ==
+                cm.PointerType(
+                    cm.BuiltinType('int', quals=['const', 'volatile'])))
 
         # test type definition precedence
-        assert variables.get('prec_ptr_of_arr') == \
-               (None, Type('int', [1], '*'))
-        assert variables.get('prec_arr_of_ptr') == \
-               (None, Type('int', '*', [1]))
-        assert variables.get('prec_arr_of_ptr2') == \
-               (None, Type('int', '*', [1]))
+        assert (vars['prec_ptr_of_arr'] ==
+                cm.PointerType(cm.ArrayType(cm.BuiltinType('int'), 1)))
+        assert (vars['prec_arr_of_ptr'] ==
+                cm.ArrayType(cm.PointerType(cm.BuiltinType('int')), 1))
+        assert (vars['prec_arr_of_ptr2'] == \
+                cm.ArrayType(cm.PointerType(cm.BuiltinType('int')), 1))
 
         # test filemap
         assert (os.path.basename(self.parser.clib_intf.file_map['short1']) ==

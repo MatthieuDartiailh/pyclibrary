@@ -1123,7 +1123,7 @@ class CParser(object):
                                        default=None)('val')
                               )), default=None) +
                      rparen)('args') +
-            Group(ZeroOrMore(lbrack + Optional(expression, default='-1') +
+            Group(ZeroOrMore(lbrack + Optional(expression, default='0') +
                   rbrack))('arrays')
         )
 
@@ -1149,8 +1149,8 @@ class CParser(object):
                                )),
                               default=None) +
                      rparen)('args') +
-            Group(ZeroOrMore(lbrack + Optional(expression, default='-1') +
-                  rbrack))('arrays')
+            Group(ZeroOrMore(lbrack + Optional(expression, default='0') +
+                             rbrack))('arrays')
         )
         self.declarator_list = Group(delimitedList(self.declarator))
 
@@ -1239,7 +1239,8 @@ class CParser(object):
         quals = [tuple(decl.get('first_typequal', []))]
         name = None
         logger.debug("DECL: {}".format(decl))
-        
+
+        base_type.quals += list(decl.get('first_typequal', []))
         result_type = base_type
 
         if 'call_conv' in decl and len(decl['call_conv']) > 0:
@@ -1249,10 +1250,20 @@ class CParser(object):
         if 'ptrs' in decl and len(decl['ptrs']) > 0:
             toks += ('*',) * len(decl['ptrs'])
             quals += map(tuple, decl['ptrs'])
+            for ptr_level in decl['ptrs']:
+                result_type = c_model.PointerType(result_type,
+                                                  quals=list(ptr_level))
 
         if 'arrays' in decl and len(decl['arrays']) > 0:
-            toks.extend([self.eval_expr(x)] for x in decl['arrays'])
+            for x in decl['arrays']:
+                arrsize = self.eval_expr(x)
+                toks.append([arrsize if arrsize > 0 else -1])
             quals += [()] * len(decl['arrays'])
+            for ast_arrsize in decl['arrays']:
+                arrsize = self.eval_expr(ast_arrsize)
+                if arrsize == 0:
+                    arrsize = None
+                result_type = c_model.ArrayType(result_type, arrsize)
 
         if 'args' in decl and len(decl['args']) > 0:
             if decl['args'][0] is None:
@@ -1307,9 +1318,9 @@ class CParser(object):
 
         """
         logger.debug("PROCESS TYPE/DECL: {}/{}".format(type_ast['name'], decl))
-        base_type = c_model.BuiltinType(type_ast['name'])  ###TODO: has to be distinguish BuiltinType and CustomType
+        pre_typequals = list(type_ast.get('pre_qual', []))
+        base_type = c_model.BuiltinType(type_ast['name'], pre_typequals)  ###TODO: has to be distinguish BuiltinType and CustomType
         (name, decl, quals, type_) = self.process_declarator(decl, base_type)
-        type_.quals = list(type_ast.get('pre_qual', [])) + type_.quals
         return (name,
                 Type(type_ast['name'], *decl,
                      type_quals=(tuple(type_ast.get('pre_qual', [])) + quals[0],) + quals[1:]),

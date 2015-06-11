@@ -48,6 +48,7 @@ int x2 = (typeCast)0x544 <<16;
 
 // Test array
 float array[2] = {0x1, 3.1415e6};
+int undef_size_array[];
 static const int * const (**intJunk[4]);
 
 const int * volatile * typeQualedIntPtrPtr, volatile * typeQualedIntPtr;
