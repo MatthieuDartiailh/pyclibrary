@@ -8,6 +8,8 @@
 # -----------------------------------------------------------------------------
 """Test cm.py via pytest
 """
+from __future__ import (division, unicode_literals, print_function,
+                        absolute_import)
 import pytest
 from pyclibrary import c_model as cm
 
@@ -29,10 +31,11 @@ class TestCLibBase(object):
         def assert_repr_valid(expr_str):
             assert (repr(eval(expr_str, {'DummyType': self.DummyType})) ==
                     expr_str)
-        assert_repr_valid("DummyType(3, ['test', 'test2'])")
-        assert_repr_valid("DummyType(0, [], p3='Test')")
+        assert_repr_valid("DummyType(3, [{!r}, {!r}])".format('tst', 'tst2'))
+        assert_repr_valid("DummyType(0, [], p3={!r})".format('Test'))
         assert_repr_valid("DummyType(0, [], p4=[2, 3])")
-        assert_repr_valid("DummyType(0, [], p3='Test', p4=[2, 3])")
+        assert_repr_valid("DummyType(0, [], p3={!r}, p4=[2, 3])"
+                          .format('Test'))
 
     def test_eq(self):
         assert self.DummyType(0, []) == self.DummyType(0, [])

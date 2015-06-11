@@ -35,6 +35,8 @@ The class hierarchy is:
       * ArrayType
       * FunctionType
 """
+from __future__ import (division, unicode_literals, print_function,
+                        absolute_import)
 import collections
 import itertools
 from future.moves.itertools import zip_longest
