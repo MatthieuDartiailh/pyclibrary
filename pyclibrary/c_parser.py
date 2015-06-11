@@ -20,11 +20,13 @@ import os
 import logging
 from inspect import cleandoc
 from future.utils import istext, isbytes
+from past.builtins import basestring
 from ast import literal_eval
 from traceback import format_exc
 
 from .errors import DefinitionError
 from .utils import find_header
+from pyclibrary import c_model
 
 # Import parsing elements
 from .thirdparty.pyparsing import \
@@ -738,7 +740,7 @@ class CParser(object):
         # First join together lines split by \\n
         text = Literal('\\\n').suppress().transformString(text)
 
-        # Define the structure of a macro definition
+        # Macro the structure of a macro definition
         name = Word(alphas+'_', alphanums+'_')('name')
         deli_list = Optional(lparen + delimitedList(name) + rparen)
         self.pp_define = (name.setWhitespaceChars(' \t')("macro") +
@@ -1670,7 +1672,7 @@ num_types = ['int', 'float', 'double']
 nonnum_types = ['char', 'bool', 'void']
 
 
-# Define some common language elements when initialising.
+# Macro some common language elements when initialising.
 def _init_cparser(extra_types=None, extra_modifiers=None):
     global expression
     global call_conv, ident
@@ -1743,3 +1745,37 @@ def _init_cparser(extra_types=None, extra_modifiers=None):
 
     expression << Group(atom + ZeroOrMore(bi_operator + atom))
     expression.setParseAction(recombine)
+
+
+class NewCParser(object):
+    """
+    This object shall replace CParser in future.
+    """
+
+    def __init__(self, cust_type_quals=None, stdlib_hdrs=None):
+        """
+        creates a parser object, that is customized for a specific
+        compiler (i.e. the microsoft compiler will support different
+        type_quals than GCC
+        """
+        pass
+
+    def derive(self, stdlib_hdrs):
+        """
+        create a cloned parser with different stdlib
+
+        :param stdlib_hdrs:
+        :return:
+        """
+        pass
+
+    def parse(self, hdr_files):
+        clibIntf = c_model.CLibInterface()
+
+        for hdr_file in hdr_files:
+            if isinstance(hdr_file, basestring):
+                hdr_file = open(hdr_file, "rt")
+
+            # parse types, macrodefs and global objects of hdr_file into clibIntf
+
+        return clibIntf
