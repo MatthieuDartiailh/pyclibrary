@@ -54,7 +54,7 @@ class UnknownCustomType(KeyError):
 
 class CLibBase(object):
 
-    __slots__ = []
+    __slots__ = ()
 
     def _getattrnames(self):
         """Internal method that lists all fields
@@ -108,7 +108,7 @@ class CLibType(CLibBase):
     "C" type.
     """
 
-    __slots__ = ['quals']
+    __slots__ = ('quals',)
 
     def __init__(self, quals=None):
         """
@@ -150,7 +150,7 @@ class SimpleType(CLibType):
     (BuildinType and CustomType)
     """
 
-    __slots__ = ['type_name']
+    __slots__ = ('type_name',)
 
     def __init__(self, type_name, quals=None):
         super(SimpleType, self).__init__(quals)
@@ -174,7 +174,7 @@ class BuiltinType(SimpleType):
     The class does no checks if the *type_name* is actually a valid C
     scalar type.
     """
-    pass
+    __slots__ = ()
 
 
 class CustomType(SimpleType):
@@ -187,6 +187,8 @@ class CustomType(SimpleType):
      * "``union <unionname>``"
      * "``enum <enumname>``"
     """
+
+    __slots__ = ()
 
     def resolve(self, typedefs):
         if self.type_name not in typedefs:
@@ -214,7 +216,7 @@ class CompoundType(CLibType):
     multiple subfields
     """
 
-    __slots__ = ['fields']
+    __slots__ = ('fields',)
 
     def __init__(self, fields, quals=None):
         """
@@ -240,6 +242,8 @@ class CompoundType(CLibType):
 
 class StructType(CompoundType):
     """Model of C structure type definitions."""
+
+    __slots__ = ('packsize',)
 
     def __init__(self, fields, packsize=None, quals=None):
         """
@@ -270,6 +274,8 @@ class StructType(CompoundType):
 class BitFieldType(CompoundType):
     """Model of C bitfield definition."""
 
+    __slots__ = ()
+
     def __init__(self, fields, quals=None):
         """
         :param list[tuple[str, CLibType, int]] fields: ordered list of
@@ -287,6 +293,8 @@ class BitFieldType(CompoundType):
 class UnionType(CompoundType):
     """Model of C union definition."""
 
+    __slots__ = ()
+
     def c_repr(self, referrer_c_repr=None):
         return self._compound_c_repr('union', referrer_c_repr)
 
@@ -294,7 +302,7 @@ class UnionType(CompoundType):
 class EnumType(CLibType):
     """Model of C enum definition."""
 
-    __slots__ = ['values']
+    __slots__ = ('values',)
 
     def __init__(self, values, quals=None):
         """
@@ -329,7 +337,7 @@ class ComposedType(CLibType):
     and implementation of resolve
     """
 
-    __slots__ = ['base_type']
+    __slots__ = ('base_type',)
 
     # Specify the operator precedence of this type definition operator
     # to ensure that paranthesis can be added if necessary on generating
@@ -379,6 +387,8 @@ class ComposedType(CLibType):
 class PointerType(ComposedType):
     """Model of C pointer definition."""
 
+    __slots__ = ()
+
     PRECEDENCE = 90
 
     def c_repr(self, referrer_c_repr=None):
@@ -392,7 +402,7 @@ class ArrayType(ComposedType):
     undefined size: ``arr[]``
     """
 
-    __slots__ = ['size']
+    __slots__ = ('size',)
 
     def __init__(self, base_type, size=None, quals=None):
         """
@@ -415,7 +425,7 @@ class ArrayType(ComposedType):
 class FunctionType(ComposedType):
     """Model of C function signature"""
 
-    __slots__ = ['params']
+    __slots__ = ('params',)
 
     def __init__(self, base_type, params=(), quals=None):
         """
@@ -448,7 +458,7 @@ class FunctionType(ComposedType):
 class Macro(CLibBase):
     """Model of C Preprocessor define"""
 
-    __slots__ = ['val_str']
+    __slots__ = ('val_str',)
 
     def __init__(self, val_str):
         """
@@ -474,7 +484,7 @@ class Macro(CLibBase):
 
 class FnMacro(Macro):
 
-    __slots__ = ['params']
+    __slots__ = ('params',)
 
     def __init__(self, val_str, params=()):
         """
