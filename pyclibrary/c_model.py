@@ -84,7 +84,6 @@ class CLibBase(object):
     def __ne__(self, other):
         return not self == other
 
-    # noinspection PyUnresolvedReferences
     def __repr__(self):
         code_obj = self.__init__.__code__
         init_params = code_obj.co_varnames[1:code_obj.co_argcount]
@@ -209,7 +208,6 @@ class CustomType(SimpleType):
             return result
 
 
-# noinspection PyAbstractClass
 class CompoundType(CLibType):
     """Abstract base class for all types that are composed of multiple
     other types (StructType, UnionType, BitFieldType)
@@ -330,7 +328,6 @@ class EnumType(CLibType):
             ['}'])
 
 
-# noinspection PyAbstractClass
 class ComposedType(CLibType):
     """Abstract base for types, that are combined with multiple
     type modifiers (PointerType, ArrayType, FunctionType).
