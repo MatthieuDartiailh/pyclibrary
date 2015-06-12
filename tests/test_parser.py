@@ -611,17 +611,24 @@ class TestParsing(object):
         self.parser.load_file(path)
         self.parser.process_all()
 
-        enums = self.parser.defs['enums']
-        types = self.parser.defs['types']
-        variables = self.parser.defs['variables']
-        assert ('enum_name' in enums and 'enum enum_name' in types)
-        assert enums['enum_name'] == {'enum1': 2, 'enum2': 6, 'enum3': 7,
-                                      'enum4': 8}
-        assert types['enum enum_name'] == Type('enum', 'enum_name',)
-        assert ('enum_inst' in variables and
-                variables['enum_inst'] == (None, Type('enum enum_name',)))
+        tdefs = self.parser.clib_intf.typedefs
+        vars = self.parser.clib_intf.vars
+        enums = self.parser.clib_intf.enums
 
-        assert 'anon_enum0' in enums
+        # test all properties of enum
+        enum_name_type = cm.EnumType([('enum1', 2), ('enum2', 6),
+                                      ('enum3', 7), ('enum4', 8)])
+        assert tdefs['enum enum_name'] == enum_name_type
+        enum_name_path = self.parser.clib_intf.file_map['enum enum_name']
+        assert os.path.basename(enum_name_path) == 'enums.h'
+        assert vars['enum_inst'] == cm.CustomType('enum enum_name')
+
+        # test anonymous enums
+        assert vars['no_name_enum_inst'] == cm.CustomType('enum anon_enum0')
+        assert vars['no_name_enum_inst2'] == cm.CustomType('enum anon_enum1')
+        assert tdefs['enum anon_enum0'] == cm.EnumType([('x', 0), ('y', 1)])
+
+        assert enums['y'] == 1
 
     def test_struct(self):
 

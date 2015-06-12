@@ -287,28 +287,38 @@ class TestCLibInterface(object):
     def clib(self):
         return cm.CLibInterface()
 
+    def assert_add_obj(self, clib, obj_map, add_func, obj_type,
+                       other_obj_type=None):
+        add_func('objname', obj_type, 'header.h')
+
+        # check if added to all required dicts
+        assert obj_map == {'objname': obj_type}
+        for other_map in clib.obj_maps.values():
+            if other_map != obj_map:
+                assert other_map == {}
+        assert clib == {'objname': obj_type}
+        assert clib.file_map['objname'] == 'header.h'
+
+        # check second element
+        add_func('objname2', other_obj_type, 'header.h')
+        assert obj_map == {'objname': obj_type, 'objname2': other_obj_type}
+
     def test_add_func(self, clib):
-        clib.add_func('f', cm.FunctionType(cm.BuiltinType('int'), []),
-                      'header.h')
-        assert clib.file_map['f'] == 'header.h'
-        assert clib.funcs == {'f': cm.FunctionType(cm.BuiltinType('int'), [])}
-        assert clib.vars == {}
-        assert clib == {'f': cm.FunctionType(cm.BuiltinType('int'), [])}
+        self.assert_add_obj(clib, clib.funcs, clib.add_func,
+                            cm.FunctionType(cm.BuiltinType('int'), []),
+                            cm.FunctionType(cm.BuiltinType('void'), []))
 
     def test_add_var(self, clib):
-        clib.add_var('v', cm.BuiltinType('int'), 'header.h')
-        assert clib.file_map['v'] == 'header.h'
-        assert clib.vars == {'v':cm.BuiltinType('int')}
-        assert clib.funcs == {}
-        assert clib == {'v': cm.BuiltinType('int')}
+        self.assert_add_obj(clib, clib.vars, clib.add_var,
+                            cm.BuiltinType('int'),
+                            cm.BuiltinType('char'))
 
     def test_add_typedef(self, clib):
-        clib.add_typedef('t', cm.BuiltinType('int'), 'header.h')
-        assert clib.file_map['t'] == 'header.h'
-        assert clib.typedefs == {'t':cm.BuiltinType('int')}
-        assert clib.funcs == {}
-        assert clib == {'t': cm.BuiltinType('int')}
+        self.assert_add_obj(clib, clib.typedefs, clib.add_typedef,
+                            cm.BuiltinType('int'),
+                            cm.BuiltinType('char'))
 
+    def test_add_typedef_with_enum(self, clib):
         clib.add_typedef('enum x', cm.EnumType([('val1', 0), ('val2', 1)]),
                          'header.h')
         assert 'enum x' in clib.typedefs
@@ -317,8 +327,6 @@ class TestCLibInterface(object):
         assert clib.file_map['val1'] == 'header.h'
 
     def test_add_macro(self, clib):
-        clib.add_macro('m', cm.Macro('1'), 'header.h')
-        assert clib.file_map['m'] == 'header.h'
-        assert clib.macros == {'m':cm.Macro('1')}
-        assert clib.funcs == {}
-        assert clib == {'m': cm.Macro('1')}
+        self.assert_add_obj(clib, clib.macros, clib.add_macro,
+                            cm.Macro('content'),
+                            cm.Macro('othercontent'))

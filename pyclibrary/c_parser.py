@@ -1341,9 +1341,9 @@ class CParser(object):
         try:
             logger.debug("ENUM: {}".format(t))
             if t.name == '':
-                n = 0
+                n = 0   ###TODO: replace by anonymous enum counter in clibinterface
                 while True:
-                    name = 'anon_enum{}'.format(n)
+                    name = 'anon_enum{}'.format(n)   ###TODO: rename to '$'+nr to avoid name clashes
                     if name not in self.defs['enums']:
                         break
                     n += 1
@@ -1352,18 +1352,23 @@ class CParser(object):
 
             logger.debug("  name: {}".format(name))
 
-            if name not in self.defs['enums']:
-                i = 0
+            if ('enum ' + name) not in self.clib_intf.typedefs:
                 enum = {}
+                enum_vals = []
+                cur_enum_val = 0
                 for v in t.members:
                     if v.value != '':
-                        i = literal_eval(v.value)
+                        cur_enum_val = literal_eval(v.value)
                     if v.valueName != '':
-                        i = enum[v.valueName]
-                    enum[v.name] = i
-                    self.add_def('values', v.name, i)
-                    i += 1
+                        cur_enum_val = enum[v.valueName]
+                    enum[v.name] = cur_enum_val
+                    enum_vals.append((v.name, cur_enum_val))
+                    self.add_def('values', v.name, cur_enum_val)
+                    cur_enum_val += 1
                 logger.debug("  members: {}".format(enum))
+                self.clib_intf.add_typedef('enum ' + name,
+                                           c_model.EnumType(enum_vals),
+                                           self.current_file)
                 self.add_def('enums', name, enum)
                 self.add_def('types', 'enum '+name, Type('enum', name))
             return ('enum ' + name)

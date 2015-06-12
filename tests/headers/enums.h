@@ -13,3 +13,8 @@ enum {
     x = 0,
     y
 } no_name_enum_inst;
+
+enum {
+    x = 0,
+    y
+} no_name_enum_inst2;

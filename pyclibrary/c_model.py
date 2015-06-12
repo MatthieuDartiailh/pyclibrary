@@ -545,12 +545,18 @@ class CLibInterface(collections.Mapping):
         self.typedefs = dict()
         self.macros = dict()
         self.enums = dict()
+        self.obj_maps = {
+            'funcs': self.funcs,
+            'vars': self.vars,
+            'typedefs': self.typedefs,
+            'macros': self.macros,
+            'enums': self.enums
+        }
 
         self.file_map = dict()
 
     def __getitem__(self, name):
-        for cls in (self.macros, self.funcs, self.vars, self.typedefs,
-                    self.enums):
+        for cls in self.obj_maps.values():
             if name in cls:
                 return cls[name]
         else:
@@ -562,6 +568,18 @@ class CLibInterface(collections.Mapping):
     def __len__(self):
         return len(self.file_map)
 
+    def _add_obj(self, obj_map, name, obj, filename):
+        """
+        internal method for adding sth. to CLibInterface.
+
+        :param dict[str, CLibBase] obj_map: map, into which add 'obj'
+        :param str name: Name under which 'obj' shall be added
+        :param CLibBase obj: object to add
+        :param str filename: filename, where the obj is located in (if known)
+        """
+        obj_map[name] = obj
+        self.file_map[name] = filename
+
     def add_func(self, name, func, filename=None):
         """
         official interface to add a function to CLibInterface.
@@ -571,8 +589,7 @@ class CLibInterface(collections.Mapping):
         :param str filename: filename, where the function is located in
             (if known)
         """
-        self.funcs[name] = func
-        self.file_map[name] = filename
+        self._add_obj(self.funcs, name, func, filename)
 
     def add_var(self, name, var, filename=None):
         """
@@ -584,8 +601,7 @@ class CLibInterface(collections.Mapping):
         :param str filename: filename, where the var is located in
             (if known)
         """
-        self.vars[name] = var
-        self.file_map[name] = filename
+        self._add_obj(self.vars, name, var, filename)
 
     def add_typedef(self, name, typedef, filename=None):
         """
@@ -596,13 +612,11 @@ class CLibInterface(collections.Mapping):
         :param str filename: filename, where the typedef is located in
             (if known)
         """
-        self.typedefs[name] = typedef
-        self.file_map[name] = filename
+        self._add_obj(self.typedefs, name, typedef, filename)
 
         if isinstance(typedef, EnumType):
             for name, val in typedef.values:
-                self.enums[name] = val
-                self.file_map[name] = filename
+                self._add_obj(self.enums, name, val, filename)
 
     def add_macro(self, name, macro, filename=None):
         """
@@ -614,5 +628,4 @@ class CLibInterface(collections.Mapping):
         :param str filename: filename, where the macro definition is
             located in (if known)
         """
-        self.macros[name] = macro
-        self.file_map[name] = filename
+        self._add_obj(self.macros, name, macro, filename)
