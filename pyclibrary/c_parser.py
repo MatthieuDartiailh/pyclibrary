@@ -294,7 +294,7 @@ class Enum(dict):
                 ')')
 
 
-def win_defs(version='800'):
+def win_defs(version='1500'):
     """Loads selection of windows headers included with PyCLibrary.
 
     These definitions can either be accessed directly or included before
@@ -322,10 +322,10 @@ def win_defs(version='800'):
     if not CParser._init:
         logger.warning('Automatic initialisation : OS is assumed to be win32')
         from .init import auto_init
-        auto_init('win32')
+        auto_init()
     d = os.path.dirname(__file__)
     p = CParser(
-        [os.path.join(d, 'headers', h) for h in header_files],
+        header_files,
         macros={'_WIN32': '', '_MSC_VER': version, 'CONST': 'const',
                 'NO_STRICT': None, 'MS_WIN32': ''},
         process_all=False
