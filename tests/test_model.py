@@ -92,7 +92,8 @@ class TestCustomType(object):
         simple_type = cm.BuiltinType('char')
         typedefs = {'simple': simple_type,
                     'nestedtype': cm.CustomType('simple'),
-                    'qualtype': cm.BuiltinType('char', quals=['tq2'])}
+                    'qualtype': cm.BuiltinType('char', quals=['tq2']),
+                    'cyclictype': cm.CustomType('cyclictype')}
 
         assert cm.CustomType('simple').resolve(typedefs) is simple_type
         assert cm.CustomType('nestedtype').resolve(typedefs) is simple_type
@@ -101,6 +102,8 @@ class TestCustomType(object):
 
         with pytest.raises(cm.UnknownCustomType):
             cm.CustomType('unknowntype').resolve(typedefs)
+        with pytest.raises(cm.UnknownCustomType):
+            cm.CustomType('cyclictype').resolve(typedefs)
 
 
 class TestStructType(object):
@@ -194,7 +197,8 @@ class TestPointerType(object):
     def test_resolve(self):
         simple_type = cm.BuiltinType('int')
         typedefs = {'simple': simple_type,
-                    'ptr': cm.PointerType(cm.CustomType('simple'))}
+                    'ptr': cm.PointerType(cm.CustomType('simple')),
+                    'cycle': cm.PointerType(cm.CustomType('cycle'))}
         simple_ptr = cm.PointerType(simple_type)
 
         assert simple_ptr is simple_ptr
@@ -209,6 +213,9 @@ class TestPointerType(object):
                 cm.PointerType(cm.PointerType(simple_type)))
         assert (cm.PointerType(cm.CustomType('ptr')).resolve(typedefs) ==
                 cm.PointerType(cm.PointerType(simple_type)))
+
+        with pytest.raises(cm.UnknownCustomType):
+            cm.CustomType('cycle').resolve(typedefs)
 
 
 class TestArrayType(object):

@@ -118,13 +118,15 @@ class CLibType(CLibBase):
         """
         self.quals = quals or []
 
-    def resolve(self, typedefs):
+    def resolve(self, typedefs, visited=None):
         """Resolves all references to type definitions. A reference to
         a type definition is represented by the TypeRef object. All
         CustomType objects are resolved with the help of typedefs.
 
         :param dict[str, CLibType] typedefs: maps the name of all known
             to the corresponding CLibType.
+        :param set[str] visited: only for internal use to prevent endless
+            loops on recursive typedefs
         :returns: a CLibType descendant object, that contains no TypeRef's.
         :rtype: CLibType
         """
@@ -191,12 +193,19 @@ class CustomType(SimpleType):
 
     __slots__ = ()
 
-    def resolve(self, typedefs):
+    def resolve(self, typedefs, visited=None):
+        visited = visited or set()
+        if self.type_name in visited:
+            raise UnknownCustomType('{!r} is a recursive typedef'
+                                    .format(self.type_name))
+        else:
+            visited.add(self.type_name)
+
         if self.type_name not in typedefs:
             raise UnknownCustomType('{!r} is a unknown type'
                                     .format(self.type_name))
 
-        result = typedefs[self.type_name].resolve(typedefs)
+        result = typedefs[self.type_name].resolve(typedefs, visited)
 
         if self.quals:
             # do not modify result directly to avoid sideeffects
@@ -372,8 +381,8 @@ class ComposedType(CLibType):
         else:
             return self.base_type.c_repr(referrer_c_repr)
 
-    def resolve(self, typedefs):
-        resolved_base_type = self.base_type.resolve(typedefs)
+    def resolve(self, typedefs, visited=None):
+        resolved_base_type = self.base_type.resolve(typedefs, visited)
         if resolved_base_type is self.base_type:
             # this optimization avoids creation of unnecessary copies
             return self

@@ -1082,15 +1082,19 @@ class CParser(object):
 
         self.struct_type = Forward()
         self.enum_type = Forward()
-        type_ = (fund_type |
-                 Optional(kwl(size_modifiers + sign_modifiers)) + ident |
-                 self.struct_type |
-                 self.enum_type)
+        builtin_type_astdef = fund_type
+        custom_type_astdef = (
+            Optional(kwl(size_modifiers + sign_modifiers)) + ident | ###TODO: check if modifiers can be omitted, since not part of C standard
+            self.struct_type |
+            self.enum_type)
         if extra_modifier is not None:
-            type_ += extra_modifier
-        type_.setParseAction(recombine)
+            builtin_type_astdef += extra_modifier
+            custom_type_astdef += extra_modifier
+        type_astdef = (
+            builtin_type_astdef.setParseAction(recombine)('builtin_name') |
+            custom_type_astdef.setParseAction(recombine)('custom_name'))
         self.type_spec = (type_qualifier('pre_qual') +
-                          type_("name"))
+                          type_astdef)
 
         # --- Abstract declarators for use in function pointer arguments
         #   Thus begins the extremely hairy business of parsing C declarators.
@@ -1316,12 +1320,18 @@ class CParser(object):
             (None, ["struct s", ((None, ['int']), (None, ['int', '*'])), '*'])
 
         """
-        logger.debug("PROCESS TYPE/DECL: {}/{}".format(type_ast['name'], decl))
-        pre_typequals = list(type_ast.get('pre_qual', []))
-        base_type = c_model.BuiltinType(type_ast['name'], pre_typequals)  ###TODO: has to be distinguish BuiltinType and CustomType
+        ast_name = type_ast.get('builtin_name') or type_ast.get('custom_name')
+        tpquals = list(type_ast.get('pre_qual', []))
+        logger.debug("PROCESS TYPE/DECL: {}/{}".format(ast_name, decl))
+
+        if 'builtin_name' in type_ast:
+            base_type = c_model.BuiltinType(ast_name, tpquals)
+        else:
+            base_type = c_model.CustomType(ast_name, tpquals)
         (name, decl, quals, type_) = self.process_declarator(decl, base_type)
+
         return (name,
-                Type(type_ast['name'], *decl,
+                Type(ast_name, *decl,
                      type_quals=(tuple(type_ast.get('pre_qual', [])) + quals[0],) + quals[1:]),
                 type_)
 
@@ -1478,11 +1488,12 @@ class CParser(object):
         """
         """
         logger.debug("TYPE: {}".format(t))
-        typ = t.type
+        ast_type = t.type
         for d in t.decl_list:
-            (name, decl, _) = self.process_type(typ, d)
+            (name, decl, type_) = self.process_type(ast_type, d)
             logger.debug("  {} {}".format(name, decl))
             self.add_def('types', name, decl)
+            self.clib_intf.add_typedef(name, type_, self.current_file)
 
     # --- Utility methods
 

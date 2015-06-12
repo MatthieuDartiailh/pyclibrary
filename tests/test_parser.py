@@ -569,47 +569,41 @@ class TestParsing(object):
         vars = self.parser.clib_intf.vars
 
         # Test defining types from base types.
-        assert ('typeChar' in types and types['typeChar'] ==
-                Type('char', '*', '*'))
-        assert ('typeInt' in types and types['typeInt'] ==
-                Type('int'))
-        assert ('typeIntPtr' in types and types['typeIntPtr'] ==
-                Type('int', '*'))
-        assert ('typeIntArr' in types and types['typeIntArr'] ==
-                Type('int', [10]))
-        assert ('typeTypeInt' in types and
-                types['typeTypeInt'] == Type('typeInt'))
+        assert (tdefs['typeChar'] ==
+                cm.PointerType(cm.PointerType(cm.BuiltinType('char'))))
+        assert tdefs['typeInt'] == cm.BuiltinType('int')
+        assert tdefs['typeIntPtr'] == cm.PointerType(cm.BuiltinType('int'))
+        assert tdefs['typeIntArr'] == cm.ArrayType(cm.BuiltinType('int'), 10)
         assert (tdefs['typeIntDArr'] ==
                 cm.ArrayType(cm.ArrayType(cm.BuiltinType('int'), 6), 5))
-        assert not self.parser.is_fund_type('typeTypeInt')
-        assert self.parser.eval_type(['typeTypeInt']) == Type('int')
-        assert ('ULONG' in types and types['ULONG'] == Type('unsigned long'))
+        assert tdefs['typeTypeInt'] == cm.CustomType('typeInt')
+        assert tdefs['typeTypeInt'].resolve(tdefs) == cm.BuiltinType('int')
+        assert tdefs['ULONG'] == cm.BuiltinType('unsigned long')
 
         # Test annotated types
-        assert ('voidpc' in types and types['voidpc'] ==
-                Type('void', '*', type_quals=(('const',), ())))
-        assert ('charf' in types and types['charf'] ==
-                Type('char', type_quals=(('far',),)))
+        assert (tdefs['voidpc'] ==
+                cm.PointerType(cm.BuiltinType('void', quals=['const'])))
+        assert (tdefs['charf'] == cm.BuiltinType('char', quals=['far']))
 
         # Test using custom type.
-        assert ('ttip5' in variables and
-                variables['ttip5'] == (None, Type('typeTypeInt', '*', [5])))
+        assert (vars['ttip5'] ==
+                cm.ArrayType(
+                    cm.PointerType(
+                        cm.CustomType('typeTypeInt')),
+                    5))
 
         # Handling undefined types
-        assert ('SomeOtherType' in types and
-                types['SomeOtherType'] == Type('someType'))
-        assert ('x' in variables and variables['x'] ==
-                (None, Type('undefined')))
-        assert not self.parser.is_fund_type('SomeOtherType')
-        with raises(Exception):
-            self.parser.eval_type(Type('undefined'))
+        assert tdefs['SomeOtherType'] == cm.CustomType('someType')
+        assert vars['x'] == cm.CustomType('undefined')
+        with raises(cm.UnknownCustomType):
+            vars['x'].resolve(tdefs)
 
         # Testing recursive defs
-        assert 'recType1' in types
-        assert 'recType2' in types
-        assert 'recType3' in types
-        with raises(Exception):
-            self.parser.eval_type(Type('recType3'))
+        assert 'recType1' in tdefs
+        assert 'recType2' in tdefs
+        assert 'recType3' in tdefs
+        with raises(cm.UnknownCustomType):
+            tdefs['recType3'].resolve(tdefs)
 
     def test_enums(self):
 
