@@ -168,10 +168,14 @@ class TestUnionType(object):
 
 class TestEnumType(object):
 
+    def test_init(self):
+        with pytest.raises(ValueError):
+            cm.EnumType([('val', 1)], quals=['keyword'])
+
     def test_c_repr(self):
         simple_lst = [('val1', 3), ('val2', 99)]
-        assert (cm.EnumType(simple_lst, ['tq1', 'tq2']).c_repr('enum enm_') ==
-                "tq1 tq2 enum enm_ {\n"
+        assert (cm.EnumType(simple_lst).c_repr('enum enm_') ==
+                "enum enm_ {\n"
                 "    val1 = 3,\n"
                 "    val2 = 99,\n"
                 "}")
@@ -304,6 +308,13 @@ class TestCLibInterface(object):
         assert clib.typedefs == {'t':cm.BuiltinType('int')}
         assert clib.funcs == {}
         assert clib == {'t': cm.BuiltinType('int')}
+
+        clib.add_typedef('enum x', cm.EnumType([('val1', 0), ('val2', 1)]),
+                         'header.h')
+        assert 'enum x' in clib.typedefs
+        assert clib.enums['val1'] == 0
+        assert clib.enums['val2'] == 1
+        assert clib.file_map['val1'] == 'header.h'
 
     def test_add_macro(self, clib):
         clib.add_macro('m', cm.Macro('1'), 'header.h')

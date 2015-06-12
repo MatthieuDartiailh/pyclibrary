@@ -50,7 +50,7 @@ def _lpadded_str(text):
         return ' ' + text
 
 
-class UnknownCustomType(KeyError):
+class UnknownCustomType(KeyError):   ###RENAME: UnknownCustomTypeError to match with PEP8
     """Thrown when a CLibType could not be resolved"""
 
 
@@ -317,8 +317,10 @@ class EnumType(CLibType):
         """
         :param list[tuple[str, int]] values: a list of tuples of
             value definitions (valuename -> value)
-        :param list[str] quals: see CLibType.quals
+        :param list[str] quals: has to be None
         """
+        if quals is not None:
+            raise ValueError('enums does not support quals')
         super(EnumType, self).__init__(quals)
         self.values = values
 
@@ -542,13 +544,15 @@ class CLibInterface(collections.Mapping):
         self.vars = dict()
         self.typedefs = dict()
         self.macros = dict()
+        self.enums = dict()
 
         self.file_map = dict()
 
     def __getitem__(self, name):
-        for map in (self.macros, self.funcs, self.vars, self.typedefs):
-            if name in map:
-                return map[name]
+        for cls in (self.macros, self.funcs, self.vars, self.typedefs,
+                    self.enums):
+            if name in cls:
+                return cls[name]
         else:
             raise KeyError("")
 
@@ -594,6 +598,11 @@ class CLibInterface(collections.Mapping):
         """
         self.typedefs[name] = typedef
         self.file_map[name] = filename
+
+        if isinstance(typedef, EnumType):
+            for name, val in typedef.values:
+                self.enums[name] = val
+                self.file_map[name] = filename
 
     def add_macro(self, name, macro, filename=None):
         """
