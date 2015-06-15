@@ -113,44 +113,42 @@ class TestStructType(object):
             cm.StructType([], packsize=3)    # packsize != 2^n
 
     def test_c_repr(self):
-        simple_fields = [('field', cm.BuiltinType('int'))]
+        simple_field = ('field', cm.BuiltinType('int'), None)
 
-        assert (cm.StructType(simple_fields).c_repr() ==
+        assert (cm.StructType([simple_field]).c_repr() ==
                 "struct {\n"
                 "    int field;\n"
                 "}")
 
-        _2_fields = [('f1', cm.BuiltinType('int')),
-                     ('f2', cm.BuiltinType('signed short'))]
-        assert (cm.StructType(_2_fields).c_repr('struct struct_name_t') ==
+        second_field = ('field2', cm.BuiltinType('signed short'), None)
+        assert (cm.StructType([simple_field, second_field])
+                .c_repr('struct struct_name_t') ==
                 "struct struct_name_t {\n"
-                "    int f1;\n"
-                "    signed short f2;\n"
+                "    int field;\n"
+                "    signed short field2;\n"
                 "}")
 
-        assert (cm.StructType(simple_fields, packsize=2).c_repr() ==
+        assert (cm.StructType([simple_field], packsize=2).c_repr() ==
                 "#pragma pack(push, 2)\n"
                 "struct {\n"
                 "    int field;\n"
                 "}\n"
                 "#pragma pack(pop)\n")
-        assert (cm.StructType(simple_fields, quals=['tp1', 'tp2']).c_repr() ==
-                "tp1 tp2 struct {\n"
-                "    int field;\n"
-                "}")
 
-        with pytest.raises(ValueError):
-            cm.StructType(simple_fields).c_repr('missing_struct_keyword')
-
-
-class TestBitFieldType(object):
-
-    def test_c_repr(self):
-        simple_lst = [('field', cm.BuiltinType('int'), 4)]
-        assert (cm.BitFieldType(simple_lst).c_repr() ==
+        bit_field = ('field', cm.BuiltinType('int'), 4)
+        assert (cm.StructType([bit_field]).c_repr() ==
                 "struct {\n"
                 "    int field : 4;\n"
                 "}")
+
+        anonn_field = (None, cm.CustomType('struct s'), None)
+        assert (cm.StructType([anonn_field]).c_repr() ==
+                "struct {\n"
+                "    struct s;\n"
+                "}")
+
+        with pytest.raises(ValueError):
+            cm.StructType([simple_field]).c_repr('missing_struct_keyword')
 
 
 class TestUnionType(object):

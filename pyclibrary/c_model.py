@@ -224,26 +224,45 @@ class CompoundType(CLibType):
 
     __slots__ = ('fields',)
 
+    KEYWORD = ''   # has to be set
+
     def __init__(self, fields, quals=None):
         """
-        :type fields: list[CompoundType.Field]
+        :type fields: list[tuple]
         :type quals: list[str]
         """
         super(CompoundType, self).__init__(quals)
         self.fields = fields
 
-    def _compound_c_repr(self, c_keywd, name, field_exts=()):
-        if name is not None:
-            if not name.startswith(c_keywd + ' '):
-                raise ValueError('{!r} requires names, starting with {!r}'
-                                 .format(type(self).__name__, c_keywd))
-            else:
-                name = name[len(c_keywd) + 1:]
-        return ''.join(
-            [' '.join(self.quals + [c_keywd]) + _lpadded_str(name) + ' {\n'] +
-            ['    ' + f[1].c_repr(f[0]) + e + ';\n'
-             for f, e in zip_longest(self.fields, field_exts, fillvalue='')] +
-            ['}'])
+    def name_to_typename(self, name):
+        """maps a name to the corresponding typename.
+        i.e. "x -> struct x"
+        """
+        return self.KEYWORD + ' ' + name
+
+    def typename_to_name(self, typename):
+        """maps a typename back to the corresponding name
+        i.e. struct x -> x
+        """
+        if not typename.startswith(self.KEYWORD + ' '):
+            raise ValueError('Invalid Typename: {!r}. Has to start with {!r}'
+                             .format(typename, self.KEYWORD))
+        return typename[len(self.KEYWORD) + 1:]
+
+    def _field_c_repr(self, field_tuple):
+        raise NotImplementedError()
+
+    def c_repr(self, typename=None):
+        result = self.KEYWORD
+        if typename:
+            result += ' ' + self.typename_to_name(typename)
+        result += ' {\n'
+
+        for field in self.fields:
+            result += '    ' + self._field_c_repr(field) + ';\n'
+
+        result += '}'
+        return result
 
 
 class StructType(CompoundType):
@@ -251,11 +270,13 @@ class StructType(CompoundType):
 
     __slots__ = ('packsize',)
 
+    KEYWORD = 'struct'
+
     def __init__(self, fields, packsize=None, quals=None):
         """
-        :param list[tuple[str, CLibType]] fields: ordered list of fields
-            in this structure. Every field is represented by a tuple of
-            field-name and field-type
+        :param list[tuple[str, CLibType, int|None]] fields: ordered list of
+            fields in this structure. Every field is represented by a tuple of
+            field-name and field-type and optionally a bitsize of the field
         :param int|None packsize: if not None, the packing size of the
             structure has to be 2^n and defines the alignment of the
             members. If None, the default (=machine word size) alignment
@@ -267,33 +288,21 @@ class StructType(CompoundType):
         super(StructType, self).__init__(fields, quals)
         self.packsize = packsize
 
-    def c_repr(self, referrer_c_repr=None):
+    def _field_c_repr(self, field_tuple):
+        field_name, field_type, field_size = field_tuple
+        if field_size is None:
+            return field_type.c_repr(field_name)
+        else:
+            return field_type.c_repr(field_name) + ' : ' + str(field_size)
+
+    def c_repr(self, typename=None):
         if self.packsize is None:
-            return self._compound_c_repr('struct', referrer_c_repr)
+            return super(StructType, self).c_repr(typename)
         else:
             return (
                 '#pragma pack(push, {})\n'.format(self.packsize) +
-                self._compound_c_repr('struct', referrer_c_repr) +
+                super(StructType, self).c_repr(typename) +
                 '\n#pragma pack(pop)\n')
-
-
-class BitFieldType(CompoundType):
-    """Model of C bitfield definition."""
-
-    __slots__ = ()
-
-    def __init__(self, fields, quals=None):
-        """
-        :param list[tuple[str, CLibType, int]] fields: ordered list of
-            fields in this bitfield. Every field is represented by a tuple
-            of field-name and field-type and field-bitsize
-        :param list[str] quals: see CLibType.quals
-        """
-        super(BitFieldType, self).__init__(fields, quals)
-
-    def c_repr(self, referrer_c_repr=None):
-        bitsize_defs = [' : {}'.format(field[2]) for field in self.fields]
-        return self._compound_c_repr('struct', referrer_c_repr, bitsize_defs)
 
 
 class UnionType(CompoundType):
@@ -301,8 +310,20 @@ class UnionType(CompoundType):
 
     __slots__ = ()
 
-    def c_repr(self, referrer_c_repr=None):
-        return self._compound_c_repr('union', referrer_c_repr)
+    KEYWORD = 'union'
+
+    def __init__(self, fields, quals=None):
+        """
+        :param list[tuple[str, CLibType]] fields: ordered list of
+            fields in this structure. Every field is represented by a tuple of
+            field-name and field-type
+        :param list[str] quals: see CLibType.quals
+        """
+        super(UnionType, self).__init__(fields, quals)
+
+    def _field_c_repr(self, field_tuple):
+        field_name, field_type = field_tuple
+        return field_type.c_repr(field_name)
 
 
 class EnumType(CLibType):
