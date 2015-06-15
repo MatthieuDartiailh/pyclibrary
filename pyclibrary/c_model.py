@@ -40,6 +40,7 @@ from __future__ import (division, unicode_literals, print_function,
 import collections
 import itertools
 from future.moves.itertools import zip_longest
+from .errors import UnknownCustomTypeError
 
 
 def _lpadded_str(text):
@@ -48,10 +49,6 @@ def _lpadded_str(text):
         return ''
     else:
         return ' ' + text
-
-
-class UnknownCustomType(KeyError):   ###RENAME: UnknownCustomTypeError to match with PEP8
-    """Thrown when a CLibType could not be resolved"""
 
 
 class CLibBase(object):
@@ -196,14 +193,14 @@ class CustomType(SimpleType):
     def resolve(self, typedefs, visited=None):
         visited = visited or set()
         if self.type_name in visited:
-            raise UnknownCustomType('{!r} is a recursive typedef'
-                                    .format(self.type_name))
+            raise UnknownCustomTypeError('{!r} is a recursive typedef'
+                                         .format(self.type_name))
         else:
             visited.add(self.type_name)
 
         if self.type_name not in typedefs:
-            raise UnknownCustomType('{!r} is a unknown type'
-                                    .format(self.type_name))
+            raise UnknownCustomTypeError('{!r} is a unknown type'
+                                         .format(self.type_name))
 
         result = typedefs[self.type_name].resolve(typedefs, visited)
 

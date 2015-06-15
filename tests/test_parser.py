@@ -595,14 +595,14 @@ class TestParsing(object):
         # Handling undefined types
         assert tdefs['SomeOtherType'] == cm.CustomType('someType')
         assert vars['x'] == cm.CustomType('undefined')
-        with raises(cm.UnknownCustomType):
+        with raises(cm.UnknownCustomTypeError):
             vars['x'].resolve(tdefs)
 
         # Testing recursive defs
         assert 'recType1' in tdefs
         assert 'recType2' in tdefs
         assert 'recType3' in tdefs
-        with raises(cm.UnknownCustomType):
+        with raises(cm.UnknownCustomTypeError):
             tdefs['recType3'].resolve(tdefs)
 
     def test_enums(self):

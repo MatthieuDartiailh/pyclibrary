@@ -100,9 +100,9 @@ class TestCustomType(object):
         assert (cm.CustomType('qualtype', quals=['tq1']).resolve(typedefs) ==
                 cm.BuiltinType('char', quals=['tq1', 'tq2']))
 
-        with pytest.raises(cm.UnknownCustomType):
+        with pytest.raises(cm.UnknownCustomTypeError):
             cm.CustomType('unknowntype').resolve(typedefs)
-        with pytest.raises(cm.UnknownCustomType):
+        with pytest.raises(cm.UnknownCustomTypeError):
             cm.CustomType('cyclictype').resolve(typedefs)
 
 
@@ -218,7 +218,7 @@ class TestPointerType(object):
         assert (cm.PointerType(cm.CustomType('ptr')).resolve(typedefs) ==
                 cm.PointerType(cm.PointerType(simple_type)))
 
-        with pytest.raises(cm.UnknownCustomType):
+        with pytest.raises(cm.UnknownCustomTypeError):
             cm.CustomType('cycle').resolve(typedefs)
 
 
