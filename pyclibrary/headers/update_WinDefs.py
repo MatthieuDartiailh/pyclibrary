@@ -12,9 +12,9 @@ copyright issues. Thus there is the cache file 'WinDefs.cache' here
 which encapsulate definitions pulled from several headers included
 in Visual Studio
 
-This script updatthe cache fileche.
+This script updates the WinDefs.cache file.
 It has to be run on one of the following conditions:
-* a another Visual C/C++ compiler version is used
+* another Visual C/C++ compiler version is used
 * the object model of the parser was updated.
 """
 from __future__ import (division, unicode_literals, print_function,
