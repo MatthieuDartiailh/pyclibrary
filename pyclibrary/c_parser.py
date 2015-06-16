@@ -1210,7 +1210,7 @@ class CParser(object):
                              ((Optional(ident)('name') +
                                self.decl_list) | ident('name'))
                              )
-        self.struct_type.setParseAction(self.process_struct)
+        self.struct_type.setParseAction(self.process_compound)
 
         self.struct_decl = self.struct_type + semi
 
@@ -1406,7 +1406,7 @@ class CParser(object):
                 break
         return packing
 
-    def process_struct(self, s, l, t):
+    def process_compound(self, s, l, t):
         """
         """
         try:
@@ -1417,23 +1417,24 @@ class CParser(object):
 
             logger.debug('{} {} {}'.format(str_typ.upper(), t.name, t))
             if t.name == '':
-                n = 0
+                n = 0 ###TODO: replace by anonymous enum counter in clibinterface
                 while True:
-                    sname = 'anon_{}{}'.format(str_typ, n)
-                    if sname not in self.defs[str_typ+'s']:
+                    sname = '{0} anon_{0}{1}'.format(str_typ, n)
+                    if sname not in self.clib_intf.typedefs:
                         break
                     n += 1
             else:
                 if istext(t.name):
-                    sname = t.name
+                    sname = str_typ + ' ' + t.name
                 else:
-                    sname = t.name[0]
+                    sname = str_typ + ' ' + t.name[0]
 
             logger.debug("  NAME: {}".format(sname))
-            if (len(t.members) > 0 or sname not in self.defs[str_typ+'s'] or
-                    self.defs[str_typ+'s'][sname] == {}):
+            if (len(t.members) > 0 or sname not in self.clib_intf.typedefs or
+                    self.clib_intf.typedefs[sname].fields == {}):
                 logger.debug("  NEW " + str_typ.upper())
-                struct = []
+                struct_ = []
+                fields = []
                 for m in t.members:
                     typ = m[0].type
                     val = self.eval_expr(m[0].value)
@@ -1441,25 +1442,47 @@ class CParser(object):
                                  m, m[0].keys(), m[0].decl_list))
 
                     if len(m[0].decl_list) == 0:  # anonymous member
+                        if str_typ == 'struct':
+                            field = (None, c_model.CustomType(typ[0]), None)
+                        else:
+                            field = (None, c_model.CustomType(typ[0]))
+                        fields.append(field)
+
                         member = [None, Type(typ[0]), None]
                         if m[0].bit:
                             member.append(int(m[0].bit))
-                        struct.append(tuple(member))
+                        struct_.append(tuple(member))
 
                     for d in m[0].decl_list:
-                        (name, decl, _) = self.process_type(typ, d)
+                        (name, decl, field_type) = self.process_type(typ, d)
+
+                        if str_typ == 'struct':
+                            bitsize = int(m[0].bits) if m[0].bits else None
+                            field = (name, field_type, bitsize)
+                        else:
+                            field = (name, field_type)
+                        fields.append(field)
+
                         member = [name, decl, val]
                         if m[0].bit:
+                            field += field + (int(m[0].bit),)
                             member.append(int(m[0].bit))
-                        struct.append(tuple(member))
+                        struct_.append(tuple(member))
+
                         logger.debug("      {} {} {} {}".format(name, decl,
                                      val, m[0].bit))
 
+                if str_typ == 'struct':
+                    compound_def = c_model.StructType(fields, packing)
+                else:
+                    compound_def = c_model.UnionType(fields)
+                self.clib_intf.add_typedef(sname, compound_def)
+
                 str_cls = (Struct if str_typ == 'struct' else Union)
-                self.add_def(str_typ + 's', sname,
-                             str_cls(*struct, pack=packing))
-                self.add_def('types', str_typ+' '+sname, Type(str_typ, sname))
-            return str_typ + ' ' + sname
+                self.add_def(str_typ + 's', sname[len(str_typ) + 1:],
+                             str_cls(*struct_, pack=packing))
+                self.add_def('types', sname, Type(str_typ, sname))
+            return sname
 
         except Exception:
             logger.exception('Error processing struct: {}'.format(t))

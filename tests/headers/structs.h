@@ -32,9 +32,23 @@ typedef struct tagWNDCLASSEXA {
 } WNDCLASSEXA, *PWNDCLASSEXA, near *NPWNDCLASSEXA, far *LPWNDCLASSEXA;
 
 // Test altering the packing of a structure.
-#pragma pack(16)
+#pragma pack(push, 16)
 struct struct_name_p
 {
   int x; type_type_int y;
   char str[10] = "brace }  \0"; /* commented brace } */
 };
+
+#pragma pack(pop)
+struct default_packsize
+{
+    int x;
+} ;
+
+struct unnamed_struct {
+    struct struct_name;
+} ;
+
+const struct typequals {
+    int x;
+} volatile typequals_var;

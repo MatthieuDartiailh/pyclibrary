@@ -636,45 +636,51 @@ class TestParsing(object):
         self.parser.load_file(path)
         self.parser.process_all()
 
-        structs = self.parser.defs['structs']
-        types = self.parser.defs['types']
-        variables = self.parser.defs['variables']
+        tdefs = self.parser.clib_intf.typedefs
+        vars = self.parser.clib_intf.vars
 
         # Test creating a structure using only base types.
-        assert ('struct_name' in structs and 'struct struct_name' in types)
-        assert structs['struct_name'] == \
-               Struct(('x', Type('int'), 1),
-                      ('y', Type('type_type_int'), None, 2),
-                      ('str', Type('char', [10]), None))
-        assert ('struct_inst' in variables and
-                variables['struct_inst'] == (None, Type('struct struct_name')))
+        assert (tdefs['struct struct_name'] ==
+                cm.StructType([('x', cm.BuiltinType('int'), None),
+                               ('y', cm.CustomType('type_type_int'), None),
+                               ('str', cm.ArrayType(cm.BuiltinType('char'),
+                                                    10), None)]))
+        assert vars['struct_inst'] == cm.CustomType('struct struct_name')
 
         # Test creating a pointer type from a structure.
-        assert ('struct_name_ptr' in types and
-                types['struct_name_ptr'] == Type('struct struct_name', '*'))
+        assert (tdefs['struct_name_ptr'] ==
+                cm.PointerType(cm.CustomType('struct struct_name')))
 
-        assert ('struct_name2_ptr' in types and
-                types['struct_name2_ptr'] == Type('struct anon_struct0', '*'))
+        assert (tdefs['struct_name2_ptr'] ==
+                cm.PointerType(cm.CustomType('struct anon_struct0')))
 
         # Test declaring a recursive structure.
-        assert ('recursive_struct' in structs and
-                'struct recursive_struct' in types)
-        assert structs['recursive_struct'] == \
-               Struct(('next', Type('struct recursive_struct', '*'), None))
+        assert (tdefs['struct recursive_struct'] ==
+                cm.StructType([('next', cm.PointerType(
+                    cm.CustomType('struct recursive_struct')), None)]))
 
         # Test declaring near and far pointers.
-        assert 'tagWNDCLASSEXA' in structs
-        assert ('NPWNDCLASSEXA' in types and
-                ( types['NPWNDCLASSEXA'] ==
-                 Type('struct tagWNDCLASSEXA', '*', type_quals=(('near',), ()))))
+        assert (tdefs['NPWNDCLASSEXA'] ==
+                cm.PointerType(cm.CustomType('struct tagWNDCLASSEXA',
+                                             quals=['near'])))
 
         # Test altering the packing of a structure.
-        assert ('struct_name_p' in structs and 'struct struct_name_p' in types)
-        assert structs['struct_name_p'] == \
-               Struct(('x', Type('int'), None),
-                      ('y', Type('type_type_int'), None),
-                      ('str', Type('char', [10]), "brace }  \0"),
-                      pack=16)
+        assert (tdefs['struct struct_name_p'] ==
+               cm.StructType([('x', cm.BuiltinType('int'), None),
+                              ('y', cm.CustomType('type_type_int'), None),
+                              ('str', cm.ArrayType(cm.BuiltinType('char'),
+                                                   10),
+                               None)],
+                             packsize=16))
+
+        assert tdefs['struct default_packsize'].packsize is None
+
+        assert (tdefs['struct unnamed_struct'] ==
+                cm.StructType([
+                    (None, cm.CustomType('struct struct_name'), None)]))
+
+        assert tdefs['struct typequals'].quals == []
+        assert vars['typequals_var'].quals == ['const', 'volatile']
 
     def test_unions(self):
 
@@ -682,43 +688,34 @@ class TestParsing(object):
         self.parser.load_file(path)
         self.parser.process_all()
 
-        unions = self.parser.defs['unions']
-        structs = self.parser.defs['structs']
-        types = self.parser.defs['types']
-        variables = self.parser.defs['variables']
+        tdefs = self.parser.clib_intf.typedefs
+        vars = self.parser.clib_intf.vars
 
         # Test declaring an union.
-        assert 'union_name' in unions and 'union union_name' in types
-        assert unions['union_name'] == \
-               Union(('x', Type('int'), 1),
-                     ('y', Type('int'), None),
-                     pack=None)
-        assert ('union_name_ptr' in types and
-                types['union_name_ptr'] == Type('union union_name', '*'))
+        assert (tdefs['union union_name'] ==
+                cm.UnionType([('x', cm.BuiltinType('int')),
+                              ('y', cm.BuiltinType('int'))]))
+        assert (tdefs['union_name_ptr'] ==
+                cm.PointerType(cm.CustomType('union union_name')))
 
         # Test defining an unnamed union
-        assert ('no_name_union_inst' in variables and
-                variables['no_name_union_inst'] == (None,
-                                                    Type('union anon_union0')))
+        assert (vars['no_name_union_inst'] ==
+                cm.CustomType('union anon_union0'))
+
 
         # Test defining a structure using an unnamed union internally.
-        assert ('tagRID_DEVICE_INFO' in structs and
-                structs['tagRID_DEVICE_INFO'] == \
-                Struct(('cbSize', Type('DWORD'), None),
-                       ('dwType', Type('DWORD'), None),
-                       (None, Type('union anon_union1'), None)))
+        assert (tdefs['struct tagRID_DEVICE_INFO'] ==
+                cm.StructType([
+                    ('cbSize', cm.CustomType('DWORD'), None),
+                    ('dwType', cm.CustomType('DWORD'), None),
+                    (None, cm.CustomType('union anon_union1'), None)]))
 
-        assert ('RID_DEVICE_INFO' in types and
-                types['RID_DEVICE_INFO'] == Type('struct tagRID_DEVICE_INFO'))
-        assert ('PRID_DEVICE_INFO' in types and
-                types['PRID_DEVICE_INFO'] ==
-                    Type('struct tagRID_DEVICE_INFO', '*')
-                )
-        assert ('LPRID_DEVICE_INFO' in types and
-                ( types['LPRID_DEVICE_INFO'] ==
-                  Type('struct tagRID_DEVICE_INFO', '*')
-                  )
-                )
+        assert (tdefs['RID_DEVICE_INFO'] ==
+                cm.CustomType('struct tagRID_DEVICE_INFO'))
+        assert (tdefs['PRID_DEVICE_INFO'] ==
+                cm.PointerType(cm.CustomType('struct tagRID_DEVICE_INFO')))
+        assert (tdefs['LPRID_DEVICE_INFO'] ==
+                cm.PointerType(cm.CustomType('struct tagRID_DEVICE_INFO')))
 
     def test_functions(self):
 
