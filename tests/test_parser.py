@@ -726,24 +726,44 @@ class TestParsing(object):
         functions = self.parser.defs['functions']
         variables = self.parser.defs['variables']
 
-        assert functions.get('f') == \
-               Type(Type('void'), ( (None, Type('int'), None),
-                                    (None, Type('int'), None) ))
-        assert functions['g'] == \
-               Type(Type('int'), ( ('ch', Type('char', '*'), None),
-                                   ('str', Type('char', '*', '*'), None) ))
-        assert variables.get('fnPtr') == \
-               (None, Type('int',
-                           ( (None, Type('char'), None),
-                             (None, Type('float'), None) ),
-                           '*'))
-        assert functions.get('function1') == \
-               Type(Type('int', '__stdcall', type_quals=((), None)), ())
+        funcs = self.parser.clib_intf.funcs
+        vars = self.parser.clib_intf.vars
 
-        assert functions.get('function2') == Type(Type('int'), ())
+        assert (funcs['f'] ==
+                cm.FunctionType(
+                    cm.BuiltinType('void'),
+                    [(None, cm.BuiltinType('int')),
+                     (None, cm.BuiltinType('int'))]))
+        assert (funcs['g'] ==
+                cm.FunctionType(
+                    cm.BuiltinType('int'),
+                    [('ch', cm.PointerType(cm.BuiltinType('char'))),
+                     ('str', cm.PointerType(cm.PointerType(
+                         cm.BuiltinType('char'))))])
+                )
+        assert (vars['fnPtr'] ==
+                cm.PointerType(
+                    cm.FunctionType(
+                        cm.BuiltinType('int'),
+                        [(None, cm.BuiltinType('char')),
+                         (None, cm.BuiltinType('float'))])))
+        assert (funcs['function1'] ==
+                cm.FunctionType(
+                    cm.BuiltinType('int'),
+                    [],
+                    quals=['__stdcall']))
+        assert (funcs['function2'] ==
+                cm.FunctionType(cm.BuiltinType('int'), []))
 
-        assert 'externFunc' in functions
+        assert 'externFunc' in funcs
 
-        ptyp = Type('int', '*', '*', type_quals=(('volatile',), ('const',), ()))
-        assert functions.get('typeQualedFunc') == \
-               Type(Type('int'), ((None, ptyp, None),))
+        ptyp = cm.PointerType(
+            cm.PointerType(
+                cm.BuiltinType('int', quals=['volatile']),
+                quals=['const']))
+        assert (funcs['typeQualedFunc'] ==
+                cm.FunctionType(cm.BuiltinType('int'), [(None, ptyp)]))
+
+        ###TODO: add __declspec() qualifier support
+
+    ###TODO: add test filemap to every clib_intf object

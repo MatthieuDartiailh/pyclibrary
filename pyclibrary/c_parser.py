@@ -1248,7 +1248,7 @@ class CParser(object):
         result_type = base_type
 
         if 'call_conv' in decl and len(decl['call_conv']) > 0:
-            toks.append(decl['call_conv'])
+            toks.append(decl['call_conv']) ###TODO: merge call_conv with type_quals
             quals.append(None)
 
         if 'ptrs' in decl and len(decl['ptrs']) > 0:
@@ -1271,12 +1271,18 @@ class CParser(object):
         if 'args' in decl and len(decl['args']) > 0:
             if decl['args'][0] is None:
                 toks.append(())
+                params = []
             else:
                 toks.append(tuple([(self.process_type(a['type'], a['decl'])[:-1] +
                                     (a['val'][0],))
-                                   for a in decl['args']])
-                            )
+                                   for a in decl['args']]))
+                params = [self.process_type(a['type'], a['decl'])[::2]
+                          for a in decl['args']]
+            call_conv = [decl['call_conv']] if 'call_conv' in decl else []
+            result_type = c_model.FunctionType(base_type, params,
+                                               quals=call_conv)
             quals.append(())
+
         if 'ref' in decl:
             toks.append('&')
             quals.append(())
@@ -1382,7 +1388,7 @@ class CParser(object):
         logger.debug("FUNCTION {} : {}".format(t, t.keys()))
 
         try:
-            (name, decl, _) = self.process_type(t.type, t.decl[0])
+            (name, decl, type_) = self.process_type(t.type, t.decl[0])
             if len(decl) == 0 or type(decl[-1]) != tuple:
                 logger.error('{}'.format(t))
                 mess = "Incorrect declarator type for function definition."
@@ -1390,6 +1396,7 @@ class CParser(object):
             logger.debug("  name: {}".format(name))
             logger.debug("  sig: {}".format(decl))
             self.add_def('functions', name, decl.add_compatibility_hack())
+            self.clib_intf.add_func(name, type_)
 
         except Exception:
             logger.exception("Error processing function: {}".format(t))
@@ -1496,11 +1503,12 @@ class CParser(object):
             for d in t[0].decl_list:
                 (name, typ, type_) = self.process_type(t[0].type, d)
                 # This is a function prototype
-                if type(typ[-1]) is tuple:
+                if isinstance(type_, c_model.FunctionType):
                     logger.debug("  Add function prototype: {} {} {}".format(
                                  name, typ, val))
                     self.add_def('functions', name,
                                  typ.add_compatibility_hack())
+                    self.clib_intf.add_func(name, type_, self.current_file)
                 # This is a variable
                 else:
                     logger.debug("  Add variable: {} {} {}".format(name,
