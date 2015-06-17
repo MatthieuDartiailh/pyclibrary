@@ -1,6 +1,13 @@
 PyCLibrary Changelog
 ====================
 
+0.1.2
+-----
+
+- Update windows headers cache and fix minor issues related to win_defs. 
+  (Robert Hoelzl)
+
+
 0.1.1
 -----
 
