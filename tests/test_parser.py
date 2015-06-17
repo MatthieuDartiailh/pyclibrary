@@ -15,7 +15,7 @@ from __future__ import (division, unicode_literals, print_function,
 import os
 import sys
 from pytest import raises
-from pyclibrary.c_parser import CParser, Type, Struct, Union, Enum
+from pyclibrary.c_parser import CParser
 import pyclibrary.utils
 import pyclibrary.c_model as cm
 
@@ -29,126 +29,6 @@ def compare_lines(lines, lines2):
     """
     for l, l_test in zip(lines, lines2):
         assert l.strip() == l_test.strip()
-
-
-class TestType(object):
-
-    def test_init(self):
-        with raises(ValueError):
-            Type('int', '*', type_quals=(('volatile',),))
-
-    def test_tuple_equality(self):
-        assert Type('int') == ('int',)
-        assert ('int',) == Type('int')
-
-        assert Type('int', '*', type_quals=[['const'], ['volatile']]) == \
-               ('int', '*')
-
-        assert issubclass(Type, tuple)
-
-    def test_Type_equality(self):
-        assert Type('int', '*', type_quals=(('const',), ('volatile',))) == \
-               Type('int', '*', type_quals=(('const',), ('volatile',)))
-        assert Type('int', '*', type_quals=(('const',), ())) != \
-               Type('int', '*', type_quals=(('const',), ('volatile',)))
-
-    def test_getters(self):
-        assert Type('int', '*').type_spec == 'int'
-        assert Type('int', '*', [1]).declarators == ('*', [1])
-        assert Type('int', '*', type_quals=(('volatile',), ())).type_quals == \
-               (('volatile',), ())
-
-    def test_is_fund_type(self):
-        assert not Type('custom_typedef').is_fund_type()
-
-        assert Type('int').is_fund_type()
-        assert Type('int', '*').is_fund_type()
-        assert Type('int', [1]).is_fund_type()
-        assert Type('int', ()).is_fund_type()
-        assert Type('int', type_quals=(('volatile',))).is_fund_type()
-
-        assert Type('unsigned').is_fund_type()
-        assert Type('short').is_fund_type()
-        assert Type('unsigned short int').is_fund_type()
-        assert Type('struct test').is_fund_type()
-
-    def test_eval(self):
-        type_map = {
-            'tq_parent_type': Type('int', '*',
-                                   type_quals=(('__tq1',), ('__tq2',))),
-            'parent_type': Type('int', '*', '*', [2]),
-            'child_type': Type('parent_type', '*', [3]) }
-
-        assert Type('parent_type', '*', [1]).eval(type_map) == \
-               Type('int', '*', '*', [2], '*', [1])
-        assert Type('child_type', (), '*').eval(type_map) == \
-               Type('int', '*', '*', [2], '*', [3], (), '*')
-        assert Type('tq_parent_type', [1],
-                    type_quals=(('__tq3',), ('__tq4',))).eval(type_map) == \
-               Type('int', '*', [1],
-                    type_quals=(('__tq1',), ('__tq2', '__tq3'), ('__tq4',)))
-
-    def test_compatibility_hack(self):
-        assert Type('int', '*', ()).add_compatibility_hack() == \
-               Type(Type('int', '*'), ())
-        assert Type('int', '*', (), '*').add_compatibility_hack() == \
-               Type('int', '*', (), '*')
-        assert Type('int', (), type_quals=(('const',), ('__interrupt',)))\
-                   .add_compatibility_hack() == \
-               Type(Type('int', type_quals=(('const',),)), (),
-                    type_quals=((), ('__interrupt',),))
-
-        assert Type(Type('int', '*'), ()).remove_compatibility_hack() == \
-               Type('int', '*', ())
-        assert Type('int', '*', ()).remove_compatibility_hack() == \
-               Type('int', '*', ())
-
-    def test_repr(self):
-        assert repr(Type('int', '*')) == "Type({!r}, {!r})".format('int', '*')
-        assert repr(Type('int', '*', type_quals=(('volatile',), ()))) == \
-               ('Type({!r}, {!r}, type_quals=(({!r},), ()))'
-                .format('int', '*', 'volatile'))
-
-
-class TestStructUnion(object):
-
-    TEST_MEMBERS = [ ('a', Type('int'), None),
-                     ('b', Type('char', '*'), None)]
-
-    def test_init(self):
-        assert Struct().members == []
-        assert Struct().pack == None
-        assert Struct(*self.TEST_MEMBERS).members == self.TEST_MEMBERS
-        assert Struct(pack=2).pack == 2
-
-        assert Union(*self.TEST_MEMBERS).members == self.TEST_MEMBERS
-
-    def test_list_equality(self):
-        assert Struct(*self.TEST_MEMBERS, pack=2) == {
-            'members': [ ('a', Type('int'), None),
-                         ('b', Type('char', '*'), None)],
-            'pack': 2 }
-        assert issubclass(Struct, dict)
-
-        assert Union(*self.TEST_MEMBERS)['members'] == self.TEST_MEMBERS
-
-    def test_repr(self):
-        assert repr(Struct()) == 'Struct()'
-        assert repr(Struct(*self.TEST_MEMBERS, pack=2)) == \
-               ( 'Struct(' + repr(self.TEST_MEMBERS[0]) + ', ' +
-                 repr(self.TEST_MEMBERS[1]) + ', pack=2)' )
-        assert repr(Union()) == 'Union()'
-
-
-class TestEnum(object):
-
-    def test_dict_equality(self):
-        assert Enum(a=1, b=2) == {'a':1, 'b':2}
-        assert issubclass(Enum, dict)
-
-
-    def test_repr(self):
-        assert repr(Enum(a=1, b=2)) == 'Enum(a=1, b=2)'
 
 
 class TestFileHandling(object):
@@ -648,7 +528,7 @@ class TestParsing(object):
         # Test creating a structure using only base types.
         assert (tdefs['struct struct_name'] ==
                 cm.StructType([('x', cm.BuiltinType('int'), None),
-                               ('y', cm.CustomType('type_type_int'), None),
+                               ('y', cm.CustomType('type_type_int'), 2),
                                ('str', cm.ArrayType(cm.BuiltinType('char'),
                                                     10), None)]))
         assert vars['struct_inst'] == cm.CustomType('struct struct_name')

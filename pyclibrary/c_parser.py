@@ -43,266 +43,13 @@ logger = logging.getLogger(__name__)
 __all__ = ['win_defs', 'CParser']
 
 
-class Type(tuple):
-    """
-    Representation of a C type. CParser uses this class to store the parsed
-    typedefs and the types of variable/func.
-
-    **ATTENTION:** Due to compatibility issues with 0.1.0 this class derives
-    from tuple and can be seen as the tuples from 0.1.0. In future this might
-    change to a tuple-like object!!!
-
-    Parameters
-    ----------
-    type_spec : str
-        a string referring the base type of this type defintion. This may
-        either be a fundametal type (i.e. 'int', 'enum x') or a type definition
-        made by a typedef-statement
-
-    declarators : str or list of tuple
-        all following parameters are deriving a type from the type defined
-        until now. Types can be derived by:
-
-        - The string '*': define a pointer to the base type
-          (i.E. Type('int', '*'))
-        - The string '&': a reference. T.B.D.
-        - A list of integers of len 1: define an array with N elements
-          (N is the first and single entry in the list of integers). If N is
-          -1, the array definition is seen as 'int x[]'
-          (i.E. Type('int', [1])
-        - a N-tuple of 3-tuples: defines a function of N parameters. Every
-          parameter is a 3 tuple of the form:
-          (<parameter-name-or-None>, <param-type>, None).
-          Due to compatibility reasons the return value of the function is
-          stored in Type.type_spec parameter
-          (This is **not** the case for function pointers):
-          (i.E. Type(Type('int', '*'), ( ('param1', Type('int'), None), ) ) )
-
-    type_quals : dict of int to list of str (optional)
-        this optional (keyword-)argument allows to optionally add type
-        qualifiers for every declarator level. The key 0 refers the type
-        qualifier of type_spec, while 1 refers to declarators[0], 2 refers to
-        declarators[1] and so on.
-
-    To build more complex types any number of declarators can be combined. i.E.
-
-    >>> int * (*a[2])(char *, signed c[]);
-
-    if represented as:
-
-    >>> Type('int', '*',
-    >>>      ( (None, Type('char', '*'), None),
-    >>>        ('c', Type('signed', [-1]), None) )),
-    >>>      '*', [2])
-
-    """
-    # Cannot slot a subclass of tuple.
-    def __new__(cls, type_spec, *declarators, **argv):
-        return super(Type, cls).__new__(cls, (type_spec,) + declarators)
-
-    def __init__(self, type_spec, *declarators, **argv):
-        super(Type, self).__init__()
-        self.type_quals = (argv.pop('type_quals', None) or
-                           ((),) * (1 + len(declarators)))
-        if len(self.type_quals) != 1 + len(declarators):
-            raise ValueError("wrong number of type qualifiers")
-        assert len(argv) == 0, 'Invalid Parameter'
-
-    def __eq__(self, other):
-        if isinstance(other, Type):
-            if self.type_quals != other.type_quals:
-                return False
-        return super(Type, self).__eq__(other)
-
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
-    @property
-    def declarators(self):
-        """Return a tuple of all declarators.
-
-        """
-        return tuple(self[1:])
-
-    @property
-    def type_spec(self):
-        """Return the base type of this type.
-
-        """
-        return self[0]
-
-    def is_fund_type(self):
-        """Returns True, if this type is a fundamental type.
-        Fundamental types are all types, that are not defined via typedef
-
-        """
-
-        if (self[0].startswith('struct ') or self[0].startswith('union ') or
-                self[0].startswith('enum ')):
-            return True
-
-        names = (num_types + nonnum_types + size_modifiers + sign_modifiers +
-                 extra_type_list)
-        for w in self[0].split():
-            if w not in names:
-                return False
-        return True
-
-    def eval(self, type_map, used=None):
-        """Resolves the type_spec of this type recursively if it is referring
-        to a typedef. For resolving the type type_map is used for lookup.
-        Returns a new Type object.
-
-        Parameters
-        ----------
-        type_map : dict of str to Type
-            All typedefs that shall be resolved have to be stored in this
-            type_map.
-
-        used : list of str
-            For internal use only to prevent circular typedefs
-
-        """
-        used = used or []
-
-        if self.is_fund_type():
-            # Remove 'signed' before returning evaluated type
-            return Type(re.sub(r'\bsigned\b', '', self.type_spec).strip(),
-                        *self.declarators,
-                        type_quals=self.type_quals)
-
-        parent = self.type_spec
-        if parent in used:
-            m = 'Recursive loop while evaluating types. (typedefs are {})'
-            raise DefinitionError(m.format(' -> '.join(used+[parent])))
-
-        used.append(parent)
-        if parent not in type_map:
-            m = 'Unknown type "{}" (typedefs are {})'
-            raise DefinitionError(m.format(parent, ' -> '.join(used)))
-
-        pt = type_map[parent]
-        evaled_type = Type(pt.type_spec, *(pt.declarators + self.declarators),
-                           type_quals=(pt.type_quals[:-1] +
-                                       (pt.type_quals[-1] +
-                                        self.type_quals[0],) +
-                                       self.type_quals[1:])
-                           )
-
-        return evaled_type.eval(type_map, used)
-
-    def add_compatibility_hack(self):
-        """If This Type is refering to a function (**not** a function pointer)
-        a new type is returned, that matches the hack from version 0.1.0.
-        This hack enforces the return value be encapsulated in a separated Type
-        object:
-
-            Type('int', '*', ())
-
-        is converted to
-
-            Type(Type('int', '*'), ())
-        """
-        if type(self[-1]) == tuple:
-            return Type(Type(*self[:-1], type_quals=self.type_quals[:-1]),
-                        self[-1],
-                        type_quals=((), self.type_quals[-1]))
-        else:
-            return self
-
-    def remove_compatibility_hack(self):
-        """Returns a Type object, where the hack from .add_compatibility_hack()
-        is removed
-
-        """
-        if len(self) == 2 and isinstance(self[0], Type):
-            return Type(*(self[0] + (self[1],)))
-        else:
-            return self
-
-    def __repr__(self):
-        type_qual_str = ('' if not any(self.type_quals) else
-                         ', type_quals='+repr(self.type_quals))
-        return (type(self).__name__ + '(' +
-                ', '.join(map(repr, self)) + type_qual_str + ')')
-
-
-class Compound(dict):
-    """Base class for representing object using a dict-like interface.
-
-    """
-    __slots__ = ()
-
-    def __init__(self, *members, **argv):
-        members = list(members)
-        pack = argv.pop('pack', None)
-        assert len(argv) == 0
-
-        super(Compound, self).__init__(dict(members=members, pack=pack))
-
-    def __repr__(self):
-        packParam = ', pack='+repr(self.pack) if self.pack is not None else ''
-        return (type(self).__name__ + '(' +
-                ', '.join(map(repr, self.members)) + packParam + ')')
-
-    @property
-    def members(self):
-        return self['members']
-
-    @property
-    def pack(self):
-        return self['pack']
-
-
-class Struct(Compound):
-    """Representation of a C struct. CParser uses this class to store the parsed
-    structs.
-
-    **ATTENTION:** Due to compatibility issues with 0.1.0 this class derives
-    from dict and can be seen as the dicts from 0.1.0. In future this might
-    change to a dict-like object!!!
-    """
-    __slots__ = ()
-
-
-class Union(Compound):
-    """Representation of a C union. CParser uses this class to store the parsed
-    unions.
-
-    **ATTENTION:** Due to compatibility issues with 0.1.0 this class derives
-    from dict and can be seen as the dicts from 0.1.0. In future this might
-    change to a dict-like object!!!
-    """
-    __slots__ = ()
-
-
-class Enum(dict):
-    """Representation of a C enum. CParser uses this class to store the parsed
-    enums.
-
-    **ATTENTION:** Due to compatibility issues with 0.1.0 this class derives
-    from dict and can be seen as the dicts from 0.1.0. In future this might
-    change to a dict-like object!!!
-    """
-    __slots__ = ()
-
-    def __init__(self, **args):
-        super(Enum, self).__init__(args)
-
-    def __repr__(self):
-        return (type(self).__name__ + '(' +
-                ', '.join(nm + '=' + repr(val)
-                          for nm, val in sorted(self.items())) +
-                ')')
-
-
 def win_defs(version='1500'):
     """Loads selection of windows headers included with PyCLibrary.
 
     These definitions can either be accessed directly or included before
     parsing another file like this:
-    >>> windefs = c_parser.win_defs()
-    >>> p = c_parser.CParser("headerFile.h", copy_from=windefs)
+    >>> windefs = win_defs()
+    >>> p = CParser("headerFile.h", copy_from=windefs)
 
     Definitions are pulled from a selection of header files included in Visual
     Studio (possibly not legal to distribute? Who knows.), some of which have
@@ -1247,22 +994,12 @@ class CParser(object):
         base_type.quals += list(decl.get('first_typequal', []))
         result_type = base_type
 
-        if 'call_conv' in decl and len(decl['call_conv']) > 0:
-            toks.append(decl['call_conv']) ###TODO: merge call_conv with type_quals
-            quals.append(None)
-
         if 'ptrs' in decl and len(decl['ptrs']) > 0:
-            toks += ('*',) * len(decl['ptrs'])
-            quals += map(tuple, decl['ptrs'])
             for ptr_level in decl['ptrs']:
                 result_type = c_model.PointerType(result_type,
                                                   quals=list(ptr_level))
 
         if 'arrays' in decl and len(decl['arrays']) > 0:
-            for x in decl['arrays']:
-                arrsize = self.eval_expr(x) if x != '' else -1
-                toks.append([arrsize])
-            quals += [()] * len(decl['arrays'])
             for ast_arrsize in reversed(decl['arrays']):
                 arrsize = (self.eval_expr(ast_arrsize) if ast_arrsize != ''
                            else None)
@@ -1270,34 +1007,29 @@ class CParser(object):
 
         if 'args' in decl and len(decl['args']) > 0:
             if decl['args'][0] is None:
-                toks.append(())
                 params = []
             else:
-                toks.append(tuple([(self.process_type(a['type'], a['decl'])[:-1] +
-                                    (a['val'][0],))
-                                   for a in decl['args']]))
-                params = [self.process_type(a['type'], a['decl'])[::2]
+                params = [self.process_type(a['type'], a['decl'])
                           for a in decl['args']]
+            ###TODO: merge call_conv with type_quals
             call_conv = [decl['call_conv']] if 'call_conv' in decl else []
             result_type = c_model.FunctionType(base_type, params,
                                                quals=call_conv)
-            quals.append(())
 
         if 'ref' in decl:
             toks.append('&')
             quals.append(())
 
         if 'center' in decl:
-            (n, t, q, result_type) = self.process_declarator(decl['center'][0], result_type)
+            (n, result_type) = self.process_declarator(decl['center'][0],
+                                                       result_type)
             if n is not None:
                 name = n
-            toks.extend(t)
-            quals = quals[:-1] + [quals[-1] + q[0]] + list(q[1:])
 
         if 'name' in decl:
             name = decl['name']
 
-        return (name, toks, tuple(quals), result_type)
+        return (name, result_type)
 
     def process_type(self, type_ast, decl):
         """Take a declarator + base type and return a serialized name/type
@@ -1334,12 +1066,9 @@ class CParser(object):
             base_type = c_model.BuiltinType(ast_name, tpquals)
         else:
             base_type = c_model.CustomType(ast_name, tpquals)
-        (name, decl, quals, type_) = self.process_declarator(decl, base_type)
+        (name, type_) = self.process_declarator(decl, base_type)
 
-        return (name,
-                Type(ast_name, *decl,
-                     type_quals=(tuple(type_ast.get('pre_qual', [])) + quals[0],) + quals[1:]),
-                type_)
+        return (name, type_)
 
     def process_enum(self, s, l, t):
         """
@@ -1350,7 +1079,7 @@ class CParser(object):
                 n = 0   ###TODO: replace by anonymous enum counter in clibinterface
                 while True:
                     name = 'anon_enum{}'.format(n)   ###TODO: rename to '$'+nr to avoid name clashes
-                    if name not in self.defs['enums']:
+                    if ('enum ' + name) not in self.clib_intf.typedefs:
                         break
                     n += 1
             else:
@@ -1359,24 +1088,19 @@ class CParser(object):
             logger.debug("  name: {}".format(name))
 
             if ('enum ' + name) not in self.clib_intf.typedefs:
-                enum = {}
                 enum_vals = []
                 cur_enum_val = 0
                 for v in t.members:
                     if v.value != '':
                         cur_enum_val = literal_eval(v.value)
                     if v.valueName != '':
-                        cur_enum_val = enum[v.valueName]
-                    enum[v.name] = cur_enum_val
+                        cur_enum_val = dict(enum_vals)[v.valueName]
                     enum_vals.append((v.name, cur_enum_val))
-                    self.add_def('values', v.name, cur_enum_val)
                     cur_enum_val += 1
-                logger.debug("  members: {}".format(enum))
+                logger.debug("  members: {}".format(enum_vals))
                 self.clib_intf.add_typedef('enum ' + name,
                                            c_model.EnumType(enum_vals),
                                            self.current_file)
-                self.add_def('enums', name, enum)
-                self.add_def('types', 'enum '+name, Type('enum', name))
             return ('enum ' + name)
         except:
             logger.exception("Error processing enum: {}".format(t))
@@ -1388,14 +1112,12 @@ class CParser(object):
         logger.debug("FUNCTION {} : {}".format(t, t.keys()))
 
         try:
-            (name, decl, type_) = self.process_type(t.type, t.decl[0])
-            if len(decl) == 0 or type(decl[-1]) != tuple:
+            (name, type_) = self.process_type(t.type, t.decl[0])
+            if not isinstance(type_, c_model.FunctionType):
                 logger.error('{}'.format(t))
                 mess = "Incorrect declarator type for function definition."
                 raise DefinitionError(mess)
-            logger.debug("  name: {}".format(name))
-            logger.debug("  sig: {}".format(decl))
-            self.add_def('functions', name, decl.add_compatibility_hack())
+            logger.debug("  sig/name: {}".format(type_.c_repr(name)))
             self.clib_intf.add_func(name, type_, self.current_file)
 
         except Exception:
@@ -1440,7 +1162,6 @@ class CParser(object):
             if (len(t.members) > 0 or sname not in self.clib_intf.typedefs or
                     self.clib_intf.typedefs[sname].fields == {}):
                 logger.debug("  NEW " + str_typ.upper())
-                struct_ = []
                 fields = []
                 for m in t.members:
                     typ = m[0].type
@@ -1455,29 +1176,19 @@ class CParser(object):
                             field = (None, c_model.CustomType(typ[0]))
                         fields.append(field)
 
-                        member = [None, Type(typ[0]), None]
-                        if m[0].bit:
-                            member.append(int(m[0].bit))
-                        struct_.append(tuple(member))
-
                     for d in m[0].decl_list:
-                        (name, decl, field_type) = self.process_type(typ, d)
+                        (name, field_type) = self.process_type(typ, d)
 
                         if str_typ == 'struct':
-                            bitsize = int(m[0].bits) if m[0].bits else None
+                            bitsize = int(m[0].bit) if m[0].bit else None
                             field = (name, field_type, bitsize)
                         else:
+                            bitsize = None
                             field = (name, field_type)
                         fields.append(field)
 
-                        member = [name, decl, val]
-                        if m[0].bit:
-                            field += field + (int(m[0].bit),)
-                            member.append(int(m[0].bit))
-                        struct_.append(tuple(member))
-
-                        logger.debug("      {} {} {} {}".format(name, decl,
-                                     val, m[0].bit))
+                        logger.debug("      {0[0]} {0[1]} {1} {2}".format(
+                            field, val, bitsize))
 
                 if str_typ == 'struct':
                     compound_def = c_model.StructType(fields, packing)
@@ -1487,10 +1198,6 @@ class CParser(object):
                                            compound_def,
                                            self.current_file)
 
-                str_cls = (Struct if str_typ == 'struct' else Union)
-                self.add_def(str_typ + 's', sname[len(str_typ) + 1:],
-                             str_cls(*struct_, pack=packing))
-                self.add_def('types', sname, Type(str_typ, sname))
             return sname
 
         except Exception:
@@ -1503,20 +1210,16 @@ class CParser(object):
         try:
             val = self.eval_expr(t[0])
             for d in t[0].decl_list:
-                (name, typ, type_) = self.process_type(t[0].type, d)
+                (name, type_) = self.process_type(t[0].type, d)
                 # This is a function prototype
                 if isinstance(type_, c_model.FunctionType):
-                    logger.debug("  Add function prototype: {} {} {}".format(
-                                 name, typ, val))
-                    self.add_def('functions', name,
-                                 typ.add_compatibility_hack())
+                    logger.debug("  Add function prototype: {}".format(
+                                 type_.c_repr(name)))
                     self.clib_intf.add_func(name, type_, self.current_file)
                 # This is a variable
                 else:
                     logger.debug("  Add variable: {} {} {}".format(name,
                                  type_, val))
-                    self.add_def('variables', name, (val, typ))
-                    self.add_def('values', name, val)
                     self.clib_intf.add_var(name, type_, self.current_file)
 
         except Exception:
@@ -1528,9 +1231,8 @@ class CParser(object):
         logger.debug("TYPE: {}".format(t))
         ast_type = t.type
         for d in t.decl_list:
-            (name, decl, type_) = self.process_type(ast_type, d)
-            logger.debug("  {} {}".format(name, decl))
-            self.add_def('types', name, decl)
+            (name, type_) = self.process_type(ast_type, d)
+            logger.debug("  {}: {}".format(name, type_))
             self.clib_intf.add_typedef(name, type_, self.current_file)
 
     # --- Utility methods
@@ -1596,27 +1298,6 @@ class CParser(object):
             base_name = os.path.basename(self.current_file)
         del self.defs[typ][name]
         del self.file_defs[base_name][typ][name]
-
-    def is_fund_type(self, typ):
-        """Return True if this type is a fundamental C type, struct, or
-        union.
-
-        **ATTENTION: This function is legacy and should be replaced by
-        Type.is_fund_type()**
-
-        """
-        return Type(typ).is_fund_type()
-
-    def eval_type(self, typ):
-        """Evaluate a named type into its fundamental type.
-
-        **ATTENTION: This function is legacy and should be replaced by
-        Type.eval()**
-
-        """
-        if not isinstance(typ, Type):
-            typ = Type(*typ)
-        return typ.eval(self.defs['types'])
 
     def find(self, name):
         """Search all definitions for the given name.
