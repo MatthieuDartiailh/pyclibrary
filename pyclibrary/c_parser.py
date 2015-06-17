@@ -1396,7 +1396,7 @@ class CParser(object):
             logger.debug("  name: {}".format(name))
             logger.debug("  sig: {}".format(decl))
             self.add_def('functions', name, decl.add_compatibility_hack())
-            self.clib_intf.add_func(name, type_)
+            self.clib_intf.add_func(name, type_, self.current_file)
 
         except Exception:
             logger.exception("Error processing function: {}".format(t))
@@ -1483,7 +1483,9 @@ class CParser(object):
                     compound_def = c_model.StructType(fields, packing)
                 else:
                     compound_def = c_model.UnionType(fields)
-                self.clib_intf.add_typedef(sname, compound_def)
+                self.clib_intf.add_typedef(sname,
+                                           compound_def,
+                                           self.current_file)
 
                 str_cls = (Struct if str_typ == 'struct' else Union)
                 self.add_def(str_typ + 's', sname[len(str_typ) + 1:],

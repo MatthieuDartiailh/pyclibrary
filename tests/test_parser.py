@@ -605,6 +605,10 @@ class TestParsing(object):
         with raises(cm.UnknownCustomTypeError):
             tdefs['recType3'].resolve(tdefs)
 
+        # test filemap
+        assert (os.path.basename(self.parser.clib_intf.file_map['ULONG']) ==
+                'typedefs.h')
+
     def test_enums(self):
 
         path = os.path.join(self.h_dir, 'enums.h')
@@ -619,8 +623,6 @@ class TestParsing(object):
         enum_name_type = cm.EnumType([('enum1', 2), ('enum2', 6),
                                       ('enum3', 7), ('enum4', 8)])
         assert tdefs['enum enum_name'] == enum_name_type
-        enum_name_path = self.parser.clib_intf.file_map['enum enum_name']
-        assert os.path.basename(enum_name_path) == 'enums.h'
         assert vars['enum_inst'] == cm.CustomType('enum enum_name')
 
         # test anonymous enums
@@ -629,6 +631,10 @@ class TestParsing(object):
         assert tdefs['enum anon_enum0'] == cm.EnumType([('x', 0), ('y', 1)])
 
         assert enums['y'] == 1
+
+        # test filemap
+        enum_name_path = self.parser.clib_intf.file_map['enum enum_name']
+        assert os.path.basename(enum_name_path) == 'enums.h'
 
     def test_struct(self):
 
@@ -682,6 +688,10 @@ class TestParsing(object):
         assert tdefs['struct typequals'].quals == []
         assert vars['typequals_var'].quals == ['const', 'volatile']
 
+        # test filemap
+        strct_name_path = self.parser.clib_intf.file_map['struct struct_name']
+        assert os.path.basename(strct_name_path) == 'structs.h'
+
     def test_unions(self):
 
         path = os.path.join(self.h_dir, 'unions.h')
@@ -716,6 +726,10 @@ class TestParsing(object):
                 cm.PointerType(cm.CustomType('struct tagRID_DEVICE_INFO')))
         assert (tdefs['LPRID_DEVICE_INFO'] ==
                 cm.PointerType(cm.CustomType('struct tagRID_DEVICE_INFO')))
+
+        # test filemap
+        union_name_path = self.parser.clib_intf.file_map['union union_name']
+        assert os.path.basename(union_name_path) == 'unions.h'
 
     def test_functions(self):
 
@@ -764,6 +778,10 @@ class TestParsing(object):
         assert (funcs['typeQualedFunc'] ==
                 cm.FunctionType(cm.BuiltinType('int'), [(None, ptyp)]))
 
-        ###TODO: add __declspec() qualifier support
+        # test filemap
+        f_name_path = self.parser.clib_intf.file_map['f']
+        assert os.path.basename(f_name_path) == 'functions.h'
+        g_name_path = self.parser.clib_intf.file_map['g']
+        assert os.path.basename(g_name_path) == 'functions.h'
 
-    ###TODO: add test filemap to every clib_intf object
+        ###TODO: add __declspec() qualifier support
