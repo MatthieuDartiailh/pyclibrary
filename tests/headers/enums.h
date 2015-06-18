@@ -8,6 +8,8 @@ enum enum_name
     enum4,
 }  enum_inst;
 
+enum enum_name enum_inst2;
+
 
 enum {
     x = 0,

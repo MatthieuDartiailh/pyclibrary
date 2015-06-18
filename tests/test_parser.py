@@ -491,6 +491,7 @@ class TestParsing(object):
                                       ('enum3', 7), ('enum4', 8)])
         assert tdefs['enum enum_name'] == enum_name_type
         assert vars['enum_inst'] == cm.CustomType('enum enum_name')
+        assert vars['enum_inst2'] == cm.CustomType('enum enum_name')
 
         # test anonymous enums
         assert vars['no_name_enum_inst'] == cm.CustomType('enum anon_enum0')

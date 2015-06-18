@@ -899,7 +899,7 @@ class CParser(object):
                           Group(OneOrMore(self.struct_member))('members') +
                           rbrace)
         self.struct_type << (struct_kw('struct_type') +
-                             ((Optional(ident)('name') +
+                             ((Optional(ident('name')) +
                                self.decl_list) | ident('name'))
                              )
         self.struct_type.setParseAction(self.process_compound)
@@ -912,7 +912,7 @@ class CParser(object):
                               (integer('value') | ident('valueName'))))
 
         self.enum_type << (Keyword('enum') +
-                           (Optional(ident)('name') +
+                           (Optional(ident('name')) +
                             lbrace +
                             Group(delimitedList(enum_var_decl))('members') +
                             Optional(comma) + rbrace | ident('name'))
@@ -1023,7 +1023,7 @@ class CParser(object):
                         break
                     n += 1
             else:
-                name = t.name[0]
+                name = t.name
 
             logger.debug("  name: {}".format(name))
 
@@ -1093,10 +1093,7 @@ class CParser(object):
                         break
                     n += 1
             else:
-                if istext(t.name):
-                    sname = str_typ + ' ' + t.name
-                else:
-                    sname = str_typ + ' ' + t.name[0]
+                sname = str_typ + ' ' + t.name
 
             logger.debug("  NAME: {}".format(sname))
             if (len(t.members) > 0 or sname not in self.clib_intf.typedefs or
