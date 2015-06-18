@@ -523,7 +523,7 @@ class ValMacro(Macro):
         self.content = content
 
     def c_repr(self, name):
-        return '#define {} {}\n'.format(name, self.content)
+        return '#define {} {}'.format(name, self.content)
 
 
 class FnMacro(Macro):
@@ -588,7 +588,7 @@ class FnMacro(Macro):
         :param str name: name of macro
         :rtype: str
         """
-        return '#define {}({}) {}\n'.format(name, ', '.join(self.params),
+        return '#define {}({}) {}'.format(name, ', '.join(self.params),
                                             self.content)
 
 
@@ -627,6 +627,20 @@ class CLibInterface(collections.Mapping):
         }
 
         self.file_map = dict()
+
+    def include(self, from_clib_intf):
+        """
+        merges another clib_intf values into this one (overwriting values,
+        that are already defined in self
+
+        :param CLibInterface from_clib_intf: clib interface to merge from
+        """
+        self.funcs.update(from_clib_intf.funcs)
+        self.vars.update(from_clib_intf.vars)
+        self.typedefs.update(from_clib_intf.typedefs)
+        self.enums.update(from_clib_intf.enums)
+        self.macros.update(from_clib_intf.macros)
+        self.file_map.update(from_clib_intf.file_map)
 
     def __getitem__(self, name):
         for cls in self.obj_maps.values():
@@ -711,3 +725,19 @@ class CLibInterface(collections.Mapping):
         :param str name: Name of macro to remove
         """
         del self.macros[name]
+
+    def print_all(self, filename=None):
+        """Print everything stored in the CLibInterface
+
+        Parameters
+        ----------
+        filename : unicode, optional
+            Name of the file whose definition should be printed. If None,
+            all files are printed
+        """
+        for obj_cls, obj_dict in sorted(self.obj_maps.items()):
+            print("============== {} ==================".format(obj_cls))
+            for name, obj in obj_dict.items():
+                if filename is None or self.file_map[name] == filename:
+                    print(obj.c_repr(name))
+            print()

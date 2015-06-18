@@ -99,8 +99,8 @@ class CParser(object):
     files : str or iterable, optional
         File or files which should be parsed.
 
-    copy_from : CParser or iterable of CParser, optional
-        CParser whose definitions should be included.
+    copy_from : CLibInterface, that shall be used as template for this parsers
+        .clib_intf
 
     replace : dict, optional
         Specify som string replacements to perform before parsing. Format is
@@ -115,10 +115,8 @@ class CParser(object):
         definitions as parsing is an expensive operation.
 
     kwargs :
-        Extra parameters may be used to specify the starting state of the
-        parser. For example, one could provide a set of missing type
-        declarations by types={'UINT': ('unsigned int'), 'STRING': ('char', 1)}
-        Similarly, preprocessor macros can be specified: macros={'WINAPI': ''}
+        Extra macros may be used to specify the starting state of the
+        parser: WINAPI='', TESTMACRO='3'
 
     Example
     -------
@@ -136,8 +134,7 @@ class CParser(object):
 
     Access parsed declarations
 
-    >>> all_values = p.defs['values']
-    >>> functionSignatures = p.defs['functions']
+    >>> p.clib_intf
 
     To see what was not successfully parsed
 
@@ -148,7 +145,7 @@ class CParser(object):
     """
     #: Increment every time cache structure or parsing changes to invalidate
     #: old cache files.
-    cache_version = 1
+    cache_version = 2
 
     #: Private flag allowing to know if the parser has been initiliased.
     _init = False
@@ -157,25 +154,21 @@ class CParser(object):
                  process_all=True, cache=None, **kwargs):
 
         self.clib_intf = c_model.CLibInterface()
+        if copy_from is not None:
+            self.clib_intf.include(copy_from)
+        self.macro_vals = {}
 
         if not self._init:
             logger.warning('Automatic initialisation based on OS detection')
             from .init import auto_init
             auto_init()
 
-        # Holds all definitions
-        self.defs = {}
-        # Holds definitions grouped by the file they came from
-        self.file_defs = {}
         # Description of the struct packing rules as defined by #pragma pack
         self.pack_list = {}
 
         self.init_opts = kwargs.copy()
         self.init_opts['files'] = []
         self.init_opts['replace'] = {}
-
-        self.data_list = ['types', 'variables', 'fnmacros', 'macros',
-                          'structs', 'unions', 'enums', 'functions', 'values']
 
         self.file_order = []
         self.files = {}
@@ -186,26 +179,11 @@ class CParser(object):
             for f in self.find_headers(files):
                 self.load_file(f, replace)
 
-        # Initialize empty definition lists
-        for k in self.data_list:
-            self.defs[k] = {}
-
-        # Holds translations from typedefs/structs/unions to fundamental types
-        self.compiled_types = {}
-
         self.current_file = None
 
-        # Import extra arguments if specified
-        for t in kwargs:
-            for k in kwargs[t].keys():
-                self.add_def(t, k, kwargs[t][k])
-
-        # Import from other CParsers if specified
-        if copy_from is not None:
-            if not isinstance(copy_from, (list, tuple)):
-                copy_from = [copy_from]
-            for p in copy_from:
-                self.import_dict(p.file_defs)
+        # Import extra macros if specified
+        for name, value in kwargs:
+            self.clib_intf.add_macro(name, c_model.ValMacro(value))
 
         if process_all:
             self.process_all(cache=cache)
@@ -340,25 +318,12 @@ class CParser(object):
                     return False
 
             # Import all parse results
-            self.import_dict(cache['file_defs'])
+            self.clib_intf.include(cache['clib_intf'])
             return True
 
         except Exception:
             logger.exception("Warning--cache read failed:")
             return False
-
-    def import_dict(self, data):
-        """Import definitions from a dictionary.
-
-        The dict format should be the same as CParser.file_defs.
-        Used internally; does not need to be called manually.
-
-        """
-        for f in data.keys():
-            self.current_file = f
-            for k in self.data_list:
-                for n in data[f][k]:
-                    self.add_def(k, n, data[f][k][n])
 
     def write_cache(self, cache_file):
         """Store all parsed declarations to cache. Used internally.
@@ -366,7 +331,7 @@ class CParser(object):
         """
         cache = {}
         cache['opts'] = self.init_opts
-        cache['file_defs'] = self.file_defs
+        cache['clib_intf'] = self.clib_intf
         cache['version'] = self.cache_version
         import pickle
         pickle.dump(cache, open(cache_file, 'wb'))
@@ -425,23 +390,6 @@ class CParser(object):
         # systems.
         self.init_opts['files'].append(bn)
         return True
-
-    def print_all(self, filename=None):
-        """Print everything parsed from files. Useful for debugging.
-
-        Parameters
-        ----------
-        filename : unicode, optional
-            Name of the file whose definition should be printed.
-
-        """
-        from pprint import pprint
-        for k in self.data_list:
-            print("============== {} ==================".format(k))
-            if filename is None:
-                pprint(self.defs[k])
-            else:
-                pprint(self.file_defs[filename][k])
 
     # =========================================================================
     # --- Processing functions
@@ -691,7 +639,7 @@ class CParser(object):
             if t.args == '':
                 macro = c_model.ValMacro(macro_val)
                 val = self.eval_expr(macro_val)
-                self.add_def('values', t.macro, val)
+                self.macro_vals[t.macro] = val
                 mess = "  Add macro: {} ({}); {}"
                 logger.debug(mess.format(t.macro, val, macro))
 
@@ -1245,12 +1193,12 @@ class CParser(object):
         logger.debug("Eval: {}".format(toks))
         try:
             if istext(toks) or isbytes(toks):
-                val = self.eval(toks, None, self.defs['values'])
+                val = self.eval(toks, None, self.macro_vals)
             elif toks.array_values != '':
-                val = [self.eval(x, None, self.defs['values'])
+                val = [self.eval(x, None, self.macro_vals)
                        for x in toks.array_values]
             elif toks.value != '':
-                val = self.eval(toks.value, None, self.defs['values'])
+                val = self.eval(toks.value, None, self.macro_vals)
             else:
                 val = None
             return val
@@ -1268,52 +1216,6 @@ class CParser(object):
         if expr == '':
             return None
         return eval(expr, *args)
-
-    def add_def(self, typ, name, val):
-        """Add a definition of a specific type to both the definition set for
-        the current file and the global definition set.
-
-        """
-        self.defs[typ][name] = val
-        if self.current_file is None:
-            base_name = None
-        else:
-            base_name = os.path.basename(self.current_file)
-        if base_name not in self.file_defs:
-            self.file_defs[base_name] = {}
-            for k in self.data_list:
-                self.file_defs[base_name][k] = {}
-        self.file_defs[base_name][typ][name] = val
-
-    def rem_def(self, typ, name):
-        """Remove a definition of a specific type to both the definition set
-        for the current file and the global definition set.
-
-        """
-        if self.current_file is None:
-            base_name = None
-        else:
-            base_name = os.path.basename(self.current_file)
-        del self.defs[typ][name]
-        del self.file_defs[base_name][typ][name]
-
-    def find(self, name):
-        """Search all definitions for the given name.
-
-        """
-        res = []
-        for f in self.file_defs:
-            fd = self.file_defs[f]
-            for t in fd:
-                typ = fd[t]
-                for k in typ:
-                    if istext(name):
-                        if k == name:
-                            res.append((f, t))
-                    else:
-                        if re.match(name, k):
-                            res.append((f, t, k))
-        return res
 
     def find_text(self, text):
         """Search all file strings for text, return matching lines.
@@ -1492,6 +1394,7 @@ def _init_cparser(extra_types=None, extra_modifiers=None):
     expression.setParseAction(recombine)
 
 
+###TODO: remove this and adapt interface of CParser
 class NewCParser(object):
     """
     This object shall replace CParser in future.

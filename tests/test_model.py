@@ -268,8 +268,8 @@ class TestMacro(object):
 
     def test_c_repr(self):
         macro = cm.ValMacro('content')
-        assert (macro.c_repr('name') == '#define name content\n')
-        assert (str(macro) == '#define <<macroname>> content\n')
+        assert (macro.c_repr('name') == '#define name content')
+        assert (str(macro) == '#define <<macroname>> content')
 
     def test_content(self):
         content = 'int f() { return(0); }'
@@ -284,8 +284,8 @@ class TestFnMacro(object):
 
     def test_c_repr(self):
         macro = cm.FnMacro('a + b + c', ['a', 'b'])
-        assert (macro.c_repr('name') == '#define name(a, b) a + b + c\n')
-        assert (str(macro) == '#define <<macroname>>(a, b) a + b + c\n')
+        assert (macro.c_repr('name') == '#define name(a, b) a + b + c')
+        assert (str(macro) == '#define <<macroname>>(a, b) a + b + c')
 
     def test_content(self):
         content = 'RTYPE f() {printf("%i", RVAL); return(RVAL+rval);}'
@@ -352,3 +352,40 @@ class TestCLibInterface(object):
         self.assert_add_obj(clib, clib.macros, clib.add_macro,
                             cm.ValMacro('content'),
                             cm.ValMacro('othercontent'))
+
+    def test_include(self):
+        clib = cm.CLibInterface()
+        clib.add_func('f', cm.FunctionType(cm.BuiltinType('int'), []), 'hd.h')
+        clib.add_var('v', cm.BuiltinType('int'), 'hd.h')
+        clib.add_typedef('t', cm.BuiltinType('int'), 'hd.h')
+        clib.add_typedef('e', cm.EnumType([('v1', 1)]), 'hd.h')
+        clib.add_macro('m', cm.ValMacro('3'), 'hd.h')
+
+        clib2 = cm.CLibInterface()
+        clib2.add_func('f2', cm.FunctionType(cm.BuiltinType('char'), []),
+                       'hd2.h')
+        clib2.add_var('v2', cm.BuiltinType('char'), 'hd2.h')
+        clib2.add_typedef('t2', cm.BuiltinType('char'), 'hd2.h')
+        clib2.add_typedef('e2', cm.EnumType([('v2', 2)]), 'hd2.h')
+        clib2.add_macro('m2', cm.ValMacro('4'), 'hd2.h')
+
+        clib.include(clib2)
+
+        assert clib.funcs == {
+            'f': cm.FunctionType(cm.BuiltinType('int'), []),
+            'f2': cm.FunctionType(cm.BuiltinType('char'), [])}
+        assert clib.vars == {
+            'v': cm.BuiltinType('int'),
+            'v2': cm.BuiltinType('char')}
+        assert clib.typedefs == {
+            't': cm.BuiltinType('int'),
+            'e': cm.EnumType([('v1', 1)]),
+            't2': cm.BuiltinType('char'),
+            'e2': cm.EnumType([('v2', 2)])
+        }
+        assert clib.enums == {'v1': 1, 'v2': 2}
+        assert clib.macros == {
+            'm': cm.ValMacro('3'),
+            'm2': cm.ValMacro('4')}
+        assert clib.file_map['f'] == 'hd.h'
+        assert clib.file_map['f2'] == 'hd2.h'

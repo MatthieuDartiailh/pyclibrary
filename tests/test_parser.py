@@ -133,7 +133,7 @@ class TestPreprocessing(object):
         self.parser.preprocess(path)
 
         macros = self.parser.clib_intf.macros
-        values = self.parser.defs['values']
+        values = self.parser.macro_vals
 
         assert macros['M'].content == ''
         assert macros['N'].content == 'n' and values['N'] is None
@@ -201,7 +201,6 @@ class TestPreprocessing(object):
         self.parser.preprocess(path)
         self.parser.parse_defs(path)
 
-        macros_ = self.parser.defs['macros']
         macros = self.parser.clib_intf.macros
         stream = self.parser.files[path]
 
@@ -269,7 +268,7 @@ class TestPreprocessing(object):
         self.parser.preprocess(path)
         self.parser.parse_defs(path)
 
-        values = self.parser.defs['values']
+        values = self.parser.macro_vals
         macros = self.parser.clib_intf.macros
         stream = self.parser.files[path]
 
@@ -433,8 +432,6 @@ class TestParsing(object):
         self.parser.load_file(path)
         self.parser.process_all()
 
-        types = self.parser.defs['types']
-        variables = self.parser.defs['variables']
         tdefs = self.parser.clib_intf.typedefs
         vars = self.parser.clib_intf.vars
 
@@ -606,9 +603,6 @@ class TestParsing(object):
         path = os.path.join(self.h_dir, 'functions.h')
         self.parser.load_file(path)
         self.parser.process_all()
-
-        functions = self.parser.defs['functions']
-        variables = self.parser.defs['variables']
 
         funcs = self.parser.clib_intf.funcs
         vars = self.parser.clib_intf.vars
