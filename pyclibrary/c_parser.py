@@ -810,8 +810,7 @@ class CParser(object):
         self.abstract_declarator << Group(
             type_qualifier('first_typequal') +
             Group(ZeroOrMore(Group(Suppress('*') + type_qualifier)))('ptrs') +
-            ((Optional('&')('ref')) |
-             (lparen + self.abstract_declarator + rparen)('center')) +
+            Optional((lparen + self.abstract_declarator + rparen)('center')) +
             Optional(lparen +
                      Optional(delimitedList(Group(
                               self.type_spec('type') +
@@ -834,7 +833,7 @@ class CParser(object):
         self.declarator << Group(
             type_qualifier('first_typequal') + call_conv +
             Group(ZeroOrMore(Group(Suppress('*') + type_qualifier)))('ptrs') +
-            ((Optional('&')('ref') + ident('name')) |
+            (ident('name') |
              (lparen + self.declarator + rparen)('center')) +
             Optional(lparen +
                      Optional(delimitedList(
@@ -962,10 +961,6 @@ class CParser(object):
             result_type = c_model.FunctionType(base_type, params,
                                                quals=call_conv)
 
-        if 'ref' in decl:
-            toks.append('&')
-            quals.append(())
-
         if 'center' in decl:
             (n, result_type) = self.process_declarator(decl['center'][0],
                                                        result_type)
@@ -989,7 +984,6 @@ class CParser(object):
         - basetype is the string representing the base type
         - modifiers can be:
             - '*'    : pointer (multiple pointers "***" allowed)
-            - '&'    : reference
             - '__X'  : calling convention (windows only). X can be 'cdecl' or
               'stdcall'
             - list   : array. Value(s) indicate the length of each array, -1
