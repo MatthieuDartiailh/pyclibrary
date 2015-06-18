@@ -531,9 +531,7 @@ class CParser(object):
                 # Evaluate 'defined' operator before expanding macros
                 if d in ['if', 'elif']:
                     def pa(t):
-                        is_macro = t['name'] in self.defs['macros']
-                        is_macro_func = t['name'] in self.defs['fnmacros']
-                        return ['0', '1'][is_macro or is_macro_func]
+                        return ['0', '1'][t['name'] in self.clib_intf.macros]
 
                     rest = (Keyword('defined') +
                             (name | lparen + name + rparen)
@@ -596,7 +594,7 @@ class CParser(object):
                     if not if_true[-1]:
                         continue
                     try:
-                        self.rem_def('macros', macroName.strip())
+                        self.clib_intf.del_macro(macroName.strip())
                     except Exception:
                         if sys.exc_info()[0] is not KeyError:
                             mess = "Error removing macro definition '{}'"
@@ -680,28 +678,31 @@ class CParser(object):
         """
         logger.debug("Processing MACRO: {}".format(t))
         macro_val = t.value.strip()
-        if macro_val in self.defs['fnmacros']:
-            self.add_def('fnmacros', t.macro, self.defs['fnmacros'][macro_val])
-            logger.debug("  Copy fn macro {} => {}".format(macro_val, t.macro))
+        if macro_val in self.clib_intf.macros:
+            # handle special case, where function macros are defined without
+            # parenthesis:
+            # #define FNMACRO1(x) x+1
+            # #define FNMACRO2 FNMACRO1     //FNMACRO2 is a function macro!!!
+            macro = self.clib_intf.macros[macro_val]
+            self.clib_intf.add_macro(t.macro, macro, self.current_file)
+            logger.debug("  Copy fnmacro {} => {}".format(macro_val, t.macro))
 
         else:
             if t.args == '':
+                macro = c_model.ValMacro(macro_val)
                 val = self.eval_expr(macro_val)
-                self.add_def('macros', t.macro, macro_val)
                 self.add_def('values', t.macro, val)
                 mess = "  Add macro: {} ({}); {}"
-                logger.debug(mess.format(t.macro, val,
-                                         self.defs['macros'][t.macro]))
+                logger.debug(mess.format(t.macro, val, macro))
 
             else:
-                self.add_def('fnmacros', t.macro,
-                             self.compile_fn_macro(macro_val,
-                                                   [x for x in t.args]))
+                fnmacro = c_model.FnMacro(macro_val, list(t.args))
+                self.clib_intf.add_macro(t.macro, fnmacro, self.current_file)
                 mess = "  Add fn macro: {} ({}); {}"
-                logger.debug(mess.format(t.macro, t.args,
-                                         self.defs['fnmacros'][t.macro]))
+                logger.debug(mess.format(t.macro, t.args, fnmacro))
 
-        return "#define " + t.macro + " " + macro_val
+        self.clib_intf.add_macro(t.macro, macro, self.current_file)
+        return macro.c_repr(t.macro)
 
     def compile_fn_macro(self, text, args):
         """Turn a function macro spec into a compiled description.
@@ -734,32 +735,32 @@ class CParser(object):
         parts = []
         # The group number to check for macro names
         N = 3
-        macros = self.defs['macros']
-        fnmacros = self.defs['fnmacros']
         while True:
             m = reg.search(line)
             if not m:
                 break
             name = m.groups()[N]
-            if name in macros:
-                parts.append(line[:m.start(N)])
-                line = line[m.end(N):]
-                parts.append(macros[name])
+            if name in self.clib_intf.macros:
+                macro = self.clib_intf.macros[name]
+                if isinstance(macro, c_model.ValMacro):
+                    parts.append(line[:m.start(N)])
+                    line = line[m.end(N):]
+                    parts.append(macro.content)
 
-            elif name in fnmacros:
-                # If function macro expansion fails, just ignore it.
-                try:
-                    exp, end = self.expand_fn_macro(name, line[m.end(N):])
-                except Exception:
-                    exp = name
-                    end = 0
-                    mess = "Function macro expansion failed: {}, {}"
-                    logger.error(mess.format(name, line[m.end(N):]))
+                elif isinstance(macro, c_model.FnMacro):
+                    # If function macro expansion fails, just ignore it.
+                    try:
+                        exp, end = self.expand_fn_macro(name, line[m.end(N):])
+                    except Exception:
+                        exp = name
+                        end = 0
+                        mess = "Function macro expansion failed: {}, {}"
+                        logger.error(mess.format(name, line[m.end(N):]))
 
-                parts.append(line[:m.start(N)])
-                start = end + m.end(N)
-                line = line[start:]
-                parts.append(exp)
+                    parts.append(line[:m.start(N)])
+                    start = end + m.end(N)
+                    line = line[start:]
+                    parts.append(exp)
 
             else:
                 start = m.end(N)
@@ -773,9 +774,6 @@ class CParser(object):
         """Replace a function macro.
 
         """
-        # defn looks like ('%s + %s / %s', (0, 0, 1))
-        defn = self.defs['fnmacros'][name]
-
         arg_list = (stringStart + lparen +
                     Group(delimitedList(expression))('args') + rparen)
         res = [x for x in arg_list.scanString(text, 1)]
@@ -784,8 +782,8 @@ class CParser(object):
             raise DefinitionError(0,  mess.format(name))
 
         args, start, end = res[0]
-        args = [self.expand_macros(arg) for arg in args[0]]
-        new_str = defn[0].format(*[args[i] for i in defn[1]])
+        exp_args = [self.expand_macros(arg) for arg in args[0]]
+        new_str = self.clib_intf.macros[name].parametrized_content(*exp_args)
 
         return (new_str, end)
 

@@ -261,22 +261,46 @@ class TestFunctionType(object):
         with pytest.raises(ValueError):
             # anonymous functions are not valid C constructs
             cm.FunctionType(int_type, []).c_repr()
+        assert str(cm.FunctionType(int_type, [])) == 'int <<funcname>>()'
 
 
 class TestMacro(object):
 
     def test_c_repr(self):
-        assert (cm.Macro('content').c_repr('name') ==
-                '#define name content\n')
-        assert (str(cm.Macro('content')) ==
-                '#define ? content\n')
+        macro = cm.ValMacro('content')
+        assert (macro.c_repr('name') == '#define name content\n')
+        assert (str(macro) == '#define <<macroname>> content\n')
+
+    def test_content(self):
+        content = 'int f() { return(0); }'
+        assert cm.ValMacro(content).content == content
 
 
 class TestFnMacro(object):
 
+    def test_repr(self):
+        assert (repr(cm.FnMacro('a1 + b2', ['a1', 'b2'])) ==
+                'FnMacro({!r}, [{!r}, {!r}])'.format('a1 + b2', 'a1', 'b2'))
+
     def test_c_repr(self):
-        assert (cm.FnMacro('a + b + c', ['a', 'b']).c_repr('name') ==
-                '#define name(a, b) a + b + c\n')
+        macro = cm.FnMacro('a + b + c', ['a', 'b'])
+        assert (macro.c_repr('name') == '#define name(a, b) a + b + c\n')
+        assert (str(macro) == '#define <<macroname>>(a, b) a + b + c\n')
+
+    def test_content(self):
+        content = 'RTYPE f() {printf("%i", RVAL); return(RVAL+rval);}'
+        macro = cm.FnMacro(content, ['RTYPE', 'RVAL'])
+        assert macro.content == content
+        assert (macro.compiled_content ==
+                '{RTYPE} f() {{printf("%i", {RVAL}); return({RVAL}+rval);}}')
+        assert (macro.parametrized_content('int', '3') ==
+                'int f() {printf("%i", 3); return(3+rval);}')
+        assert (macro.parametrized_content(RVAL='4', RTYPE='char') ==
+                'char f() {printf("%i", 4); return(4+rval);}')
+        assert (macro.parametrized_content('short', RVAL='5') ==
+                'short f() {printf("%i", 5); return(5+rval);}')
+        with pytest.raises(TypeError):
+            macro.parametrized_content('int', '3', RTYPE='char')
 
 
 class TestCLibInterface(object):
@@ -326,5 +350,5 @@ class TestCLibInterface(object):
 
     def test_add_macro(self, clib):
         self.assert_add_obj(clib, clib.macros, clib.add_macro,
-                            cm.Macro('content'),
-                            cm.Macro('othercontent'))
+                            cm.ValMacro('content'),
+                            cm.ValMacro('othercontent'))

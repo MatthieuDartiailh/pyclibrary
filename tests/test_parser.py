@@ -132,74 +132,62 @@ class TestPreprocessing(object):
         self.parser.remove_comments(path)
         self.parser.preprocess(path)
 
-        macros = self.parser.defs['macros']
+        macros = self.parser.clib_intf.macros
         values = self.parser.defs['values']
 
-        assert 'M' in macros and macros['M'] == ''
-        assert 'N' in macros and macros['N'] == 'n' and values['N'] is None
+        assert macros['M'].content == ''
+        assert macros['N'].content == 'n' and values['N'] is None
 
         # Decimal integer
-        assert ('MACRO_D1' in macros and macros['MACRO_D1'] == '1' and
+        assert (macros['MACRO_D1'].content  == '1' and
                 values['MACRO_D1'] == 1)
-        assert ('MACRO_D2' in macros and macros['MACRO_D2'] == '-2U' and
+        assert (macros['MACRO_D2'].content == '-2U' and
                 values['MACRO_D2'] == -2)
-        assert ('MACRO_D3' in macros and macros['MACRO_D3'] == '+ 3UL' and
+        assert (macros['MACRO_D3'].content == '+ 3UL' and
                 values['MACRO_D3'] == 3)
 
         # Bit shifted decimal integer
-        assert ('MACRO_SD1' in macros and
-                macros['MACRO_SD1'] == '(1 << 1)' and
+        assert (macros['MACRO_SD1'].content == '(1 << 1)' and
                 values['MACRO_SD1'] == 2)
-        assert ('MACRO_SD2' in macros and
-                macros['MACRO_SD2'] == '(2U << 2)' and
+        assert (macros['MACRO_SD2'].content == '(2U << 2)' and
                 values['MACRO_SD2'] == 8)
-        assert ('MACRO_SD3' in macros and
-                macros['MACRO_SD3'] == '(3UL << 3)' and
+        assert (macros['MACRO_SD3'].content == '(3UL << 3)' and
                 values['MACRO_SD3'] == 24)
 
         # Hexadecimal integer
-        assert ('MACRO_H1' in macros and
-                macros['MACRO_H1'] == '+0x000000' and
+        assert (macros['MACRO_H1'].content == '+0x000000' and
                 values['MACRO_H1'] == 0)
-        assert ('MACRO_H2' in macros and
-                macros['MACRO_H2'] == '- 0x000001U' and
+        assert (macros['MACRO_H2'].content == '- 0x000001U' and
                 values['MACRO_H2'] == -1)
-        assert ('MACRO_H3' in macros and
-                macros['MACRO_H3'] == '0X000002UL' and
+        assert (macros['MACRO_H3'].content == '0X000002UL' and
                 values['MACRO_H3'] == 2)
 
         # Bit shifted hexadecimal integer
-        assert ('MACRO_SH1' in macros and
-                macros['MACRO_SH1'] == '(0x000000 << 1)' and
+        assert (macros['MACRO_SH1'].content == '(0x000000 << 1)' and
                 values['MACRO_SH1'] == 0)
-        assert ('MACRO_SH2' in macros and
-                macros['MACRO_SH2'] == '(0x000001U << 2)' and
+        assert (macros['MACRO_SH2'].content == '(0x000001U << 2)' and
                 values['MACRO_SH2'] == 4)
-        assert ('MACRO_H3' in macros and
-                macros['MACRO_SH3'] == '(0X000002UL << 3)' and
+        assert (macros['MACRO_SH3'].content == '(0X000002UL << 3)' and
                 values['MACRO_SH3'] == 16)
 
         # Floating point value
-        assert ('MACRO_F1' in macros and
-                macros['MACRO_F1'] == '1.0' and
+        assert (macros['MACRO_F1'].content == '1.0' and
                 values['MACRO_F1'] == 1.0)
-        assert ('MACRO_F2' in macros and
-                macros['MACRO_F2'] == '1.1e1' and
+        assert (macros['MACRO_F2'].content == '1.1e1' and
                 values['MACRO_F2'] == 11.)
-        assert ('MACRO_F3' in macros and
-                macros['MACRO_F3'] == '-1.1E-1' and
+        assert (macros['MACRO_F3'].content == '-1.1E-1' and
                 values['MACRO_F3'] == -0.11)
 
         # String macro
-        assert ('MACRO_S' in macros and macros['MACRO_S'] == '"test"' and
+        assert (macros['MACRO_S'].content == '"test"' and
                 values['MACRO_S'] == 'test')
 
         # Nested macros
-        assert ('NESTED' in macros and macros['NESTED'] == '1' and
+        assert (macros['NESTED'].content == '1' and
                 values['NESTED'] == 1)
-        assert ('NESTED2' in macros and macros['NESTED2'] == '1' and
+        assert (macros['NESTED2'].content == '1' and
                 values['NESTED2'] == 1)
-        assert ('MACRO_N' in macros and macros['MACRO_N'] == '1 + 2' and
+        assert (macros['MACRO_N'].content == '1 + 2' and
                 values['MACRO_N'] == 3)
 
         # Muliline macro
@@ -213,7 +201,8 @@ class TestPreprocessing(object):
         self.parser.preprocess(path)
         self.parser.parse_defs(path)
 
-        macros = self.parser.defs['macros']
+        macros_ = self.parser.defs['macros']
+        macros = self.parser.clib_intf.macros
         stream = self.parser.files[path]
 
         # Test if defined conditional
@@ -281,22 +270,23 @@ class TestPreprocessing(object):
         self.parser.parse_defs(path)
 
         values = self.parser.defs['values']
-        fnmacros = self.parser.defs['fnmacros']
+        macros = self.parser.clib_intf.macros
         stream = self.parser.files[path]
 
         # Test macro declaration.
-        assert 'CARRE' in fnmacros
+        assert macros['CARRE'] == cm.FnMacro('a*a', ['a'])
         assert 'int carre = 2*2;' in stream
 
         assert 'int __declspec(dllexport) function2()' in stream
         assert '__declspec(dllexport) int function3()' in stream
 
         # Test defining a macro function as an alias for another one.
-        assert 'MAKEINTRESOURCEA' in fnmacros
-        assert 'MAKEINTRESOURCEW' in fnmacros
-        assert 'MAKEINTRESOURCE' in fnmacros
-        assert fnmacros['MAKEINTRESOURCE'] == fnmacros['MAKEINTRESOURCEA']
-        assert 'int x = ((LPSTR)((ULONG_PTR)((WORD)(4))))'
+        assert (macros['MAKEINTRESOURCEA'] ==
+                cm.FnMacro('((LPSTR)((ULONG_PTR)((WORD)(i))))', ['i']))
+        assert (macros['MAKEINTRESOURCEW'] ==
+                cm.FnMacro('((LPWSTR)((ULONG_PTR)((WORD)(i))))', ['i']))
+        assert macros['MAKEINTRESOURCE'] is macros['MAKEINTRESOURCEA']
+        assert 'int x = ((LPSTR)((ULONG_PTR)((WORD)(4))))' in stream
 
         # Test using a macro value in a macro function call
         assert 'BIT' in values and values['BIT'] == 1
@@ -304,11 +294,11 @@ class TestPreprocessing(object):
 
         # Test defining a macro function calling other macros (values and
         # functions)
-        assert 'SETBITS' in fnmacros
+        assert 'SETBITS' in macros
         assert 'int z1, z2 = (((1) |= (0x01)), ((2) |= (0x01)));' in stream
 
         # Test defining a macro function calling nested macro functions
-        assert 'SETBIT_AUTO' in fnmacros
+        assert 'SETBIT_AUTO' in macros
         assert 'int z3 = ((((3) |= (0x01)), ((3) |= (0x01))));' in stream
 
     def test_pragmas(self):

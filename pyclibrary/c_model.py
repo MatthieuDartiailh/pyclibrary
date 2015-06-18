@@ -19,7 +19,8 @@ The class hierarchy is:
 
 * CLibInterface (a catalogue of all CLibBase objects in a library)
 * CLibBase (base class of all objects in header file)
-  * Macro (#define x ...)
+  * Macro
+    * ValMacro (#define x ...)
     * FnMacro (#define x(...) ...)
   * CLibType
     * SimpleType
@@ -39,6 +40,7 @@ from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 import collections
 import itertools
+import re
 from future.moves.itertools import zip_longest
 from .errors import UnknownCustomTypeError
 
@@ -482,48 +484,101 @@ class FunctionType(ComposedType):
                                for pname, ptype in self.params)
         return self._par_c_repr(referrer_c_repr + '(' + params_str + ')')
 
+    def __str__(self):
+        return self.c_repr('<<funcname>>')
+
 
 class Macro(CLibBase):
     """Model of C Preprocessor define"""
 
-    __slots__ = ('val_str',)
+    __slots__ = ()
 
-    def __init__(self, val_str):
-        """
-        :param str val_str: the text in the define as written in
-            the C source code (may contain calls to other defines)
-        """
-        super(Macro, self).__init__()
-        self.val_str = val_str
-
-    def c_repr(self, name):
+    def c_repr(self, macro_name):
         """
         returns the C code as string that corresponds to this
         C preprocessor definition
 
-        :param str name: name of macro
+        :param str macro_name: name of macro
         :rtype: str
         """
-        return '#define {} {}\n'.format(name, self.val_str)
+        raise NotImplementedError()
 
     def __str__(self):
-        return self.c_repr('?')
+        return self.c_repr('<<macroname>>')
+
+
+class ValMacro(Macro):
+    """Model of C Preprocessor define, that is not parametrized. i.E.:
+    #define X 3
+    """
+
+    __slots__ = ('content',)
+
+    def __init__(self, content):
+        """
+        :param str content: the text in the define as written in
+            the C source code (may contain calls to other defines)
+        """
+        super(ValMacro, self).__init__()
+        self.content = content
+
+    def c_repr(self, name):
+        return '#define {} {}\n'.format(name, self.content)
 
 
 class FnMacro(Macro):
+    """Model of C Preprocessor define, that is parametrized. i.E.:
+    #define X(a) a + 3
+    """
 
-    __slots__ = ('params',)
+    __slots__ = ('compiled_content', 'params')
 
-    def __init__(self, val_str, params=()):
+    def _getattrnames(self):
+        """hide 'compiled_content' since it is a computed value, that can
+        be derived from 'content' and 'params' (see ._compile_content())
         """
-        :param str val_str: the text, that shall be inserted
+        return ('content', 'params')
+
+    def __init__(self, content, params):
+        """
+        :param str content: the text, that shall be inserted
             instead of the macro call. This text may contain one or
             multiple occurences of parameters from param_names
-        :param list[str] param_names: A list of names of parameter
+        :param list[str] params: A list of names of parameter
             needed for this macro
         """
-        super(FnMacro, self).__init__(val_str)
+        super(FnMacro, self).__init__()
         self.params = params
+        self.compiled_content = self._compile_content(content, params)
+
+    @staticmethod
+    def _compile_content(content, params):
+        """Turn a function macro spec into a string formatter, where all
+        params are curly bracketed.
+        """
+        def parentesize_func(matchObj):
+            arg_name = matchObj.group(0)
+            if arg_name.startswith('"'):
+                return arg_name    # this is a string -> ignore it
+            else:
+                return '{' + arg_name + '}'
+        arg_pattern = r'("(\\"|[^"])*")|(\b({})\b)'.format('|'.join(params))
+        esc_content = content.replace('{', '{{').replace('}', '}}')
+        return re.sub(arg_pattern, parentesize_func, esc_content)
+
+    @property
+    def content(self):
+        self_mapped_args = dict(zip(self.params, self.params))
+        return self.compiled_content.format(**self_mapped_args)
+
+    def parametrized_content(self, *args, **argv):
+        """Returns the content of this function macro with replaced arguments
+        """
+        arg_dict = dict(zip(self.params, args))
+        if set(arg_dict) & set(argv):
+            raise TypeError('got multiple values for single parameter')
+        arg_dict.update(argv)
+        return self.compiled_content.format(**arg_dict)
 
     def c_repr(self, name):
         """
@@ -534,7 +589,7 @@ class FnMacro(Macro):
         :rtype: str
         """
         return '#define {}({}) {}\n'.format(name, ', '.join(self.params),
-                                            self.val_str)
+                                            self.content)
 
 
 class CLibInterface(collections.Mapping):
@@ -638,12 +693,21 @@ class CLibInterface(collections.Mapping):
 
     def add_macro(self, name, macro, filename=None):
         """
-        official interface to add a macro (either Macro() or FnMacro())
+        official interface to add a macro (descendant of Macro class)
         to CLibInterface.
 
         :param str name: Name of macro
-        :param FunctionType macro: model object of macro
+        :param Macro macro: model object of macro
         :param str filename: filename, where the macro definition is
             located in (if known)
         """
         self._add_obj(self.macros, name, macro, filename)
+
+    def del_macro(self, name):
+        """
+        remove a macro definition from the CLibInterface. Usually needed
+        by #undef
+
+        :param str name: Name of macro to remove
+        """
+        del self.macros[name]

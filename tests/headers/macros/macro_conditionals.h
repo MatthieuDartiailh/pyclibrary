@@ -50,7 +50,7 @@
 #ifdef UNDEFINED
   #define NO_DEFINE_ELIF
   int NO_DECLARE_ELIF;
-#elif defined MACRO
+#elif defined(MACRO)
   #define DEFINE_ELIF
   int DECLARE_ELIF;
 #endif
