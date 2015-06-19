@@ -2,7 +2,7 @@
 
 enum enum_name
 {
-    enum1=2,
+    enum1=9,
     enum2=6,
     enum3,
     enum4,
@@ -14,9 +14,4 @@ enum enum_name enum_inst2;
 enum {
     x = 0,
     y
-} no_name_enum_inst;
-
-enum {
-    x = 0,
-    y
-} no_name_enum_inst2;
+} * anonymous_enum_inst;

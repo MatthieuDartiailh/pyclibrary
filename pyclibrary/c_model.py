@@ -25,12 +25,14 @@ The class hierarchy is:
   * CLibType
     * SimpleType
       * BuiltinType (int, char, double, ...)
-      * CustomType (all references to custom types = typedefs, structs, ...)
-    * EnumType
-    * CompoundType
-      * StructType
-      * UnionType
-      * BitFieldType
+      * CustomType (all references to custom types = typedefs or named
+                    AlgebraicDataTypes)
+    * AlgebraicDataType
+      * EnumType
+      * CompoundType
+        * StructType
+        * UnionType
+        * BitFieldType
     * ComposedType
       * PointerType
       * ArrayType
@@ -165,6 +167,11 @@ class CLibType(CLibBase):
     def __str__(self):
         return self.c_repr()
 
+    def __iter__(self):
+        """iterate through all type objects, this type if build from.
+        """
+        return iter([])
+
 
 class SimpleType(CLibType):
     """Abstract Base class for non-composed types
@@ -227,25 +234,14 @@ class CustomType(SimpleType):
         return resolved_type.with_quals(self.quals)
 
 
-class CompoundType(CLibType):
-    """Abstract base class for all types that are composed of multiple
-    other types (StructType, UnionType, BitFieldType)
-
-    The common functionality managed by this class is management of
-    multiple subfields
+class AlgebraicDataType(CLibType):
+    """Abstract base class for algebraic type definition
+    (enums, structs, union).
     """
 
-    __slots__ = ('fields',)
+    __slots__ = ()
 
     KEYWORD = ''   # has to be set
-
-    def __init__(self, fields, quals=None):
-        """
-        :type fields: list[tuple]
-        :type quals: list[str]
-        """
-        super(CompoundType, self).__init__(quals)
-        self.fields = fields
 
     def name_to_typename(self, name):
         """maps a name to the corresponding typename.
@@ -262,20 +258,51 @@ class CompoundType(CLibType):
                              .format(typename, self.KEYWORD))
         return typename[len(self.KEYWORD) + 1:]
 
-    def _field_c_repr(self, field_tuple):
+    def _iter_sub_c_repr(self):
         raise NotImplementedError()
 
-    def c_repr(self, typename=None):
-        result = self.KEYWORD
-        if typename:
-            result += ' ' + self.typename_to_name(typename)
-        result += ' {\n'
+    def named_c_repr(self, typename=None, referrer_c_repr=None):
+        result = self.KEYWORD + ' '
+        if typename is not None:
+            result += self.typename_to_name(typename) + ' '
+        result += '{\n'
 
-        for field in self.fields:
-            result += '    ' + self._field_c_repr(field) + ';\n'
+        for sub_c_repr in self._iter_sub_c_repr():
+            for sub_line in sub_c_repr.split('\n'):
+                result += '    ' + sub_line + '\n'
 
         result += '}'
+        if referrer_c_repr is not None:
+            result += ' ' + referrer_c_repr
+
         return result
+
+    def c_repr(self, referrer_c_repr=None):
+        return self.named_c_repr(referrer_c_repr=referrer_c_repr)
+
+
+class CompoundType(AlgebraicDataType):
+    """Abstract base class for structs and unions
+
+    The common functionality managed by this class is management of
+    multiple subfields (see 'fields')
+    """
+
+    __slots__ = ('fields',)
+
+    KEYWORD = ''   # has to be set
+
+    def __init__(self, fields, quals=None):
+        """
+        :type fields: list[tuple]
+        :type quals: list[str]
+        """
+        super(CompoundType, self).__init__(quals)
+        self.fields = fields
+
+    def __iter__(self):
+        for field in self.fields:
+            yield field[1]
 
 
 class StructType(CompoundType):
@@ -301,21 +328,19 @@ class StructType(CompoundType):
         super(StructType, self).__init__(fields, quals)
         self.packsize = packsize
 
-    def _field_c_repr(self, field_tuple):
-        field_name, field_type, field_size = field_tuple
-        if field_size is None:
-            return field_type.c_repr(field_name)
-        else:
-            return field_type.c_repr(field_name) + ' : ' + str(field_size)
+    def _iter_sub_c_repr(self):
+        if self.packsize is not None:
+            yield '#pragma pack(push, {})'.format(self.packsize)
 
-    def c_repr(self, typename=None):
-        if self.packsize is None:
-            return super(StructType, self).c_repr(typename)
-        else:
-            return (
-                '#pragma pack(push, {})\n'.format(self.packsize) +
-                super(StructType, self).c_repr(typename) +
-                '\n#pragma pack(pop)\n')
+        for field_name, field_type, field_size in self.fields:
+            if field_size is None:
+                yield field_type.c_repr(field_name) + ';'
+            else:
+                yield '{} : {};'.format(field_type.c_repr(field_name),
+                                        field_size)
+
+        if self.packsize is not None:
+            yield '#pragma pack(pop)'.format(self.packsize)
 
 
 class UnionType(CompoundType):
@@ -325,24 +350,17 @@ class UnionType(CompoundType):
 
     KEYWORD = 'union'
 
-    def __init__(self, fields, quals=None):
-        """
-        :param list[tuple[str, CLibType]] fields: ordered list of
-            fields in this structure. Every field is represented by a tuple of
-            field-name and field-type
-        :param list[str] quals: see CLibType.quals
-        """
-        super(UnionType, self).__init__(fields, quals)
-
-    def _field_c_repr(self, field_tuple):
-        field_name, field_type = field_tuple
-        return field_type.c_repr(field_name)
+    def _iter_sub_c_repr(self):
+        for field_name, field_type in self.fields:
+            yield field_type.c_repr(field_name) + ';'
 
 
-class EnumType(CLibType):
+class EnumType(AlgebraicDataType):
     """Model of C enum definition."""
 
     __slots__ = ('values',)
+
+    KEYWORD = 'enum'
 
     def __init__(self, values, quals=None):
         """
@@ -350,24 +368,11 @@ class EnumType(CLibType):
             value definitions (valuename -> value)
         :param list[str] quals: has to be None
         """
-        if quals is not None:
-            raise ValueError('enums does not support quals')
         super(EnumType, self).__init__(quals)
         self.values = values
 
-    def c_repr(self, referrer_c_repr=None):
-        if referrer_c_repr is None:
-            name = ''
-        elif referrer_c_repr.startswith('enum '):
-            name = referrer_c_repr[len('enum '):]
-        else:
-            raise ValueError('{!r} requires names, starting with {!r}'
-                             .format(type(self).__name__, 'enum'))
-        return ''.join(
-            [' '.join(self.quals + ['enum']) + _lpadded_str(name) + ' {\n'] +
-            ['    {} = {},\n'.format(nm, val)
-             for nm, val in self.values] +
-            ['}'])
+    def _iter_sub_c_repr(self):
+        return map('{0[0]} = {0[1]},'.format, self.values)
 
 
 class ComposedType(CLibType):
@@ -423,6 +428,9 @@ class ComposedType(CLibType):
             resolved_self = self.copy()
             resolved_self.base_type = resolved_base_type
             return resolved_self
+
+    def __iter__(self):
+        yield self.base_type
 
 
 class PointerType(ComposedType):
@@ -497,6 +505,11 @@ class FunctionType(ComposedType):
 
     def __str__(self):
         return self.c_repr('<<funcname>>')
+
+    def __iter__(self):
+        yield self.base_type
+        for param in self.params:
+            yield param
 
 
 class Macro(CLibBase):
@@ -675,8 +688,17 @@ class CLibInterface(collections.Mapping):
         :param CLibBase obj: object to add
         :param str filename: filename, where the obj is located in (if known)
         """
+        def add_enum_vals(type_):
+            if isinstance(type_, EnumType):
+                for name, val in type_.values:
+                    self._add_obj(self.enums, name, val, filename)
+            elif isinstance(type_, CLibType):
+                for subtype in type_:
+                    add_enum_vals(subtype)
+
         obj_map[name] = obj
         self.file_map[name] = filename
+        add_enum_vals(obj)
 
     def add_func(self, name, func, filename=None):
         """
@@ -712,10 +734,6 @@ class CLibInterface(collections.Mapping):
         """
         self._add_obj(self.typedefs, name, typedef, filename)
 
-        if isinstance(typedef, EnumType):
-            for name, val in typedef.values:
-                self._add_obj(self.enums, name, val, filename)
-
     def add_macro(self, name, macro, filename=None):
         """
         official interface to add a macro (descendant of Macro class)
@@ -750,5 +768,8 @@ class CLibInterface(collections.Mapping):
             print("============== {} ==================".format(obj_cls))
             for name, obj in obj_dict.items():
                 if filename is None or self.file_map[name] == filename:
-                    print(obj.c_repr(name))
+                    if isinstance(obj, AlgebraicDataType):
+                        print(obj.named_c_repr(name))
+                    else:
+                        print(obj.c_repr(name))
             print()

@@ -487,17 +487,18 @@ class TestParsing(object):
         enums = self.parser.clib_intf.enums
 
         # test all properties of enum
-        enum_name_type = cm.EnumType([('enum1', 2), ('enum2', 6),
+        enum_name_type = cm.EnumType([('enum1', 9), ('enum2', 6),
                                       ('enum3', 7), ('enum4', 8)])
         assert tdefs['enum enum_name'] == enum_name_type
         assert vars['enum_inst'] == cm.CustomType('enum enum_name')
         assert vars['enum_inst2'] == cm.CustomType('enum enum_name')
 
         # test anonymous enums
-        assert vars['no_name_enum_inst'] == cm.CustomType('enum anon_enum0')
-        assert vars['no_name_enum_inst2'] == cm.CustomType('enum anon_enum1')
-        assert tdefs['enum anon_enum0'] == cm.EnumType([('x', 0), ('y', 1)])
+        assert (vars['anonymous_enum_inst'] ==
+                cm.PointerType(cm.EnumType([('x', 0), ('y', 1)])))
+        assert set(tdefs) == { 'enum enum_name' }
 
+        assert enums['enum1'] == 9
         assert enums['y'] == 1
 
         # test filemap
@@ -526,7 +527,10 @@ class TestParsing(object):
                 cm.PointerType(cm.CustomType('struct struct_name')))
 
         assert (tdefs['struct_name2_ptr'] ==
-                cm.PointerType(cm.CustomType('struct anon_struct0')))
+                cm.PointerType(cm.StructType([
+                    ('x', cm.BuiltinType('int'), None),
+                    ('y', cm.BuiltinType('int'), None),
+                ])))
 
         # Test declaring a recursive structure.
         assert (tdefs['struct recursive_struct'] ==
@@ -553,6 +557,12 @@ class TestParsing(object):
                 cm.StructType([
                     (None, cm.CustomType('struct struct_name'), None)]))
 
+        sub_struct = cm.StructType([('y', cm.BuiltinType('int'), None)])
+        assert (vars['anonymous_struct_inst'] ==
+                cm.StructType([
+                    ('x', cm.BuiltinType('long'), None),
+                    (None, sub_struct, None)]))
+
         assert tdefs['struct typequals'].quals == []
         assert vars['typequals_var'].quals == ['const', 'volatile']
 
@@ -578,15 +588,19 @@ class TestParsing(object):
 
         # Test defining an unnamed union
         assert (vars['no_name_union_inst'] ==
-                cm.CustomType('union anon_union0'))
-
+                cm.UnionType([('x', cm.BuiltinType('int')),
+                              ('y', cm.BuiltinType('int'))]))
 
         # Test defining a structure using an unnamed union internally.
+        sub_union = cm.UnionType([
+            ('mouse', cm.CustomType('RID_DEVICE_INFO_MOUSE')),
+            ('keyboard', cm.CustomType('RID_DEVICE_INFO_KEYBOARD')),
+            ('hid', cm.CustomType('RID_DEVICE_INFO_HID'))])
         assert (tdefs['struct tagRID_DEVICE_INFO'] ==
                 cm.StructType([
                     ('cbSize', cm.CustomType('DWORD'), None),
                     ('dwType', cm.CustomType('DWORD'), None),
-                    (None, cm.CustomType('union anon_union1'), None)]))
+                    (None, sub_union, None)]))
 
         assert (tdefs['RID_DEVICE_INFO'] ==
                 cm.CustomType('struct tagRID_DEVICE_INFO'))

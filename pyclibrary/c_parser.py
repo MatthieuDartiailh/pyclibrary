@@ -953,19 +953,11 @@ class CParser(object):
         """
         try:
             logger.debug("ENUM: {}".format(t))
-            if t.name == '':
-                n = 0   ###TODO: replace by anonymous enum counter in clibinterface
-                while True:
-                    name = 'anon_enum{}'.format(n)   ###TODO: rename to '$'+nr to avoid name clashes
-                    if ('enum ' + name) not in self.clib_intf.typedefs:
-                        break
-                    n += 1
-            else:
-                name = t.name
+            ename = 'enum ' + t.name if t.name else None
 
-            logger.debug("  name: {}".format(name))
+            logger.debug("  name: {}".format(ename))
 
-            if ('enum ' + name) not in self.clib_intf.typedefs:
+            if ename not in self.clib_intf.typedefs:
                 enum_vals = []
                 cur_enum_val = 0
                 for v in t.members:
@@ -976,10 +968,14 @@ class CParser(object):
                     enum_vals.append((v.name, cur_enum_val))
                     cur_enum_val += 1
                 logger.debug("  members: {}".format(enum_vals))
-                self.clib_intf.add_typedef('enum ' + name,
-                                           c_model.EnumType(enum_vals),
-                                           self.current_file)
-            return c_model.CustomType('enum ' + name)
+
+                etyp = c_model.EnumType(enum_vals)
+                if not ename:
+                    return etyp
+                else:
+                    self.clib_intf.add_typedef(ename, etyp, self.current_file)
+
+            return c_model.CustomType(ename)
         except:
             logger.exception("Error processing enum: {}".format(t))
 
@@ -1023,19 +1019,10 @@ class CParser(object):
             packing = self.packing_at(lineno(l, s))
 
             logger.debug('{} {} {}'.format(str_typ.upper(), t.name, t))
-            if t.name == '':
-                n = 0 ###TODO: replace by anonymous enum counter in clibinterface
-                while True:
-                    sname = '{0} anon_{0}{1}'.format(str_typ, n)
-                    if sname not in self.clib_intf.typedefs:
-                        break
-                    n += 1
-            else:
-                sname = str_typ + ' ' + t.name
+            sname = str_typ + ' ' + t.name if t.name else None
 
             logger.debug("  NAME: {}".format(sname))
-            if (len(t.members) > 0 or sname not in self.clib_intf.typedefs or
-                    self.clib_intf.typedefs[sname].fields == {}):
+            if len(t.members) > 0 or sname not in self.clib_intf.typedefs:
                 logger.debug("  NEW " + str_typ.upper())
                 fields = []
                 for m in t.members:
@@ -1069,7 +1056,13 @@ class CParser(object):
                     type_ = c_model.StructType(fields, packing)
                 else:
                     type_ = c_model.UnionType(fields)
-                self.clib_intf.add_typedef(sname, type_, self.current_file)
+
+                if sname is None:
+                    # anonymous struct/union => return directly
+                    return type_
+                else:
+                    self.clib_intf.add_typedef(sname, type_,
+                                               self.current_file)
 
             return c_model.CustomType(sname)
 

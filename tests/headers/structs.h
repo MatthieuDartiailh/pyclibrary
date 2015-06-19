@@ -49,6 +49,11 @@ struct unnamed_struct {
     struct struct_name;
 } ;
 
+struct {
+    long x;
+    struct { int y; } ;
+} anonymous_struct_inst;
+
 const struct typequals {
     int x;
 } volatile typequals_var;

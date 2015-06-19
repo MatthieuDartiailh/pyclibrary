@@ -80,6 +80,9 @@ class TestCLibType(object):
         dummy_type = self.DummyType(['tq2'])
         assert dummy_type.resolve({}) == dummy_type
 
+    def test_iter(self):
+        assert list(self.DummyType()) == []
+
 
 class TestSimpleType(object):
 
@@ -90,6 +93,9 @@ class TestSimpleType(object):
         qual_type = cm.SimpleType('unsigned char', quals=['tp1', 'tp2'])
         assert qual_type.c_repr() == 'tp1 tp2 unsigned char'
         assert qual_type.c_repr('a') == 'tp1 tp2 unsigned char a'
+
+    def test_iter(self):
+        assert list(cm.SimpleType('int')) == []
 
 
 class TestCustomType(object):
@@ -111,6 +117,9 @@ class TestCustomType(object):
         with pytest.raises(cm.UnknownCustomTypeError):
             cm.CustomType('cyclictype').resolve(typedefs)
 
+    def test_iter(self):
+        assert list(cm.CustomType('custom_type')) == []
+
 
 class TestStructType(object):
 
@@ -128,18 +137,18 @@ class TestStructType(object):
 
         second_field = ('field2', cm.BuiltinType('signed short'), None)
         assert (cm.StructType([simple_field, second_field])
-                .c_repr('struct struct_name_t') ==
-                "struct struct_name_t {\n"
-                "    int field;\n"
-                "    signed short field2;\n"
-                "}")
-
-        assert (cm.StructType([simple_field], packsize=2).c_repr() ==
-                "#pragma pack(push, 2)\n"
+                .c_repr('struct_name') ==
                 "struct {\n"
                 "    int field;\n"
-                "}\n"
-                "#pragma pack(pop)\n")
+                "    signed short field2;\n"
+                "} struct_name")
+
+        assert (cm.StructType([simple_field], packsize=2).c_repr() ==
+                "struct {\n"
+                "    #pragma pack(push, 2)\n"
+                "    int field;\n"
+                "    #pragma pack(pop)\n"
+                "}")
 
         bit_field = ('field', cm.BuiltinType('int'), 4)
         assert (cm.StructType([bit_field]).c_repr() ==
@@ -153,8 +162,22 @@ class TestStructType(object):
                 "    struct s;\n"
                 "}")
 
-        with pytest.raises(ValueError):
-            cm.StructType([simple_field]).c_repr('missing_struct_keyword')
+        assert (cm.StructType([
+                ('field', cm.StructType([
+                    ('subfield', cm.BuiltinType('int'), None)]), None)])
+                .c_repr() ==
+                "struct {\n"
+                "    struct {\n"
+                "        int subfield;\n"
+                "    } field;\n"
+                "}")
+
+    def test_iter(self):
+        field1 = cm.BuiltinType('int')
+        field2 = cm.BuiltinType('int')
+        assert (list(cm.StructType([('a', field1, None),
+                                    ('b', field2, None)])) ==
+                [field1, field2])
 
 
 class TestUnionType(object):
@@ -166,26 +189,25 @@ class TestUnionType(object):
                 "    int field;\n"
                 "}")
 
-        with pytest.raises(ValueError):
-            cm.UnionType(simple_fields).c_repr('missing_union_keyword')
+    def test_iter(self):
+        field1 = cm.BuiltinType('int')
+        field2 = cm.BuiltinType('int')
+        assert (list(cm.UnionType([('a', field1), ('b', field2)])) ==
+                [field1, field2])
 
 
 class TestEnumType(object):
 
-    def test_init(self):
-        with pytest.raises(ValueError):
-            cm.EnumType([('val', 1)], quals=['keyword'])
-
     def test_c_repr(self):
         simple_lst = [('val1', 3), ('val2', 99)]
-        assert (cm.EnumType(simple_lst).c_repr('enum enm_') ==
-                "enum enm_ {\n"
+        assert (cm.EnumType(simple_lst).c_repr('enum_inst') ==
+                "enum {\n"
                 "    val1 = 3,\n"
                 "    val2 = 99,\n"
-                "}")
+                "} enum_inst")
 
-        with pytest.raises(ValueError):
-            cm.EnumType(simple_lst).c_repr('missing_enum_keyword')
+    def test_iter(self):
+        assert (list(cm.EnumType([('a', 1), ('b', 2)])) == [])
 
 
 class TestPointerType(object):
@@ -225,6 +247,10 @@ class TestPointerType(object):
         with pytest.raises(cm.UnknownCustomTypeError):
             cm.CustomType('cycle').resolve(typedefs)
 
+    def test_iter(self):
+        base_type = cm.BuiltinType('int')
+        assert (list(cm.PointerType(base_type)) == [base_type])
+
 
 class TestArrayType(object):
 
@@ -245,6 +271,10 @@ class TestArrayType(object):
                 'int * name[]')
         assert (cm.PointerType(cm.ArrayType(int_type)).c_repr('name') ==
                 'int (* name)[]')
+
+    def test_iter(self):
+        base_type = cm.BuiltinType('int')
+        assert (list(cm.ArrayType(base_type, 4)) == [base_type])
 
 
 class TestFunctionType(object):
@@ -268,6 +298,13 @@ class TestFunctionType(object):
             # anonymous functions are not valid C constructs
             cm.FunctionType(int_type, []).c_repr()
         assert str(cm.FunctionType(int_type, [])) == 'int <<funcname>>()'
+
+    def test_iter(self):
+        ret_type = cm.BuiltinType('char')
+        arg1_type = cm.BuiltinType('int')
+        arg2_type = cm.BuiltinType('long')
+        assert (list(cm.FunctionType(ret_type, [arg1_type, arg2_type])) ==
+                [ret_type, arg1_type, arg2_type])
 
 
 class TestMacro(object):
