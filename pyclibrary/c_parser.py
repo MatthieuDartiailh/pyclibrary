@@ -786,7 +786,7 @@ class CParser(object):
             Optional((lparen + self.abstract_declarator + rparen)('center')) +
             Optional(lparen +
                      Optional(delimitedList(Group(
-                              self.type_spec('type_spec') +
+                              self.type_spec +
                               self.abstract_declarator('decl') +
                               Optional(Literal('=').suppress() + expression,
                                        default=None)('val')
@@ -809,7 +809,7 @@ class CParser(object):
             (ident('name') | (lparen + self.declarator + rparen)('center')) +
             Optional(lparen +
                      Optional(delimitedList(
-                         Group(self.type_spec('type_spec') +
+                         Group(self.type_spec +
                                (self.declarator |
                                 self.abstract_declarator)('decl') +
                                Optional(Literal('=').suppress() +
@@ -823,14 +823,16 @@ class CParser(object):
         self.declarator_list = Group(delimitedList(self.declarator))
 
         # Typedef
-        self.type_decl = (Keyword('typedef') + self.type_spec('type_spec') +
+        self.type_decl = (Keyword('typedef') + self.type_spec +
                           self.declarator_list('decl_list') + semi)
         self.type_decl.setParseAction(self.process_typedef)
 
         # Variable declaration
         self.variable_decl = (
-            Group(storage_class_spec +
-                  self.type_spec('type_spec') +
+            Group(type_qualifier('pre_qual') +
+                  storage_class_spec('pre_stor_cls') +
+                  type_astdef('type') +
+                  storage_class_spec('post_stor_cls') +
                   Optional(self.declarator_list('decl_list')) +
                   Optional(Literal('=').suppress() +
                            (expression('value') |
@@ -845,12 +847,13 @@ class CParser(object):
         self.variable_decl.setParseAction(self.process_variable)
 
         # Function definition
-        self.typeless_function_decl = (self.declarator('decl') +
-                                       nestedExpr('{', '}').suppress())
-        self.function_decl = (storage_class_spec +
-                              self.type_spec('type_spec') +
-                              self.declarator('decl') +
-                              nestedExpr('{', '}').suppress())
+        self.function_decl = (
+            type_qualifier('pre_qual') +
+            storage_class_spec('pre_stor_cls') +
+            type_astdef('type') +
+            storage_class_spec('post_stor_cls') +
+            self.declarator('decl') +
+            nestedExpr('{', '}').suppress())
         self.function_decl.setParseAction(self.process_function)
 
         # Struct definition
@@ -859,7 +862,7 @@ class CParser(object):
         self.struct_member = (
             Group(self.variable_decl.copy().setParseAction(lambda: None)) |
             # Hack to handle bit width specification.
-            Group(Group(self.type_spec('type_spec') +
+            Group(Group(self.type_spec +
                         Optional(self.declarator_list('decl_list')) +
                         colon + integer('bit') + semi)) |
             (self.type_spec + self.declarator +
@@ -918,7 +921,7 @@ class CParser(object):
             if decl['args'][0] is None:
                 params = []
             else:
-                params = [self.process_type(a['type_spec'], a['decl'])
+                params = [self.process_type(a, a['decl'])
                           for a in decl['args']]
             base_type = c_model.FunctionType(base_type, params, quals)
 
@@ -986,13 +989,16 @@ class CParser(object):
         logger.debug("FUNCTION {} : {}".format(t, t.keys()))
 
         try:
-            (name, ret_type) = self.process_type(t.type_spec, t.decl[0])
-            if not isinstance(ret_type, c_model.FunctionType):
+            (name, func_sig) = self.process_type(t, t.decl[0])
+            storage_classes = (list(t.pre_stor_cls or []) +
+                               list(t.post_stor_cls or []))
+            if not isinstance(func_sig, c_model.FunctionType):
                 logger.error('{}'.format(t))
                 mess = "Incorrect declarator type for function definition."
                 raise DefinitionError(mess)
-            logger.debug("  sig/name: {}".format(ret_type.c_repr(name)))
-            self.clib_intf.add_func(name, ret_type, self.current_file)
+            logger.debug("  sig/name: {}".format(func_sig.c_repr(name)))
+            self.clib_intf.add_func(name, func_sig, self.current_file,
+                                    storage_classes)
 
         except Exception:
             logger.exception("Error processing function: {}".format(t))
@@ -1026,7 +1032,7 @@ class CParser(object):
                 logger.debug("  NEW " + str_typ.upper())
                 fields = []
                 for m in t.members:
-                    typ = m[0].type_spec
+                    typ = m[0]
                     val = self.eval_expr(m[0].value)
                     logger.debug("    member: {}, {}, {}".format(
                                  m, m[0].keys(), m[0].decl_list))
@@ -1076,17 +1082,21 @@ class CParser(object):
         try:
             val = self.eval_expr(t[0])
             for d in t[0].decl_list:
-                (name, type_) = self.process_type(t[0].type_spec, d)
+                (name, type_) = self.process_type(t[0], d)
                 # This is a function prototype
+                storage_classes = (list(t[0].pre_stor_cls or []) +
+                                   list(t[0].post_stor_cls or []))
                 if isinstance(type_, c_model.FunctionType):
                     logger.debug("  Add function prototype: {}".format(
                                  type_.c_repr(name)))
-                    self.clib_intf.add_func(name, type_, self.current_file)
+                    self.clib_intf.add_func(name, type_, self.current_file,
+                                            storage_classes)
                 # This is a variable
                 else:
                     logger.debug("  Add variable: {} {} {}".format(name,
                                  type_, val))
-                    self.clib_intf.add_var(name, type_, self.current_file)
+                    self.clib_intf.add_var(name, type_, self.current_file,
+                                           storage_classes)
 
         except Exception:
             logger.exception('Error processing variable: {}'.format(t))
@@ -1095,9 +1105,8 @@ class CParser(object):
         """
         """
         logger.debug("TYPE: {}".format(t))
-        ast_type = t.type_spec
         for d in t.decl_list:
-            (name, type_) = self.process_type(ast_type, d)
+            (name, type_) = self.process_type(t, d)
             logger.debug("  {}: {}".format(name, type_))
             self.clib_intf.add_typedef(name, type_, self.current_file)
 
@@ -1251,13 +1260,13 @@ def _init_cparser(extra_types=None, extra_modifiers=()):
     # Some basic definitions
     extra_type_list = [] if extra_types is None else list(extra_types)
     base_types = nonnum_types + num_types + extra_type_list
-    storage_classes = ['inline', 'static', 'extern']
+    storage_classes = ['inline', 'static', 'extern', '__declspec']
     ###TODO: extend storage classes by stanard and custom ones (i.e. 'auto', 'register', '__declspec()')
-    ###TODO: allow storage classes to be intermixed with types (i.e. int static a')
     qualifiers = ['const', 'volatile', 'restrict', 'near', 'far', '__cdecl', '__stdcall', 'call_conv']
 
     keywords = (['struct', 'enum', 'union', '__stdcall', '__cdecl'] +
-                qualifiers + base_types + size_modifiers + sign_modifiers)
+                qualifiers + base_types + size_modifiers + sign_modifiers +
+                storage_classes)
 
     keyword = kwl(keywords)
     wordchars = alphanums+'_$'
@@ -1282,7 +1291,9 @@ def _init_cparser(extra_types=None, extra_modifiers=()):
         (special_quals + Optional(nestedExpr())).setParseAction(mergeNested) |
         kwl(qualifiers))
 
-    storage_class_spec = Optional(kwl(storage_classes))
+    storage_class_spec = ZeroOrMore(
+        (kwl(storage_classes) + Optional(nestedExpr()))
+        .setParseAction(mergeNested))
 
     # Language elements
     fund_type = OneOrMore(kwl(sign_modifiers + size_modifiers +

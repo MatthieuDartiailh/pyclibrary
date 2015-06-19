@@ -372,11 +372,17 @@ class TestCLibInterface(object):
         self.assert_add_obj(clib, clib.funcs, clib.add_func,
                             cm.FunctionType(cm.BuiltinType('int'), []),
                             cm.FunctionType(cm.BuiltinType('void'), []))
+        clib.add_func('func2', cm.FunctionType(cm.BuiltinType('int'), []),
+                      storage_classes=['fcls1', 'fcls2'])
+        assert clib.storage_classes['func2'] == ['fcls1', 'fcls2']
 
     def test_add_var(self, clib):
         self.assert_add_obj(clib, clib.vars, clib.add_var,
                             cm.BuiltinType('int'),
                             cm.BuiltinType('char'))
+        clib.add_func('var2', cm.BuiltinType('int'),
+                      storage_classes=['vcls1', 'vcls2'])
+        assert clib.storage_classes['var2'] == ['vcls1', 'vcls2']
 
     def test_add_typedef(self, clib):
         self.assert_add_obj(clib, clib.typedefs, clib.add_typedef,
@@ -398,7 +404,8 @@ class TestCLibInterface(object):
 
     def test_include(self):
         clib = cm.CLibInterface()
-        clib.add_func('f', cm.FunctionType(cm.BuiltinType('int'), []), 'hd.h')
+        clib.add_func('f', cm.FunctionType(cm.BuiltinType('int'), []),
+                      'hd.h', storage_classes=['stor_cls'])
         clib.add_var('v', cm.BuiltinType('int'), 'hd.h')
         clib.add_typedef('t', cm.BuiltinType('int'), 'hd.h')
         clib.add_typedef('e', cm.EnumType([('v1', 1)]), 'hd.h')
@@ -406,7 +413,7 @@ class TestCLibInterface(object):
 
         clib2 = cm.CLibInterface()
         clib2.add_func('f2', cm.FunctionType(cm.BuiltinType('char'), []),
-                       'hd2.h')
+                       'hd2.h', storage_classes=['stor_cls2'])
         clib2.add_var('v2', cm.BuiltinType('char'), 'hd2.h')
         clib2.add_typedef('t2', cm.BuiltinType('char'), 'hd2.h')
         clib2.add_typedef('e2', cm.EnumType([('v2', 2)]), 'hd2.h')
@@ -432,3 +439,8 @@ class TestCLibInterface(object):
             'm2': cm.ValMacro('4')}
         assert clib.file_map['f'] == 'hd.h'
         assert clib.file_map['f2'] == 'hd2.h'
+        assert clib.storage_classes == {
+            'f': ['stor_cls'],
+            'v': [],
+            'f2': ['stor_cls2'],
+            'v2': [] }

@@ -374,6 +374,8 @@ class TestParsing(object):
         assert vars['int_stat'] == cm.BuiltinType('int')
         assert vars['int_con_stat'] == cm.BuiltinType('int', quals=['const'])
         assert vars['int_extern'] == cm.BuiltinType('int')
+        assert (self.parser.clib_intf.storage_classes['int_extern'] ==
+                ['extern'])
 
         # String
         assert vars['str1'] == cm.PointerType(cm.BuiltinType('char'))
@@ -621,6 +623,7 @@ class TestParsing(object):
 
         funcs = self.parser.clib_intf.funcs
         vars = self.parser.clib_intf.vars
+        storage_classes = self.parser.clib_intf.storage_classes
 
         assert (funcs['f'] ==
                 cm.FunctionType(
@@ -632,8 +635,8 @@ class TestParsing(object):
                     cm.BuiltinType('int'),
                     [('ch', cm.PointerType(cm.BuiltinType('char'))),
                      ('str', cm.PointerType(cm.PointerType(
-                         cm.BuiltinType('char'))))])
-                )
+                         cm.BuiltinType('char'))))]))
+        assert storage_classes['g'] == ['inline']
         assert (vars['fnPtr'] ==
                 cm.PointerType(
                     cm.FunctionType(
@@ -641,15 +644,14 @@ class TestParsing(object):
                         [(None, cm.BuiltinType('char')),
                          (None, cm.BuiltinType('float'))])))
         assert (funcs['function1'] ==
-                cm.FunctionType(
-                    cm.BuiltinType('int'),
-                    [],
-                    quals=['__declspec(dllexport)', '__stdcall']))
+                cm.FunctionType(cm.BuiltinType('int'), [], ['__stdcall']))
+        assert (storage_classes['function1'] ==
+                ['extern', '__declspec(dllexport)'])
         assert (funcs['function2'] ==
-                cm.FunctionType(cm.BuiltinType('int'), [],
-                                quals=['__declspec(dllexport)']))
+                cm.FunctionType(cm.BuiltinType('int'), []))
 
         assert 'externFunc' in funcs
+        assert storage_classes['externFunc'] == ['extern']
 
         ptyp = cm.PointerType(
             cm.PointerType(
@@ -663,5 +665,3 @@ class TestParsing(object):
         assert os.path.basename(f_name_path) == 'functions.h'
         g_name_path = self.parser.clib_intf.file_map['g']
         assert os.path.basename(g_name_path) == 'functions.h'
-
-        ###TODO: add __declspec() == proproetary storace_class support

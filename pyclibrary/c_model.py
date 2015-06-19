@@ -651,6 +651,7 @@ class CLibInterface(collections.Mapping):
         }
 
         self.file_map = dict()
+        self.storage_classes = dict()
 
     def include(self, from_clib_intf):
         """
@@ -665,6 +666,7 @@ class CLibInterface(collections.Mapping):
         self.enums.update(from_clib_intf.enums)
         self.macros.update(from_clib_intf.macros)
         self.file_map.update(from_clib_intf.file_map)
+        self.storage_classes.update(from_clib_intf.storage_classes)
 
     def __getitem__(self, name):
         for cls in self.obj_maps.values():
@@ -700,7 +702,7 @@ class CLibInterface(collections.Mapping):
         self.file_map[name] = filename
         add_enum_vals(obj)
 
-    def add_func(self, name, func, filename=None):
+    def add_func(self, name, func, filename=None, storage_classes=None):
         """
         official interface to add a function to CLibInterface.
 
@@ -710,8 +712,9 @@ class CLibInterface(collections.Mapping):
             (if known)
         """
         self._add_obj(self.funcs, name, func, filename)
+        self.storage_classes[name] = storage_classes or []
 
-    def add_var(self, name, var, filename=None):
+    def add_var(self, name, var, filename=None, storage_classes=None):
         """
         official interface to add a global variable (of any type, even
         function pointers) to CLibInterface.
@@ -722,6 +725,7 @@ class CLibInterface(collections.Mapping):
             (if known)
         """
         self._add_obj(self.vars, name, var, filename)
+        self.storage_classes[name] = storage_classes or []
 
     def add_typedef(self, name, typedef, filename=None):
         """
