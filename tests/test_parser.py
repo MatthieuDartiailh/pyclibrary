@@ -383,18 +383,18 @@ class TestParsing(object):
                 cm.PointerType(cm.PointerType(cm.BuiltinType('char'))))
         assert (vars['str3'] ==
                 cm.PointerType(cm.BuiltinType('char', quals=['const']),
-                               quals=['const']))   ### test initial_val?
-        assert 'str4' in vars     ### test initial_val?
-        assert 'str5' in vars     ### test initial_val?
+                               quals=['const']))
+        assert 'str4' in vars
+        assert 'str5' in vars
 
         # Test complex evaluation
-        assert 'x1' in vars    ### test initial_val == 1.0?
+        assert 'x1' in vars
 
         # Test type casting handling.
-        assert 'x2' in vars    ### test initial_val == 88342528?
+        assert 'x2' in vars
 
         # Test array handling
-        assert vars['array'] == cm.ArrayType(cm.BuiltinType('float'), 2) ### test initial_val?
+        assert vars['array'] == cm.ArrayType(cm.BuiltinType('float'), 2)
         assert (vars['intJunk'] ==
                 cm.ArrayType(
                     cm.PointerType(
@@ -665,3 +665,8 @@ class TestParsing(object):
         assert os.path.basename(f_name_path) == 'functions.h'
         g_name_path = self.parser.clib_intf.file_map['g']
         assert os.path.basename(g_name_path) == 'functions.h'
+
+        assert (funcs['array_param_func'] ==
+                cm.FunctionType(cm.BuiltinType('void'), [
+                    ('arr_params', cm.ArrayType(
+                        cm.BuiltinType('int'), None))]))

@@ -28,4 +28,5 @@ extern int externFunc(void);
 
 //define typequals in abstract typedef
 int typeQualedFunc(int volatile * const *);
-//###TODO: test parameter with undefined array size
+
+void array_param_func(int arr_params[]);
