@@ -651,7 +651,8 @@ class CParser(object):
 
         self.clib_intf.add_macro(t.macro, macro, self.current_file)
         return macro.c_repr(t.macro)
-
+    
+    ###TODO: remove, as it moved to FnMacro._compiled_content
     def compile_fn_macro(self, text, args):
         """Turn a function macro spec into a compiled description.
 
@@ -775,19 +776,12 @@ class CParser(object):
 
         self.struct_type = Forward()
         self.enum_type = Forward()
-        builtin_type_astdef = fund_type
-        custom_type_astdef = (
-            Optional(kwl(size_modifiers + sign_modifiers)) + ident | ###TODO: check if modifiers can be omitted, since not part of C standard
+        type_astdef = (
+            fund_type.setParseAction(converter(c_model.BuiltinType)) |
+            (Optional(kwl(size_modifiers + sign_modifiers)) + ident).setParseAction(converter(c_model.CustomType)) | ###TODO: check if modifiers can be omitted, since not part of C standard
             self.struct_type |
             self.enum_type)
-        if extra_modifier is not None:
-            builtin_type_astdef += extra_modifier
-            custom_type_astdef += extra_modifier
-        type_astdef = (
-            builtin_type_astdef.setParseAction(recombine)('builtin_name') |
-            custom_type_astdef.setParseAction(recombine)('custom_name'))
-        self.type_spec = (type_qualifier('pre_qual') +
-                          type_astdef)
+        self.type_spec = type_qualifier('pre_qual') + type_astdef('type')
 
         # --- Abstract declarators for use in function pointer arguments
         #   Thus begins the extremely hairy business of parsing C declarators.
@@ -808,12 +802,12 @@ class CParser(object):
         #     *( )(int, int)[10]
         #     ...etc...
         self.abstract_declarator << Group(
-            type_qualifier('first_typequal') +
-            Group(ZeroOrMore(Group(Suppress('*') + type_qualifier)))('ptrs') +
+            Group(ZeroOrMore(Group(type_qualifier + Suppress('*'))))('ptrs') +
+            type_qualifier('qual') +
             Optional((lparen + self.abstract_declarator + rparen)('center')) +
             Optional(lparen +
                      Optional(delimitedList(Group(
-                              self.type_spec('type') +
+                              self.type_spec('type_spec') +
                               self.abstract_declarator('decl') +
                               Optional(Literal('=').suppress() + expression,
                                        default=None)('val')
@@ -831,13 +825,13 @@ class CParser(object):
         #     * fnName(int arg1=0)[10]
         #     ...etc...
         self.declarator << Group(
-            type_qualifier('first_typequal') + call_conv +
-            Group(ZeroOrMore(Group(Suppress('*') + type_qualifier)))('ptrs') +
+            Group(ZeroOrMore(Group(type_qualifier + Suppress('*'))))('ptrs') +
+            type_qualifier('qual') +
             (ident('name') |
              (lparen + self.declarator + rparen)('center')) +
             Optional(lparen +
                      Optional(delimitedList(
-                         Group(self.type_spec('type') +
+                         Group(self.type_spec('type_spec') +
                                (self.declarator |
                                 self.abstract_declarator)('decl') +
                                Optional(Literal('=').suppress() +
@@ -851,14 +845,14 @@ class CParser(object):
         self.declarator_list = Group(delimitedList(self.declarator))
 
         # Typedef
-        self.type_decl = (Keyword('typedef') + self.type_spec('type') +
+        self.type_decl = (Keyword('typedef') + self.type_spec('type_spec') +
                           self.declarator_list('decl_list') + semi)
         self.type_decl.setParseAction(self.process_typedef)
 
         # Variable declaration
         self.variable_decl = (
             Group(storage_class_spec +
-                  self.type_spec('type') +
+                  self.type_spec('type_spec') +
                   Optional(self.declarator_list('decl_list')) +
                   Optional(Literal('=').suppress() +
                            (expression('value') |
@@ -876,7 +870,7 @@ class CParser(object):
         self.typeless_function_decl = (self.declarator('decl') +
                                        nestedExpr('{', '}').suppress())
         self.function_decl = (storage_class_spec +
-                              self.type_spec('type') +
+                              self.type_spec('type_spec') +
                               self.declarator('decl') +
                               nestedExpr('{', '}').suppress())
         self.function_decl.setParseAction(self.process_function)
@@ -887,7 +881,7 @@ class CParser(object):
         self.struct_member = (
             Group(self.variable_decl.copy().setParseAction(lambda: None)) |
             # Hack to handle bit width specification.
-            Group(Group(self.type_spec('type') +
+            Group(Group(self.type_spec('type_spec') +
                         Optional(self.declarator_list('decl_list')) +
                         colon + integer('bit') + semi)) |
             (self.type_spec + self.declarator +
@@ -931,84 +925,50 @@ class CParser(object):
         See process_type(...) for more information.
 
         """
-        toks = []
-        quals = [tuple(decl.get('first_typequal', []))]
         name = None
+        quals = list(decl.get('qual', []))
         logger.debug("DECL: {}".format(decl))
-
-        base_type.quals += list(decl.get('first_typequal', []))
-        result_type = base_type
 
         if 'ptrs' in decl and len(decl['ptrs']) > 0:
             for ptr_level in decl['ptrs']:
-                result_type = c_model.PointerType(result_type,
-                                                  quals=list(ptr_level))
+                base_type = c_model.PointerType(
+                    base_type.with_quals(list(ptr_level)))
+
+        if 'args' not in decl or len(decl['args']) == 0:
+            base_type = base_type.with_quals(quals)
+        else:
+            if decl['args'][0] is None:
+                params = []
+            else:
+                params = [self.process_type(a['type_spec'], a['decl'])
+                          for a in decl['args']]
+            base_type = c_model.FunctionType(base_type, params, quals)
 
         if 'arrays' in decl and len(decl['arrays']) > 0:
             for ast_arrsize in reversed(decl['arrays']):
                 arrsize = (self.eval_expr(ast_arrsize) if ast_arrsize != ''
                            else None)
-                result_type = c_model.ArrayType(result_type, arrsize)
-
-        if 'args' in decl and len(decl['args']) > 0:
-            if decl['args'][0] is None:
-                params = []
-            else:
-                params = [self.process_type(a['type'], a['decl'])
-                          for a in decl['args']]
-            ###TODO: merge call_conv with type_quals
-            call_conv = [decl['call_conv']] if 'call_conv' in decl else []
-            result_type = c_model.FunctionType(base_type, params,
-                                               quals=call_conv)
+                base_type = c_model.ArrayType(base_type, arrsize)
 
         if 'center' in decl:
-            (n, result_type) = self.process_declarator(decl['center'][0],
-                                                       result_type)
+            (n, base_type) = self.process_declarator(
+                decl['center'][0],
+                base_type)
             if n is not None:
                 name = n
 
         if 'name' in decl:
             name = decl['name']
 
-        return (name, result_type)
+        return (name, base_type)
 
     def process_type(self, type_ast, decl):
-        """Take a declarator + base type and return a serialized name/type
-        description.
-
-        The description will be a list of elements (name, [basetype, modifier,
-        modifier, ...]):
-
-        - name is the string name of the declarator or None for an abstract
-          declarator
-        - basetype is the string representing the base type
-        - modifiers can be:
-            - '*'    : pointer (multiple pointers "***" allowed)
-            - '__X'  : calling convention (windows only). X can be 'cdecl' or
-              'stdcall'
-            - list   : array. Value(s) indicate the length of each array, -1
-              for incomplete type.
-            - tuple  : function, items are the output of processType for each
-              function argument.
-
-        Examples:
-          - int *x[10]            =>  ('x', ['int', [10], '*'])
-          - char fn(int x)         =>  ('fn', ['char', [('x', ['int'])]])
-          - struct s (*)(int, int*)   =>
-            (None, ["struct s", ((None, ['int']), (None, ['int', '*'])), '*'])
-
+        """Take a declarator + base type and return a CLibType object.
         """
-        ast_name = type_ast.get('builtin_name') or type_ast.get('custom_name')
-        tpquals = list(type_ast.get('pre_qual', []))
-        logger.debug("PROCESS TYPE/DECL: {}/{}".format(ast_name, decl))
-
-        if 'builtin_name' in type_ast:
-            base_type = c_model.BuiltinType(ast_name, tpquals)
-        else:
-            base_type = c_model.CustomType(ast_name, tpquals)
-        (name, type_) = self.process_declarator(decl, base_type)
-
-        return (name, type_)
+        pre_quals = list(type_ast.get('pre_qual', []))
+        base_type = type_ast.get('type').with_quals(pre_quals)
+        logger.debug("PROCESS TYPE/DECL: {}".format(base_type))
+        return self.process_declarator(decl, base_type)
 
     def process_enum(self, s, l, t):
         """
@@ -1041,7 +1001,7 @@ class CParser(object):
                 self.clib_intf.add_typedef('enum ' + name,
                                            c_model.EnumType(enum_vals),
                                            self.current_file)
-            return ('enum ' + name)
+            return c_model.CustomType('enum ' + name)
         except:
             logger.exception("Error processing enum: {}".format(t))
 
@@ -1052,13 +1012,13 @@ class CParser(object):
         logger.debug("FUNCTION {} : {}".format(t, t.keys()))
 
         try:
-            (name, type_) = self.process_type(t.type, t.decl[0])
-            if not isinstance(type_, c_model.FunctionType):
+            (name, ret_type) = self.process_type(t.type_spec, t.decl[0])
+            if not isinstance(ret_type, c_model.FunctionType):
                 logger.error('{}'.format(t))
                 mess = "Incorrect declarator type for function definition."
                 raise DefinitionError(mess)
-            logger.debug("  sig/name: {}".format(type_.c_repr(name)))
-            self.clib_intf.add_func(name, type_, self.current_file)
+            logger.debug("  sig/name: {}".format(ret_type.c_repr(name)))
+            self.clib_intf.add_func(name, ret_type, self.current_file)
 
         except Exception:
             logger.exception("Error processing function: {}".format(t))
@@ -1101,16 +1061,16 @@ class CParser(object):
                 logger.debug("  NEW " + str_typ.upper())
                 fields = []
                 for m in t.members:
-                    typ = m[0].type
+                    typ = m[0].type_spec
                     val = self.eval_expr(m[0].value)
                     logger.debug("    member: {}, {}, {}".format(
                                  m, m[0].keys(), m[0].decl_list))
 
                     if len(m[0].decl_list) == 0:  # anonymous member
                         if str_typ == 'struct':
-                            field = (None, c_model.CustomType(typ[0]), None)
+                            field = (None, typ.type, None)
                         else:
-                            field = (None, c_model.CustomType(typ[0]))
+                            field = (None, typ.type)
                         fields.append(field)
 
                     for d in m[0].decl_list:
@@ -1128,14 +1088,12 @@ class CParser(object):
                             field, val, bitsize))
 
                 if str_typ == 'struct':
-                    compound_def = c_model.StructType(fields, packing)
+                    type_ = c_model.StructType(fields, packing)
                 else:
-                    compound_def = c_model.UnionType(fields)
-                self.clib_intf.add_typedef(sname,
-                                           compound_def,
-                                           self.current_file)
+                    type_ = c_model.UnionType(fields)
+                self.clib_intf.add_typedef(sname, type_, self.current_file)
 
-            return sname
+            return c_model.CustomType(sname)
 
         except Exception:
             logger.exception('Error processing struct: {}'.format(t))
@@ -1147,7 +1105,7 @@ class CParser(object):
         try:
             val = self.eval_expr(t[0])
             for d in t[0].decl_list:
-                (name, type_) = self.process_type(t[0].type, d)
+                (name, type_) = self.process_type(t[0].type_spec, d)
                 # This is a function prototype
                 if isinstance(type_, c_model.FunctionType):
                     logger.debug("  Add function prototype: {}".format(
@@ -1166,7 +1124,7 @@ class CParser(object):
         """
         """
         logger.debug("TYPE: {}".format(t))
-        ast_type = t.type
+        ast_type = t.type_spec
         for d in t.decl_list:
             (name, type_) = self.process_type(ast_type, d)
             logger.debug("  {}: {}".format(name, type_))
@@ -1238,11 +1196,13 @@ def flatten(lst):
         return res
 
 
-def recombine(tok):
-    """Flattens a tree of tokens and joins into one big string.
-
+def converter(converter):
+    """Flattens a tree of tokens and joins into one big string and converts
+    the str by 'converter'.
     """
-    return " ".join(flatten(tok.asList()))
+    def recombine(tok):
+        return converter(' '.join(flatten(tok.asList())))
+    return recombine
 
 
 def print_parse_results(pr, depth=0, name=''):
@@ -1299,10 +1259,8 @@ expression = Forward()
 array_op = lbrack + expression + rbrack
 base_types = None
 ident = None
-call_conv = None
 type_qualifier = None
 storage_class_spec = None
-extra_modifier = None
 fund_type = None
 extra_type_list = []
 
@@ -1311,11 +1269,11 @@ nonnum_types = ['char', 'bool', 'void']
 
 
 # Macro some common language elements when initialising.
-def _init_cparser(extra_types=None, extra_modifiers=None):
+def _init_cparser(extra_types=None, extra_modifiers=()):
     global expression
-    global call_conv, ident
+    global ident
     global base_types
-    global type_qualifier, storage_class_spec, extra_modifier
+    global type_qualifier, storage_class_spec
     global fund_type
     global extra_type_list
 
@@ -1323,7 +1281,9 @@ def _init_cparser(extra_types=None, extra_modifiers=None):
     extra_type_list = [] if extra_types is None else list(extra_types)
     base_types = nonnum_types + num_types + extra_type_list
     storage_classes = ['inline', 'static', 'extern']
-    qualifiers = ['const', 'volatile', 'restrict', 'near', 'far']
+    ###TODO: extend storage classes by stanard and custom ones (i.e. 'auto', 'register', '__declspec()')
+    ###TODO: allow storage classes to be intermixed with types (i.e. int static a')
+    qualifiers = ['const', 'volatile', 'restrict', 'near', 'far', '__cdecl', '__stdcall', 'call_conv']
 
     keywords = (['struct', 'enum', 'union', '__stdcall', '__cdecl'] +
                 qualifiers + base_types + size_modifiers + sign_modifiers)
@@ -1334,24 +1294,24 @@ def _init_cparser(extra_types=None, extra_modifiers=None):
              Word(alphas + "_", alphanums + "_$") +
              WordEnd(wordchars)).setParseAction(lambda t: t[0])
 
-    call_conv = Optional(Keyword('__cdecl') |
-                         Keyword('__stdcall'))('call_conv')
-
     # Removes '__name' from all type specs. may cause trouble.
     underscore_2_ident = (WordStart(wordchars) + ~keyword + '__' +
                           Word(alphanums, alphanums+"_$") +
-                          WordEnd(wordchars)).setParseAction(lambda t: t[0])
-    type_qualifier = ZeroOrMore((underscore_2_ident + Optional(nestedExpr())) |
-                                kwl(qualifiers))
+                          WordEnd(wordchars)
+                          )
+
+    special_quals = underscore_2_ident   ###TODO: remove / has to be done via extra_modifiers in future
+    if extra_modifiers:
+        special_quals |= kwl(extra_modifiers)
+    def mergeNested(t):
+        return ''.join((part if isinstance(part, basestring)
+                        else '(' + mergeNested(part) + ')')
+                       for part in t)
+    type_qualifier = ZeroOrMore(
+        (special_quals + Optional(nestedExpr())).setParseAction(mergeNested) |
+        kwl(qualifiers))
 
     storage_class_spec = Optional(kwl(storage_classes))
-
-    if extra_modifiers:
-        extra_modifier = ZeroOrMore(kwl(extra_modifiers) +
-                                    Optional(nestedExpr())).suppress()
-
-    else:
-        extra_modifier = None
 
     # Language elements
     fund_type = OneOrMore(kwl(sign_modifiers + size_modifiers +
@@ -1382,7 +1342,7 @@ def _init_cparser(extra_types=None, extra_modifiers=None):
     atom = cast_atom | uncast_atom
 
     expression << Group(atom + ZeroOrMore(bi_operator + atom))
-    expression.setParseAction(recombine)
+    expression.setParseAction(converter(str))
 
 
 ###TODO: remove this and adapt interface of CParser

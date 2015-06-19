@@ -117,6 +117,25 @@ class CLibType(CLibBase):
         """
         self.quals = quals or []
 
+    def with_quals(self, add_quals):
+        """
+        returns this type with additional type qualifiers.
+
+        ATTENTION: Does not modify the current type, but creates a new one,
+            if necessary
+
+        :param list[str] quals: list of type qualifiers, that shall be added
+            to the current list of type qualifiers
+        :rtype: CLibType
+        """
+        if len(add_quals) is 0:
+            # qualifiers need not to be modified (optimization)
+            return self
+        else:
+            clone = self.copy()
+            clone.quals = clone.quals + add_quals
+            return clone
+
     def resolve(self, typedefs, visited=None):
         """Resolves all references to type definitions. A reference to
         a type definition is represented by the TypeRef object. All
@@ -204,16 +223,8 @@ class CustomType(SimpleType):
             raise UnknownCustomTypeError('{!r} is a unknown type'
                                          .format(self.type_name))
 
-        result = typedefs[self.type_name].resolve(typedefs, visited)
-
-        if self.quals:
-            # do not modify result directly to avoid sideeffects
-            cloned_result = result.copy()
-
-            cloned_result.quals = self.quals + result.quals
-            return cloned_result
-        else:
-            return result
+        resolved_type = typedefs[self.type_name].resolve(typedefs, visited)
+        return resolved_type.with_quals(self.quals)
 
 
 class CompoundType(CLibType):

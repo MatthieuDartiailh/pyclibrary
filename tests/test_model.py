@@ -67,6 +67,12 @@ class TestCLibType(object):
         def c_repr(self, inner=None):
             return "dummy<{!r}>".format(inner)
 
+    def test_with_quals(self):
+        type_ = self.DummyType(['x'])
+        assert type_.with_quals(['y']) == self.DummyType(['x', 'y'])
+        assert type_ == self.DummyType(['x'])
+        assert type_.with_quals([]) is type_
+
     def test_str(self):
         assert str(self.DummyType()) == "dummy<None>"
 
@@ -98,7 +104,7 @@ class TestCustomType(object):
         assert cm.CustomType('simple').resolve(typedefs) is simple_type
         assert cm.CustomType('nestedtype').resolve(typedefs) is simple_type
         assert (cm.CustomType('qualtype', quals=['tq1']).resolve(typedefs) ==
-                cm.BuiltinType('char', quals=['tq1', 'tq2']))
+                cm.BuiltinType('char', quals=['tq2', 'tq1']))
 
         with pytest.raises(cm.UnknownCustomTypeError):
             cm.CustomType('unknowntype').resolve(typedefs)

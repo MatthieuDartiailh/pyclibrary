@@ -630,9 +630,10 @@ class TestParsing(object):
                 cm.FunctionType(
                     cm.BuiltinType('int'),
                     [],
-                    quals=['__stdcall']))
+                    quals=['__declspec(dllexport)', '__stdcall']))
         assert (funcs['function2'] ==
-                cm.FunctionType(cm.BuiltinType('int'), []))
+                cm.FunctionType(cm.BuiltinType('int'), [],
+                                quals=['__declspec(dllexport)']))
 
         assert 'externFunc' in funcs
 
@@ -649,4 +650,4 @@ class TestParsing(object):
         g_name_path = self.parser.clib_intf.file_map['g']
         assert os.path.basename(g_name_path) == 'functions.h'
 
-        ###TODO: add __declspec() qualifier support
+        ###TODO: add __declspec() == proproetary storace_class support
