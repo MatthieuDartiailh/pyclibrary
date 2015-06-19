@@ -652,28 +652,6 @@ class CParser(object):
         self.clib_intf.add_macro(t.macro, macro, self.current_file)
         return macro.c_repr(t.macro)
     
-    ###TODO: remove, as it moved to FnMacro._compiled_content
-    def compile_fn_macro(self, text, args):
-        """Turn a function macro spec into a compiled description.
-
-        """
-        # Find all instances of each arg in text.
-        args_str = '|'.join(args)
-        arg_regex = re.compile(r'("(\\"|[^"])*")|(\b({})\b)'.format(args_str))
-        start = 0
-        parts = []
-        arg_order = []
-        # The group number to check for macro names
-        N = 3
-        for m in arg_regex.finditer(text):
-            arg = m.groups()[N]
-            if arg is not None:
-                parts.append(text[start:m.start(N)] + '{}')
-                start = m.end(N)
-                arg_order.append(args.index(arg))
-        parts.append(text[start:])
-        return (''.join(parts), arg_order)
-
     def expand_macros(self, line):
         """Expand all the macro expressions in a string.
 
@@ -776,9 +754,10 @@ class CParser(object):
 
         self.struct_type = Forward()
         self.enum_type = Forward()
+        custom_type = ident.copy()
         type_astdef = (
             fund_type.setParseAction(converter(c_model.BuiltinType)) |
-            (Optional(kwl(size_modifiers + sign_modifiers)) + ident).setParseAction(converter(c_model.CustomType)) | ###TODO: check if modifiers can be omitted, since not part of C standard
+            custom_type.setParseAction(converter(c_model.CustomType)) |
             self.struct_type |
             self.enum_type)
         self.type_spec = type_qualifier('pre_qual') + type_astdef('type')
@@ -827,8 +806,7 @@ class CParser(object):
         self.declarator << Group(
             Group(ZeroOrMore(Group(type_qualifier + Suppress('*'))))('ptrs') +
             type_qualifier('qual') +
-            (ident('name') |
-             (lparen + self.declarator + rparen)('center')) +
+            (ident('name') | (lparen + self.declarator + rparen)('center')) +
             Optional(lparen +
                      Optional(delimitedList(
                          Group(self.type_spec('type_spec') +
