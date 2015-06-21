@@ -437,7 +437,7 @@ class CParser(object):
         # First join together lines split by \\n
         text = Literal('\\\n').suppress().transformString(text)
 
-        # Macro the structure of a macro definition
+        # Define the structure of a macro definition
         name = Word(alphas+'_', alphanums+'_')('name')
         deli_list = Optional(lparen + delimitedList(name) + rparen)
         self.pp_define = (name.setWhitespaceChars(' \t')("macro") +

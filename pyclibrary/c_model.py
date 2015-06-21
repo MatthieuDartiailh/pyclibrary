@@ -32,18 +32,17 @@ The class hierarchy is:
       * CompoundType
         * StructType
         * UnionType
-        * BitFieldType
     * ComposedType
       * PointerType
       * ArrayType
       * FunctionType
+
 """
 from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 import collections
 import itertools
 import re
-from future.moves.itertools import zip_longest
 from .errors import UnknownCustomTypeError
 
 
@@ -61,7 +60,12 @@ class CLibBase(object):
 
     def _getattrnames(self):
         """Internal method that lists all fields
-        :rtype: list[str]
+
+        Returns
+        -------
+        list[str]
+            A list of attribute names
+
         """
         for cls in type(self).__mro__:
             if hasattr(cls, '__slots__'):
@@ -69,8 +73,13 @@ class CLibBase(object):
                     yield name
 
     def copy(self):
-        """Creates a shallow copy o this type.
-        :rtype: CLibBase
+        """Creates a shallow copy of this type.
+
+        Returns
+        -------
+        CLibBase
+            A copy of self
+
         """
         attrs = {anm: getattr(self, anm) for anm in self._getattrnames()}
         return type(self)(**attrs)
@@ -108,30 +117,48 @@ class CLibBase(object):
 class CLibType(CLibBase):
     """This is the abstract base class for all objects that are modeling a
     "C" type.
+
+    Attributes
+    ----------
+    quals : list[str]
+        type qualifiers assigned to this C type
+
     """
 
     __slots__ = ('quals',)
 
     def __init__(self, quals=None):
-        """
-        :param list[str]|None quals: a list of type qualifiers
-            attached to this type.
+        """Initialize CLibType.
+
+        Parameters
+        ----------
+        quals : Optional[list[str]]
+            A list of type qualifiers attached to this type.
+
         """
         self.quals = quals or []
 
     def with_quals(self, add_quals):
-        """
-        returns this type with additional type qualifiers.
+        """Returns this C Type with additional type qualifiers.
 
-        ATTENTION: Does not modify the current type, but creates a new one,
-            if necessary
+        Notes
+        -----
+            Does not modify the current type, but creates a new one, if
+            necessary.
 
-        :param list[str] quals: list of type qualifiers, that shall be added
-            to the current list of type qualifiers
-        :rtype: CLibType
+        Parameters
+        ----------
+        quals : list[str]
+            List of type qualifiers, that shall be added to the current list
+            of type qualifiers.
+
+        Returns
+        -------
+        CLibType
+
         """
         if len(add_quals) is 0:
-            # qualifiers need not to be modified (optimization)
+            # qualifiers need not to be modified => do not copy (optimization)
             return self
         else:
             clone = self.copy()
@@ -139,28 +166,41 @@ class CLibType(CLibBase):
             return clone
 
     def resolve(self, typedefs, visited=None):
-        """Resolves all references to type definitions. A reference to
-        a type definition is represented by the TypeRef object. All
-        CustomType objects are resolved with the help of typedefs.
+        """Resolves all references to type definitions.
+        A reference to a type definition is represented by the TypeRef
+        object. All CustomType objects are resolved with the help of typedefs.
 
-        :param dict[str, CLibType] typedefs: maps the name of all known
-            to the corresponding CLibType.
-        :param set[str] visited: only for internal use to prevent endless
-            loops on recursive typedefs
-        :returns: a CLibType descendant object, that contains no TypeRef's.
-        :rtype: CLibType
+        Parameters
+        ----------
+        typedefs : dict[str, CLibType]
+            Maps the name of all known to the corresponding CLibType.
+        visited : set[str]
+            Only for internal use to prevent endless loops on recursive
+            typedefs
+
+        Returns
+        -------
+        CLibType
+            a CLibType descendant object, that contains no TypeRef's.
+
         """
         return self
 
     def c_repr(self, referrer_c_repr=None):
         """Get the c representation of this type.
 
-        :param str|None referrer_c_repr: Has to be either the
-            referrer_c_repr part of the type definition or None,
-            if this is an abstract type:
+        Parameters
+        ----------
+        referrer_c_repr Optional[str]
+            Has to be either the referrer_c_repr part of the type definition
+            or None, if this is an abstract type:
             * referrer_c_repr='a' => "int *a[2]"
             * referrer_c_repr=None => "int *[2]"
-        :rtype: str
+
+        Returns
+        -------
+        str
+
         """
         raise NotImplementedError()
 
@@ -168,14 +208,21 @@ class CLibType(CLibBase):
         return self.c_repr()
 
     def __iter__(self):
-        """iterate through all type objects, this type if build from.
+        """Iterate through all CLibType objects, this object is build from.
+
         """
         return iter([])
 
 
 class SimpleType(CLibType):
     """Abstract Base class for non-composed types
-    (BuildinType and CustomType)
+    (BuiltinType and CustomType).
+
+    Attributes
+    ----------
+    type_name : str
+        name of C type
+
     """
 
     __slots__ = ('type_name',)
@@ -190,7 +237,7 @@ class SimpleType(CLibType):
 
 
 class BuiltinType(SimpleType):
-    """Is used for modeling scalar C types like:"
+    """Is used for modeling scalar C types like:
      * "``[signed/unsigned] char``"
      * "``[signed/unsigned] short [int]``"
      * "``[signed/unsigned] int``"
@@ -201,6 +248,7 @@ class BuiltinType(SimpleType):
 
     The class does no checks if the *type_name* is actually a valid C
     scalar type.
+
     """
     __slots__ = ()
 
@@ -214,6 +262,7 @@ class CustomType(SimpleType):
      * "``struct <structname>``"
      * "``union <unionname>``"
      * "``enum <enumname>``"
+
     """
 
     __slots__ = ()
@@ -237,6 +286,7 @@ class CustomType(SimpleType):
 class AlgebraicDataType(CLibType):
     """Abstract base class for algebraic type definition
     (enums, structs, union).
+
     """
 
     __slots__ = ()
@@ -246,12 +296,14 @@ class AlgebraicDataType(CLibType):
     def name_to_typename(self, name):
         """maps a name to the corresponding typename.
         i.e. "x -> struct x"
+
         """
         return self.KEYWORD + ' ' + name
 
     def typename_to_name(self, typename):
         """maps a typename back to the corresponding name
         i.e. struct x -> x
+
         """
         if not typename.startswith(self.KEYWORD + ' '):
             raise ValueError('Invalid Typename: {!r}. Has to start with {!r}'
@@ -259,9 +311,38 @@ class AlgebraicDataType(CLibType):
         return typename[len(self.KEYWORD) + 1:]
 
     def _iter_sub_c_repr(self):
+        """Internal, abstract method, that returns iterator over all lines
+        within brackets of an algebraic data type.
+        Is called by c_repr()/named_c_repr().
+
+        Returns
+        -------
+        iter[str]
+            C source code lines (with trailing ';'/',')
+
+        """
         raise NotImplementedError()
 
     def named_c_repr(self, typename=None, referrer_c_repr=None):
+        """Returns the C representation of an algebraic data type including.
+        In contrary to c_repr() this method allows to set a typename for the
+        data type.
+
+        Parameters
+        ----------
+        typename : Optional[str]
+            The name of the algebraic data type. If omitted the resulting
+            string is a anonymous algebraic data type.
+        referrer_c_repr : Optional[str]
+            The name of the algebraic data object. If omitted, this is only
+            a type declaration, but no instantioation.
+
+        Returns
+        -------
+        str
+            C code, that represents this type
+
+        """
         result = self.KEYWORD + ' '
         if typename is not None:
             result += self.typename_to_name(typename) + ' '
@@ -282,10 +363,19 @@ class AlgebraicDataType(CLibType):
 
 
 class CompoundType(AlgebraicDataType):
-    """Abstract base class for structs and unions
+    """Abstract base class for structs and unions.
 
     The common functionality managed by this class is management of
     multiple subfields (see 'fields')
+
+    Attributes
+    ----------
+    fields : list[tuple[str|None, CLibType]]
+        list of field names/field types, this union/struct is composed of.
+        The name has to be set to None, if a substruct/-union's elements
+        shall be visible at the parent ones level
+        (i.e. "struct a { struct b; } ;")
+
     """
 
     __slots__ = ('fields',)
@@ -293,9 +383,15 @@ class CompoundType(AlgebraicDataType):
     KEYWORD = ''   # has to be set
 
     def __init__(self, fields, quals=None):
-        """
-        :type fields: list[tuple]
-        :type quals: list[str]
+        """Initialize CompuundType.
+
+        Parameters
+        ----------
+        fields : list[tuple]
+            see Attributes
+        quals : list[str]
+            see Attributes
+
         """
         super(CompoundType, self).__init__(quals)
         self.fields = fields
@@ -306,7 +402,15 @@ class CompoundType(AlgebraicDataType):
 
 
 class StructType(CompoundType):
-    """Model of C structure type definitions."""
+    """Model of C structure type definitions.
+
+    Attributes
+    ----------
+    packsize : int
+        Size of packing of structure (see pack() pragma of MSVC). Has to be
+        2**x.
+
+    """
 
     __slots__ = ('packsize',)
 
@@ -322,6 +426,7 @@ class StructType(CompoundType):
             members. If None, the default (=machine word size) alignment
             is used.
         :param list[str] quals: see CLibType.quals
+
         """
         if packsize is not None and 2**(packsize.bit_length() - 1) != packsize:
             raise ValueError('packsize has to be a value of format 2^n')
@@ -356,17 +461,30 @@ class UnionType(CompoundType):
 
 
 class EnumType(AlgebraicDataType):
-    """Model of C enum definition."""
+    """Model of C enum definition.
+
+    Attributes
+    ----------
+    values : list[tuple[str, int]]
+        A list of tuples of value definitions (valuename -> value)
+
+    """
 
     __slots__ = ('values',)
 
     KEYWORD = 'enum'
 
     def __init__(self, values, quals=None):
-        """
-        :param list[tuple[str, int]] values: a list of tuples of
-            value definitions (valuename -> value)
-        :param list[str] quals: has to be None
+        """Initialize EnumType.
+
+        Parameters
+        ----------
+        values : list[tuple[str, int]]
+            See values Attribute
+        quals : list[str]
+            Has to be None
+            (only for interface compatibility with AlgebraicDataType)
+
         """
         super(EnumType, self).__init__(quals)
         self.values = values
@@ -381,6 +499,13 @@ class ComposedType(CLibType):
 
     The common functionality managed by this class is operator precedence
     and implementation of resolve
+
+    Attributes
+    ----------
+    base_type : CLibType
+        The C Type object, this C type is composed of
+        (i.e. pointer of base-type)
+
     """
 
     __slots__ = ('base_type',)
@@ -393,10 +518,15 @@ class ComposedType(CLibType):
     PRECEDENCE = 100
 
     def __init__(self, base_type, quals=None):
-        """
-        :param CLibType base_type: base type, which is modified by this
-            type modifier
-        :param list[str]|None quals: see CLibType
+        """Initialize Composed Types.
+
+        Parameters
+        ----------
+        CLibType : base_type
+            Base type, which is modified by this type modifier.
+        quals : Optional[list[str]]
+            see CLibType
+
         """
         super(ComposedType, self).__init__(quals)
         self.base_type = base_type
@@ -407,11 +537,17 @@ class ComposedType(CLibType):
         enforces this. Only needed by .c_repr() implementations of
         ancestor classes.
 
-        :param str referrer_c_repr: The C representation of the
-            definition of the type, that refers to self (plus the
-            part that is added by self)
-        :returns: the complete C representation of the type
-        :rtype: str
+        Parameters
+        ----------
+        referrer_c_repr str
+            The C representation of the definition of the type, that refers
+            to self (plus the part that is added by self)
+
+        Returns
+        -------
+        str
+            The complete C representation of the type.
+
         """
         if (isinstance(self.base_type, ComposedType) and
             self.PRECEDENCE < self.base_type.PRECEDENCE):
@@ -449,17 +585,30 @@ class ArrayType(ComposedType):
     """Model of C arrays definition.
     Does not only cover fixed size arrays, but also arrays of
     undefined size: ``arr[]``
+
+    Attributes
+    ----------
+    size : int|None
+        Size of C array in count of 'base_type' elements.
+        If None, the size of the array is undefined (i.e. "x[]").
+
     """
 
     __slots__ = ('size',)
 
     def __init__(self, base_type, size=None, quals=None):
-        """
-        :param CLibType base_type: type of elements in this array
-        :param int|None size: size of array in elements
-            (or None if size is undefined)
-        :param list[str]|None quals: has to be empty!!! Is only available
+        """Initialize ArrayType.
+
+        Parameters
+        ----------
+        base_type : CLibType:
+            see base_type Attribute.
+        size : int|None
+            see base type Attributes
+        quals : Optional[list[str]]:
+            has to be empty!!! Is only available
             for compatibility with CLibType.copy/CLibType.eq
+
         """
         if quals:
             raise ValueError('arrays do not support qualifiers')
@@ -472,27 +621,45 @@ class ArrayType(ComposedType):
 
 
 class FunctionType(ComposedType):
-    """Model of C function signature"""
+    """Model of C function signature
+
+    Attributes
+    ----------
+    params : list[tuples[str|None, CLibType]
+        List of parameters, where each parameter is represented as tuple
+        of name and type. If name is None, the parameter is an anonymous one
+        (i.e. "void x(int);").
+
+    """
 
     __slots__ = ('params',)
 
     def __init__(self, base_type, params=(), quals=None):
-        """
-        :param CLibType base_type: return value of function
-        :param list[tuple[str|None, CLibType]] params: list of parameters,
-            where each parameter is represented as tuple of name and type.
-            If name is None, the parameter is an anonymous one.
-        :param list[str]|None quals: see CLibType.quals
+        """Initialize FunctionType.
+
+        Parameters
+        ----------
+        base_type CLibType:
+            Return value of function.
+        params : list[tuple[str|None, CLibType]]
+            See params Attribute.
+        quals : Optional[list[str]]
+            see CLibType.quals
+
         """
         super(FunctionType, self).__init__(base_type, quals=quals)
         self.params = list(params)
 
     @property
     def return_type(self):
-        """this is only a convenience property, that introduces a alias
+        """This is only a convenience property, that introduces a alias
         for .base_type, since the name "base_type" is not descriptive
         in the context of functions
-        :rtype: CLibType
+
+        Returns
+        -------
+        CLibType
+
         """
         return self.base_type
 
@@ -513,17 +680,23 @@ class FunctionType(ComposedType):
 
 
 class Macro(CLibBase):
-    """Model of C Preprocessor define"""
+    """Model of C Preprocessor define."""
 
     __slots__ = ()
 
     def c_repr(self, macro_name):
-        """
-        returns the C code as string that corresponds to this
+        """Returns the C code as string that corresponds to this
         C preprocessor definition
 
-        :param str macro_name: name of macro
-        :rtype: str
+        Parameters
+        ----------
+        macro_name : str
+            Name of macro.
+
+        Returns
+        -------
+        str
+
         """
         raise NotImplementedError()
 
@@ -534,14 +707,25 @@ class Macro(CLibBase):
 class ValMacro(Macro):
     """Model of C Preprocessor define, that is not parametrized. i.E.:
     #define X 3
+
+    Attributes
+    ----------
+    content : str
+        The text in the define as written in the C source code
+        (may contain calls to other defines)-
+
     """
 
     __slots__ = ('content',)
 
     def __init__(self, content):
-        """
-        :param str content: the text in the define as written in
-            the C source code (may contain calls to other defines)
+        """Initialize a C macro
+
+        Parameters
+        ----------
+        content : str
+            See attributes.
+
         """
         super(ValMacro, self).__init__()
         self.content = content
@@ -553,23 +737,39 @@ class ValMacro(Macro):
 class FnMacro(Macro):
     """Model of C Preprocessor define, that is parametrized. i.E.:
     #define X(a) a + 3
+
+    Attributes
+    ----------
+    compiled_content : str
+        a formatter string, that corresponds to content, but can be used as
+        formatter template, where a dictionary of parameter names (see params)
+        has to be passed to get the macro output when providing the
+        corresponding parameters.
+    params : list[str]
+        A list of parameter names, that will be replaced in content when
+        applying the macro.
+
     """
 
     __slots__ = ('compiled_content', 'params')
 
     def _getattrnames(self):
-        """hide 'compiled_content' since it is a computed value, that can
+        """Hide 'compiled_content' since it is a computed value, that can
         be derived from 'content' and 'params' (see ._compile_content())
+
         """
         return ('content', 'params')
 
     def __init__(self, content, params):
-        """
-        :param str content: the text, that shall be inserted
-            instead of the macro call. This text may contain one or
-            multiple occurences of parameters from param_names
-        :param list[str] params: A list of names of parameter
-            needed for this macro
+        """Initialize FnMacro.
+
+        Parameters
+        ----------
+        content : str
+            See attributes.
+        params : list[str]
+            see attributes
+
         """
         super(FnMacro, self).__init__()
         self.params = params
@@ -579,6 +779,7 @@ class FnMacro(Macro):
     def _compile_content(content, params):
         """Turn a function macro spec into a string formatter, where all
         params are curly bracketed.
+
         """
         def parentesize_func(matchObj):
             arg_name = matchObj.group(0)
@@ -605,13 +806,6 @@ class FnMacro(Macro):
         return self.compiled_content.format(**arg_dict)
 
     def c_repr(self, name):
-        """
-        returns the C code as string that corresponds to this
-        C preprocessor definition
-
-        :param str name: name of macro
-        :rtype: str
-        """
         return '#define {}({}) {}'.format(name, ', '.join(self.params),
                                             self.content)
 
@@ -625,15 +819,20 @@ class CLibInterface(collections.Mapping):
     following instance attributes, to get only objects of a specific
     class:
 
-    :ivar dict[str, CLibType] funcs: registry of all signatures of
-        exposed functions by function name
-    :ivar dict[str, CLibType] vars: registry of all types of exposed
-        global variables by name
-    :ivar dict[str, CLibType] typedefs: registry of all types of
-        typedefs/enums/structs/unions by name
-    :ivar dict[str, str|None] file_map: a mapping of all names to file,
-        where they are defined. If the file for a object is unknown it is
-        None.
+    Attributes
+    ----------
+    funcs : dict[str, CLibType]
+        A registry of all signatures of exposed functions by function name
+    vars : dict[str, CLibType]
+        A registry of all types of exposed global variables by name
+    typedefs : dict[str, CLibType]
+        A registry of all types of typedefs/enums/structs/unions by name
+    file_map : dict[str, str|None]
+        A mapping of all names to file, where they are defined.
+        If the file for a object is unknown it is None.
+    storage_classes : dict[str, list[str]]
+        A list of storage classes assigned to each function / global var.
+
     """
 
     def __init__(self):
@@ -654,11 +853,14 @@ class CLibInterface(collections.Mapping):
         self.storage_classes = dict()
 
     def include(self, from_clib_intf):
-        """
-        merges another clib_intf values into this one (overwriting values,
+        """Merges another clib_intf values into this one (overwriting values,
         that are already defined in self
 
-        :param CLibInterface from_clib_intf: clib interface to merge from
+        Parameters
+        ----------
+        from_clib_intf : CLibInterface
+            Clib interface to merge from.
+
         """
         self.funcs.update(from_clib_intf.funcs)
         self.vars.update(from_clib_intf.vars)
@@ -669,9 +871,9 @@ class CLibInterface(collections.Mapping):
         self.storage_classes.update(from_clib_intf.storage_classes)
 
     def __getitem__(self, name):
-        for cls in self.obj_maps.values():
-            if name in cls:
-                return cls[name]
+        for clibobj_dict in self.obj_maps.values():
+            if name in clibobj_dict:
+                return clibobj_dict[name]
         else:
             raise KeyError("")
 
@@ -682,13 +884,19 @@ class CLibInterface(collections.Mapping):
         return len(self.file_map)
 
     def _add_obj(self, obj_map, name, obj, filename):
-        """
-        internal method for adding sth. to CLibInterface.
+        """Internal method for adding sth. to CLibInterface.
 
-        :param dict[str, CLibBase] obj_map: map, into which add 'obj'
-        :param str name: Name under which 'obj' shall be added
-        :param CLibBase obj: object to add
-        :param str filename: filename, where the obj is located in (if known)
+        Parameters
+        ----------
+        obj_map : dict[str, CLibBase]
+            Map, into which add 'obj' parameter
+        name : str
+            Name under which 'obj' shall be added.
+        obj : CLibBase
+            object to add to obj_map
+        filename : str
+            Filename, where the obj is located in (if known).
+
         """
         def add_enum_vals(type_):
             if isinstance(type_, EnumType):
@@ -703,59 +911,81 @@ class CLibInterface(collections.Mapping):
         add_enum_vals(obj)
 
     def add_func(self, name, func, filename=None, storage_classes=None):
-        """
-        official interface to add a function to CLibInterface.
+        """Official interface to add a function to CLibInterface.
 
-        :param str name: Name of function
-        :param FunctionType func: signature object of function
-        :param str filename: filename, where the function is located in
-            (if known)
+        Parameters
+        ----------
+        name : str
+            Name of function.
+        func : FunctionType
+            Signature object of function.
+        filename : str
+            Filename, where the function is located in (if known)
+        storage_classes : Optional[list[str]]
+            List of storage classes assigned to this function
+
         """
         self._add_obj(self.funcs, name, func, filename)
         self.storage_classes[name] = storage_classes or []
 
     def add_var(self, name, var, filename=None, storage_classes=None):
-        """
-        official interface to add a global variable (of any type, even
-        function pointers) to CLibInterface.
+        """Official interface to add a global variable to CLibInterface.
 
-        :param str name: Name of variable
-        :param CLibType var: model object of variable
-        :param str filename: filename, where the var is located in
-            (if known)
+        Parameters
+        ----------
+        name : str
+            Name of variable.
+        func : CLibType
+            Type of variable.
+        filename : str
+            Filename, where the variable is located in (if known)
+        storage_classes : Optional[list[str]]
+            List of storage classes assigned to this variable
+
         """
         self._add_obj(self.vars, name, var, filename)
         self.storage_classes[name] = storage_classes or []
 
     def add_typedef(self, name, typedef, filename=None):
-        """
-        official interface to add a typedef to CLibInterface.
+        """Official interface to add a typedef/struct/union/enum to
+        CLibInterface.
 
-        :param str name: Name of typedef
-        :param CLibType typedef: model object of typedef
-        :param str filename: filename, where the typedef is located in
-            (if known)
+        Parameters
+        ----------
+        name : str
+            Name of typeef.
+        func : CLibType
+            Type of typedef.
+        filename : str
+            Filename, where the typedef is located in (if known)
+
         """
         self._add_obj(self.typedefs, name, typedef, filename)
 
     def add_macro(self, name, macro, filename=None):
-        """
-        official interface to add a macro (descendant of Macro class)
-        to CLibInterface.
+        """Official interface to add a macro defintion to CLibInterface.
 
-        :param str name: Name of macro
-        :param Macro macro: model object of macro
-        :param str filename: filename, where the macro definition is
-            located in (if known)
+        Parameters
+        ----------
+        name : str
+            Name of macro.
+        func : CLibType
+            Macro object to assign to 'name'.
+        filename : str
+            Filename, where the macro is defined in (if known)
+
         """
         self._add_obj(self.macros, name, macro, filename)
 
     def del_macro(self, name):
-        """
-        remove a macro definition from the CLibInterface. Usually needed
-        by #undef
+        """Remove a macro definition from the CLibInterface.
+        Usually needed to implement #undef.
 
-        :param str name: Name of macro to remove
+        Parameters
+        ----------
+        name : str
+            Name of macro to remove.
+
         """
         del self.macros[name]
 
@@ -767,6 +997,7 @@ class CLibInterface(collections.Mapping):
         filename : unicode, optional
             Name of the file whose definition should be printed. If None,
             all files are printed
+
         """
         for obj_cls, obj_dict in sorted(self.obj_maps.items()):
             print("============== {} ==================".format(obj_cls))
