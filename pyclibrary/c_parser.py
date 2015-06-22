@@ -68,10 +68,6 @@ def win_defs(version='1500'):
     """
     header_files = ['WinNt.h', 'WinDef.h', 'WinBase.h', 'BaseTsd.h',
                     'WTypes.h', 'WinUser.h']
-    if not CParser._init:
-        logger.warning('Automatic initialisation : OS is assumed to be win32')
-        from .init import auto_init
-        auto_init()
     d = os.path.dirname(__file__)
     p = CParser(
         header_files,
@@ -86,6 +82,12 @@ def win_defs(version='1500'):
     p.process_all(cache=os.path.join(d, 'headers', 'WinDefs.cache'))
 
     return p
+
+
+WIN_TYPES = {'__int64': None}
+WIN_MODIFIERS = ['__based', '__declspec', '__fastcall',
+                 '__restrict', '__sptr', '__uptr', '__w64',
+                 '__unaligned', '__nullterminated']
 
 
 class CParser(object):
@@ -150,9 +152,6 @@ class CParser(object):
     #: old cache files.
     cache_version = 2
 
-    #: Private flag allowing to know if the parser has been initiliased.
-    _init = False
-
     def __init__(self, files=None, copy_from=None, replace=None,
                  process_all=True, cache=None, **kwargs):
 
@@ -160,11 +159,6 @@ class CParser(object):
         if copy_from is not None:
             self.clib_intf.include(copy_from)
         self.macro_vals = {}
-
-        if not self._init:
-            logger.warning('Automatic initialisation based on OS detection')
-            from .init import auto_init
-            auto_init()
 
         # Description of the struct packing rules as defined by #pragma pack
         self.pack_list = {}
@@ -427,7 +421,7 @@ class CParser(object):
 
         """
         # We need this so that eval_expr works properly
-        self.build_parser()
+        self._build_parser()
         self.current_file = path
 
         # Stack for #pragma pack push/pop
@@ -442,7 +436,7 @@ class CParser(object):
 
         # Define the structure of a macro definition
         name = Word(alphas+'_', alphanums+'_')('name')
-        deli_list = Optional(lparen + delimitedList(name) + rparen)
+        deli_list = Optional(self.lparen + delimitedList(name) + self.rparen)
         self.pp_define = (name.setWhitespaceChars(' \t')("macro") +
                           deli_list.setWhitespaceChars(' \t')('args') +
                           SkipTo(LineEnd())('value'))
@@ -485,7 +479,7 @@ class CParser(object):
                         return ['0', '1'][t['name'] in self.clib_intf.macros]
 
                     rest = (Keyword('defined') +
-                            (name | lparen + name + rparen)
+                            (name | self.lparen + name + self.rparen)
                             ).setParseAction(pa).transformString(rest)
 
                 elif d in ['define', 'undef']:
@@ -704,8 +698,10 @@ class CParser(object):
         """Replace a function macro.
 
         """
-        arg_list = (stringStart + lparen +
-                    Group(delimitedList(expression))('args') + rparen)
+        arg_list = (stringStart +
+                    self.lparen +
+                    Group(delimitedList(self.expression))('args') +
+                    self.rparen)
         res = [x for x in arg_list.scanString(text, 1)]
         if len(res) == 0:
             mess = "Function macro '{}' not followed by (...)"
@@ -740,30 +736,206 @@ class CParser(object):
         """
         self.current_file = path
 
-        parser = self.build_parser()
+        parser = self._build_parser()
         if return_unparsed:
             text = parser.suppress().transformString(self.files[path])
             return re.sub(r'\n\s*\n', '\n', text)
         else:
             return [x[0] for x in parser.scanString(self.files[path])]
 
-    def build_parser(self):
+    # Syntatic delimiters
+    comma = Literal(",").ignore(quotedString).suppress()
+    colon = Literal(":").ignore(quotedString).suppress()
+    semi = Literal(";").ignore(quotedString).suppress()
+    lbrace = Literal("{").ignore(quotedString).suppress()
+    rbrace = Literal("}").ignore(quotedString).suppress()
+    lbrack = Literal("[").ignore(quotedString).suppress()
+    rbrack = Literal("]").ignore(quotedString).suppress()
+    lparen = Literal("(").ignore(quotedString).suppress()
+    rparen = Literal(")").ignore(quotedString).suppress()
+
+    # Numbers
+    int_strip = lambda t: t[0].rstrip('UL')
+    hexint = Regex('[+-]?\s*0[xX][{}]+[UL]*'.format(hexnums)).setParseAction(int_strip)
+    decint = Regex('[+-]?\s*[0-9]+[UL]*').setParseAction(int_strip)
+    integer = (hexint | decint)
+    # The floating regex is ugly but it is because we do not want to match
+    # integer to it.
+    floating = Regex(r'[+-]?\s*((((\d(\.\d*)?)|(\.\d+))[eE][+-]?\d+)|((\d\.\d*)|(\.\d+)))')
+    number = (floating | integer)
+
+    # Miscelaneous
+    bi_operator = oneOf("+ - / * | & || && ! ~ ^ % == != > < >= <= -> . :: << >> = ? :")
+    uni_right_operator = oneOf("++ --")
+    uni_left_operator = oneOf("++ -- - + * sizeof new")
+    wordchars = alphanums+'_$'
+    name = (WordStart(wordchars) + Word(alphas+"_", alphanums+"_$") +
+            WordEnd(wordchars))
+    size_modifiers = ['short', 'long']
+    sign_modifiers = ['signed', 'unsigned']
+
+    # Syntax elements defined by _init_parser.
+    # expression = Forward()
+    # array_op = lbrack + expression + rbrack
+    # base_types = None
+    # ident = None
+    # type_qualifier = None
+    # storage_class_spec = None
+    # fund_type = None
+
+    num_types = ['int', 'float', 'double']
+    nonnum_types = ['char', 'bool', 'void']
+
+
+    @staticmethod
+    def _kwl(strs):
+        """Generate a match-first list of keywords given a list of strings."""
+        return Regex(r'\b({})\b'.format('|'.join(strs)))
+    
+    
+    @staticmethod
+    def _converter(converterFunc):
+        """Flattens a tree of tokens and joins into one big string and
+        converts the str by 'converterFunc'.
+
+        """
+        def flatten(lst):
+            res = []
+            for i in lst:
+                if isinstance(i, (list, tuple)):
+                    res.extend(flatten(i))
+                else:
+                    res.append(str(i))
+            return res
+
+        def recombine(tok):
+            return converterFunc(' '.join(flatten(tok.asList())))
+
+        return recombine
+
+    
+    @staticmethod
+    def _print_parse_results(pr, depth=0, name=''):
+        """For debugging; pretty-prints parse result objects.
+    
+        """
+        start = name + " " * (20 - len(name)) + ':' + '..' * depth
+        if isinstance(pr, ParseResults):
+            print(start)
+            for i in pr:
+                name = ''
+                for k in pr.keys():
+                    if pr[k] is i:
+                        name = k
+                        break
+                CParser._print_parse_results(i, depth+1, name)
+        else:
+            print(start + str(pr))
+    
+    
+    def _build_parser(self):
         """Builds the entire tree of parser elements for the C language (the
         bits we support, anyway).
 
         """
+        # Some basic definitions
+        extra_type_list = list(WIN_TYPES)
+        extra_modifiers = list(WIN_MODIFIERS)
+
+        base_types = self.nonnum_types + self.num_types + extra_type_list
+        storage_classes = ['inline', 'static', 'extern', '__declspec']
+        ###TODO: extend storage classes by stanard and custom ones (i.e. 'auto', 'register', '__declspec()')
+        qualifiers = ['const', 'volatile', 'restrict', 'near', 'far',
+                      '__cdecl', '__stdcall', 'call_conv']
+
+        keywords = (['struct', 'enum', 'union', '__stdcall', '__cdecl'] +
+                    qualifiers + base_types + self.size_modifiers +
+                    self.sign_modifiers + storage_classes)
+
+        keyword = self._kwl(keywords)
+        wordchars = alphanums+'_$'
+        self.ident = (WordStart(wordchars) + ~keyword +
+                      Word(alphas + "_", alphanums + "_$") +
+                      WordEnd(wordchars)).setParseAction(lambda t: t[0])
+
+        # Removes '__name' from all type specs. may cause trouble.
+        underscore_2_ident = (WordStart(wordchars) + ~keyword + '__' +
+                              Word(alphanums, alphanums+"_$") +
+                              WordEnd(wordchars)
+                              )
+
+        special_quals = underscore_2_ident   ###TODO: remove / has to be done via extra_modifiers in future
+        if extra_modifiers:
+            special_quals |= self._kwl(extra_modifiers)
+
+        def mergeNested(t):
+            return ''.join((part if isinstance(part, basestring)
+                            else '(' + mergeNested(part) + ')')
+                           for part in t)
+        self.type_qualifier = ZeroOrMore(
+            (special_quals + Optional(nestedExpr()))
+                .setParseAction(mergeNested) |
+            self._kwl(qualifiers))
+
+        self.storage_class_spec = ZeroOrMore(
+            (self._kwl(storage_classes) + Optional(nestedExpr()))
+            .setParseAction(mergeNested))
+
+        # Language elements
+        self.fund_type = OneOrMore(
+            self._kwl(self.sign_modifiers + self.size_modifiers + base_types)
+        ).setParseAction(lambda t: ' '.join(t))
+
+        self.expression = Forward()
+
+        # Is there a better way to process expressions with cast operators??
+        cast_atom = (
+            ZeroOrMore(self.uni_left_operator) +
+            Optional('('+self.ident+')').suppress() +
+            ((self.ident + '(' + Optional(delimitedList(self.expression)) +
+                ')' |
+              self.ident + OneOrMore('[' + self.expression + ']') |
+              self.ident |
+              self.number |
+              quotedString
+              ) |
+             ('(' + self.expression + ')')) +
+            ZeroOrMore(self.uni_right_operator)
+            )
+
+        # XXX Added name here to catch macro functions on types
+        uncast_atom = (
+            ZeroOrMore(self.uni_left_operator) +
+            ((self.ident + '(' + Optional(delimitedList(self.expression)) +
+                ')' |
+              self.ident + OneOrMore('[' + self.expression + ']') |
+              self.ident |
+              self.number |
+              self.name |
+              quotedString
+              ) |
+             ('(' + self.expression + ')')) +
+            ZeroOrMore(self.uni_right_operator)
+            )
+
+        atom = cast_atom | uncast_atom
+
+        self.expression << Group(atom + ZeroOrMore(self.bi_operator + atom))
+        self.expression.setParseAction(self._converter(str))
+
         if hasattr(self, 'parser'):
             return self.parser
 
         self.struct_type = Forward()
         self.enum_type = Forward()
-        custom_type = ident.copy()
+        custom_type = self.ident.copy()
         type_astdef = (
-            fund_type.setParseAction(converter(c_model.BuiltinType)) |
-            custom_type.setParseAction(converter(c_model.CustomType)) |
+            self.fund_type.setParseAction(
+                self._converter(c_model.BuiltinType)) |
+            custom_type.setParseAction(self._converter(c_model.CustomType)) |
             self.struct_type |
             self.enum_type)
-        self.type_spec = type_qualifier('pre_qual') + type_astdef('type')
+        self.type_spec = self.type_qualifier('pre_qual') + type_astdef('type')
 
         # --- Abstract declarators for use in function pointer arguments
         #   Thus begins the extremely hairy business of parsing C declarators.
@@ -784,19 +956,24 @@ class CParser(object):
         #     *( )(int, int)[10]
         #     ...etc...
         self.abstract_declarator << Group(
-            Group(ZeroOrMore(Group(type_qualifier + Suppress('*'))))('ptrs') +
-            type_qualifier('qual') +
-            Optional((lparen + self.abstract_declarator + rparen)('center')) +
-            Optional(lparen +
+            Group(ZeroOrMore(
+                Group(self.type_qualifier + Suppress('*'))))('ptrs') +
+            self.type_qualifier('qual') +
+            Optional((self.lparen +
+                      self.abstract_declarator +
+                      self.rparen)('center')) +
+            Optional(self.lparen +
                      Optional(delimitedList(Group(
                               self.type_spec +
                               self.abstract_declarator('decl') +
-                              Optional(Literal('=').suppress() + expression,
+                              Optional(Literal('=').suppress() +
+                                       self.expression,
                                        default=None)('val')
                               )), default=None) +
-                     rparen)('args') +
-            Group(ZeroOrMore(lbrack + Optional(expression, default='') +
-                  rbrack))('arrays')
+                     self.rparen)('args') +
+            Group(ZeroOrMore(self.lbrack +
+                             Optional(self.expression, default='') +
+                  self.rbrack))('arrays')
         )
 
         # Declarators look like:
@@ -807,54 +984,58 @@ class CParser(object):
         #     * fnName(int arg1=0)[10]
         #     ...etc...
         self.declarator << Group(
-            Group(ZeroOrMore(Group(type_qualifier + Suppress('*'))))('ptrs') +
-            type_qualifier('qual') +
-            (ident('name') | (lparen + self.declarator + rparen)('center')) +
-            Optional(lparen +
+            Group(ZeroOrMore(Group(self.type_qualifier +
+                                   Suppress('*'))))('ptrs') +
+            self.type_qualifier('qual') +
+            (self.ident('name') |
+             (self.lparen + self.declarator + self.rparen)('center')) +
+            Optional(self.lparen +
                      Optional(delimitedList(
                          Group(self.type_spec +
                                (self.declarator |
                                 self.abstract_declarator)('decl') +
                                Optional(Literal('=').suppress() +
-                                        expression, default=None)('val')
+                                        self.expression, default=None)('val')
                                )),
                               default=None) +
-                     rparen)('args') +
-            Group(ZeroOrMore(lbrack + Optional(expression, default='') +
-                             rbrack))('arrays')
+                     self.rparen)('args') +
+            Group(ZeroOrMore(self.lbrack +
+                             Optional(self.expression, default='') +
+                             self.rbrack))('arrays')
         )
         self.declarator_list = Group(delimitedList(self.declarator))
 
         # Typedef
         self.type_decl = (Keyword('typedef') + self.type_spec +
-                          self.declarator_list('decl_list') + semi)
+                          self.declarator_list('decl_list') + self.semi)
         self.type_decl.setParseAction(self.process_typedef)
 
         # Variable declaration
         self.variable_decl = (
-            Group(type_qualifier('pre_qual') +
-                  storage_class_spec('pre_stor_cls') +
+            Group(self.type_qualifier('pre_qual') +
+                  self.storage_class_spec('pre_stor_cls') +
                   type_astdef('type') +
-                  storage_class_spec('post_stor_cls') +
+                  self.storage_class_spec('post_stor_cls') +
                   Optional(self.declarator_list('decl_list')) +
                   Optional(Literal('=').suppress() +
-                           (expression('value') |
-                            (lbrace +
-                             Group(delimitedList(expression))('array_values') +
-                             rbrace
+                           (self.expression('value') |
+                            (self.lbrace +
+                             Group(delimitedList(self.expression)
+                                   )('array_values') +
+                             self.rbrace
                              )
                             )
                            )
                   ) +
-            semi)
+            self.semi)
         self.variable_decl.setParseAction(self.process_variable)
 
         # Function definition
         self.function_decl = (
-            type_qualifier('pre_qual') +
-            storage_class_spec('pre_stor_cls') +
+            self.type_qualifier('pre_qual') +
+            self.storage_class_spec('pre_stor_cls') +
             type_astdef('type') +
-            storage_class_spec('post_stor_cls') +
+            self.storage_class_spec('post_stor_cls') +
             self.declarator('decl') +
             nestedExpr('{', '}').suppress())
         self.function_decl.setParseAction(self.process_function)
@@ -867,36 +1048,39 @@ class CParser(object):
             # Hack to handle bit width specification.
             Group(Group(self.type_spec +
                         Optional(self.declarator_list('decl_list')) +
-                        colon + integer('bit') + semi)) |
+                        self.colon + self.integer('bit') + self.semi)) |
             (self.type_spec + self.declarator +
              nestedExpr('{', '}')).suppress() |
             (self.declarator + nestedExpr('{', '}')).suppress()
             )
 
-        self.decl_list = (lbrace +
+        self.decl_list = (self.lbrace +
                           Group(OneOrMore(self.struct_member))('members') +
-                          rbrace)
+                          self.rbrace)
         self.struct_type << (struct_kw('struct_type') +
-                             ((Optional(ident('name')) +
-                               self.decl_list) | ident('name'))
+                             ((Optional(self.ident('name')) +
+                               self.decl_list) | self.ident('name'))
                              )
         self.struct_type.setParseAction(self.process_compound)
 
-        self.struct_decl = self.struct_type + semi
+        self.struct_decl = self.struct_type + self.semi
 
         # Enum definition
-        enum_var_decl = Group(ident('name') +
+        enum_var_decl = Group(self.ident('name') +
                               Optional(Literal('=').suppress() +
-                              (integer('value') | ident('valueName'))))
+                              (self.integer('value') |
+                               self.ident('valueName'))))
 
         self.enum_type << (Keyword('enum') +
-                           (Optional(ident('name')) +
-                            lbrace +
-                            Group(delimitedList(enum_var_decl))('members') +
-                            Optional(comma) + rbrace | ident('name'))
+                           ((Optional(self.ident('name')) +
+                             self.lbrace +
+                             Group(delimitedList(enum_var_decl))('members') +
+                             Optional(self.comma) +
+                             self.rbrace) |
+                            self.ident('name'))
                            )
         self.enum_type.setParseAction(self.process_enum)
-        self.enum_decl = self.enum_type + semi
+        self.enum_decl = self.enum_type + self.semi
 
         self.parser = (self.type_decl | self.variable_decl |
                        self.function_decl)
@@ -1142,9 +1326,9 @@ class CParser(object):
     def eval(self, expr, *args):
         """Just eval with a little extra robustness."""
         expr = expr.strip()
-        cast = (lparen + self.type_spec + self.abstract_declarator +
-                rparen).suppress()
-        expr = (quotedString | number | cast).transformString(expr)
+        cast = (self.lparen + self.type_spec + self.abstract_declarator +
+                self.rparen).suppress()
+        expr = (quotedString | self.number | cast).transformString(expr)
         if expr == '':
             return None
         return eval(expr, *args)
@@ -1160,176 +1344,6 @@ class CParser(object):
                 if text in l[i]:
                     res.append((f, i, l[i]))
         return res
-
-
-# --- Basic parsing elements.
-
-def kwl(strs):
-    """Generate a match-first list of keywords given a list of strings."""
-    return Regex(r'\b({})\b'.format('|'.join(strs)))
-
-
-def flatten(lst):
-        res = []
-        for i in lst:
-            if isinstance(i, (list, tuple)):
-                res.extend(flatten(i))
-            else:
-                res.append(str(i))
-        return res
-
-
-def converter(converter):
-    """Flattens a tree of tokens and joins into one big string and converts
-    the str by 'converter'.
-    """
-    def recombine(tok):
-        return converter(' '.join(flatten(tok.asList())))
-    return recombine
-
-
-def print_parse_results(pr, depth=0, name=''):
-    """For debugging; pretty-prints parse result objects.
-
-    """
-    start = name + " " * (20 - len(name)) + ':' + '..' * depth
-    if isinstance(pr, ParseResults):
-        print(start)
-        for i in pr:
-            name = ''
-            for k in pr.keys():
-                if pr[k] is i:
-                    name = k
-                    break
-            print_parse_results(i, depth+1, name)
-    else:
-        print(start + str(pr))
-
-
-# Syntatic delimiters
-comma = Literal(",").ignore(quotedString).suppress()
-colon = Literal(":").ignore(quotedString).suppress()
-semi = Literal(";").ignore(quotedString).suppress()
-lbrace = Literal("{").ignore(quotedString).suppress()
-rbrace = Literal("}").ignore(quotedString).suppress()
-lbrack = Literal("[").ignore(quotedString).suppress()
-rbrack = Literal("]").ignore(quotedString).suppress()
-lparen = Literal("(").ignore(quotedString).suppress()
-rparen = Literal(")").ignore(quotedString).suppress()
-
-# Numbers
-int_strip = lambda t: t[0].rstrip('UL')
-hexint = Regex('[+-]?\s*0[xX][{}]+[UL]*'.format(hexnums)).setParseAction(int_strip)
-decint = Regex('[+-]?\s*[0-9]+[UL]*').setParseAction(int_strip)
-integer = (hexint | decint)
-# The floating regex is ugly but it is because we do not want to match
-# integer to it.
-floating = Regex(r'[+-]?\s*((((\d(\.\d*)?)|(\.\d+))[eE][+-]?\d+)|((\d\.\d*)|(\.\d+)))')
-number = (floating | integer)
-
-# Miscelaneous
-bi_operator = oneOf("+ - / * | & || && ! ~ ^ % == != > < >= <= -> . :: << >> = ? :")
-uni_right_operator = oneOf("++ --")
-uni_left_operator = oneOf("++ -- - + * sizeof new")
-wordchars = alphanums+'_$'
-name = (WordStart(wordchars) + Word(alphas+"_", alphanums+"_$") +
-        WordEnd(wordchars))
-size_modifiers = ['short', 'long']
-sign_modifiers = ['signed', 'unsigned']
-
-# Syntax elements defined by _init_parser.
-expression = Forward()
-array_op = lbrack + expression + rbrack
-base_types = None
-ident = None
-type_qualifier = None
-storage_class_spec = None
-fund_type = None
-extra_type_list = []
-
-num_types = ['int', 'float', 'double']
-nonnum_types = ['char', 'bool', 'void']
-
-
-# Macro some common language elements when initialising.
-def _init_cparser(extra_types=None, extra_modifiers=()):
-    global expression
-    global ident
-    global base_types
-    global type_qualifier, storage_class_spec
-    global fund_type
-    global extra_type_list
-
-    # Some basic definitions
-    extra_type_list = [] if extra_types is None else list(extra_types)
-    base_types = nonnum_types + num_types + extra_type_list
-    storage_classes = ['inline', 'static', 'extern', '__declspec']
-    ###TODO: extend storage classes by stanard and custom ones (i.e. 'auto', 'register', '__declspec()')
-    qualifiers = ['const', 'volatile', 'restrict', 'near', 'far', '__cdecl',
-                  '__stdcall', 'call_conv']
-
-    keywords = (['struct', 'enum', 'union', '__stdcall', '__cdecl'] +
-                qualifiers + base_types + size_modifiers + sign_modifiers +
-                storage_classes)
-
-    keyword = kwl(keywords)
-    wordchars = alphanums+'_$'
-    ident = (WordStart(wordchars) + ~keyword +
-             Word(alphas + "_", alphanums + "_$") +
-             WordEnd(wordchars)).setParseAction(lambda t: t[0])
-
-    # Removes '__name' from all type specs. may cause trouble.
-    underscore_2_ident = (WordStart(wordchars) + ~keyword + '__' +
-                          Word(alphanums, alphanums+"_$") +
-                          WordEnd(wordchars)
-                          )
-
-    special_quals = underscore_2_ident   ###TODO: remove / has to be done via extra_modifiers in future
-    if extra_modifiers:
-        special_quals |= kwl(extra_modifiers)
-
-    def mergeNested(t):
-        return ''.join((part if isinstance(part, basestring)
-                        else '(' + mergeNested(part) + ')')
-                       for part in t)
-    type_qualifier = ZeroOrMore(
-        (special_quals + Optional(nestedExpr())).setParseAction(mergeNested) |
-        kwl(qualifiers))
-
-    storage_class_spec = ZeroOrMore(
-        (kwl(storage_classes) + Optional(nestedExpr()))
-        .setParseAction(mergeNested))
-
-    # Language elements
-    fund_type = OneOrMore(kwl(sign_modifiers + size_modifiers +
-                          base_types)).setParseAction(lambda t: ' '.join(t))
-
-    # Is there a better way to process expressions with cast operators??
-    cast_atom = (
-        ZeroOrMore(uni_left_operator) + Optional('('+ident+')').suppress() +
-        ((ident + '(' + Optional(delimitedList(expression)) + ')' |
-          ident + OneOrMore('[' + expression + ']') |
-          ident | number | quotedString
-          ) |
-         ('(' + expression + ')')) +
-        ZeroOrMore(uni_right_operator)
-        )
-
-    # XXX Added name here to catch macro functions on types
-    uncast_atom = (
-        ZeroOrMore(uni_left_operator) +
-        ((ident + '(' + Optional(delimitedList(expression)) + ')' |
-          ident + OneOrMore('[' + expression + ']') |
-          ident | number | name | quotedString
-          ) |
-         ('(' + expression + ')')) +
-        ZeroOrMore(uni_right_operator)
-        )
-
-    atom = cast_atom | uncast_atom
-
-    expression << Group(atom + ZeroOrMore(bi_operator + atom))
-    expression.setParseAction(converter(str))
 
 
 ###TODO: remove this and adapt interface of CParser
