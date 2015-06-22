@@ -838,19 +838,25 @@ class CLibInterface(collections.Mapping):
     ----------
     funcs : dict[str, CLibType]
         A registry of all signatures of exposed functions by function name
+
     vars : dict[str, CLibType]
         A registry of all types of exposed global variables by name
+
     typedefs : dict[str, CLibType]
         A registry of all types of typedefs/enums/structs/unions by name
+
     macros : dict[str, Macro]
         A registry of all macros (no matter if ValMacro or FnMacro) by name
+
     enum : dict[str, int]
         A registry of all enum value definitions
+
     file_map : dict[str, str|None]
         A mapping of all names to file, where they are defined.
         If the file for a object is unknown it is None.
     storage_classes : dict[str, list[str]]
         A list of storage classes assigned to each function / global var.
+
 
     """
 
@@ -936,11 +942,14 @@ class CLibInterface(collections.Mapping):
         ----------
         name : str
             Name of function.
+
         func : FunctionType
             Signature object of function.
-        filename : str
+
+        filename : str, optional
             Filename, where the function is located in (if known)
-        storage_classes : Optional[list[str]]
+
+        storage_classes : list[str], optional
             List of storage classes assigned to this function
 
         """
@@ -954,11 +963,14 @@ class CLibInterface(collections.Mapping):
         ----------
         name : str
             Name of variable.
+
         func : CLibType
             Type of variable.
-        filename : str
+
+        filename : str, optional
             Filename, where the variable is located in (if known)
-        storage_classes : Optional[list[str]]
+
+        storage_classes : list[str], optional
             List of storage classes assigned to this variable
 
         """
@@ -972,10 +984,12 @@ class CLibInterface(collections.Mapping):
         Parameters
         ----------
         name : str
-            Name of typeef.
+            Name of typedef.
+
         func : CLibType
             Type of typedef.
-        filename : str
+
+        filename : str, optional
             Filename, where the typedef is located in (if known)
 
         """
@@ -988,9 +1002,11 @@ class CLibInterface(collections.Mapping):
         ----------
         name : str
             Name of macro.
+
         func : CLibType
             Macro object to assign to 'name'.
-        filename : str
+
+        filename : str, optional
             Filename, where the macro is defined in (if known)
 
         """
@@ -998,6 +1014,7 @@ class CLibInterface(collections.Mapping):
 
     def del_macro(self, name):
         """Remove a macro definition from the CLibInterface.
+
         Usually needed to implement #undef.
 
         Parameters
