@@ -651,7 +651,7 @@ class CParser(object):
 
         self.clib_intf.add_macro(t.macro, macro, self.current_file)
         return macro.c_repr(t.macro)
-    
+
     def expand_macros(self, line):
         """Expand all the macro expressions in a string.
 
@@ -813,7 +813,7 @@ class CParser(object):
                                (self.declarator |
                                 self.abstract_declarator)('decl') +
                                Optional(Literal('=').suppress() +
-                               expression, default=None)('val')
+                                        expression, default=None)('val')
                                )),
                               default=None) +
                      rparen)('args') +
@@ -1262,7 +1262,8 @@ def _init_cparser(extra_types=None, extra_modifiers=()):
     base_types = nonnum_types + num_types + extra_type_list
     storage_classes = ['inline', 'static', 'extern', '__declspec']
     ###TODO: extend storage classes by stanard and custom ones (i.e. 'auto', 'register', '__declspec()')
-    qualifiers = ['const', 'volatile', 'restrict', 'near', 'far', '__cdecl', '__stdcall', 'call_conv']
+    qualifiers = ['const', 'volatile', 'restrict', 'near', 'far', '__cdecl',
+                  '__stdcall', 'call_conv']
 
     keywords = (['struct', 'enum', 'union', '__stdcall', '__cdecl'] +
                 qualifiers + base_types + size_modifiers + sign_modifiers +
@@ -1283,6 +1284,7 @@ def _init_cparser(extra_types=None, extra_modifiers=()):
     special_quals = underscore_2_ident   ###TODO: remove / has to be done via extra_modifiers in future
     if extra_modifiers:
         special_quals |= kwl(extra_modifiers)
+
     def mergeNested(t):
         return ''.join((part if isinstance(part, basestring)
                         else '(' + mergeNested(part) + ')')

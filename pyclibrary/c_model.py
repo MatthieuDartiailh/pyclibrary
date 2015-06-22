@@ -133,33 +133,27 @@ class CLibType(CLibBase):
     """This is the abstract base class for all objects that are modeling a
     "C" type.
 
+    Parameters
+    ----------
+    quals : list[str], optional
+        see Attributes
+
     Attributes
     ----------
     quals : list[str]
-        type qualifiers assigned to this C type
+        A list of type qualifiers attached to this type.
 
     """
 
     __slots__ = ('quals',)
 
     def __init__(self, quals=None):
-        """Initialize CLibType.
-
-        Parameters
-        ----------
-        quals : Optional[list[str]]
-            A list of type qualifiers attached to this type.
-
-        """
         self.quals = quals or []
 
     def with_quals(self, add_quals):
-        """Returns this C Type with additional type qualifiers.
+        """Add type qualifiers to this C Type.
 
-        Notes
-        -----
-            Does not modify the current type, but creates a new one, if
-            necessary.
+        Does not modify the current type, but creates a new one, if necessary.
 
         Parameters
         ----------
@@ -169,7 +163,8 @@ class CLibType(CLibBase):
 
         Returns
         -------
-        CLibType
+        new_type : CLibType
+            New type with added qualifiers.
 
         """
         if len(add_quals) is 0:
@@ -182,6 +177,7 @@ class CLibType(CLibBase):
 
     def resolve(self, typedefs, visited=None):
         """Resolves all references to type definitions.
+
         A reference to a type definition is represented by the TypeRef
         object. All CustomType objects are resolved with the help of typedefs.
 
@@ -206,7 +202,7 @@ class CLibType(CLibBase):
 
         Parameters
         ----------
-        referrer_c_repr Optional[str]
+        referrer_c_repr : str, optional
             Has to be either the referrer_c_repr part of the type definition
             or None, if this is an abstract type:
             * referrer_c_repr='a' => "int *a[2]"
@@ -214,7 +210,8 @@ class CLibType(CLibBase):
 
         Returns
         -------
-        str
+        repr : str
+            Formatted representation of the type.
 
         """
         raise NotImplementedError()
@@ -230,13 +227,20 @@ class CLibType(CLibBase):
 
 
 class SimpleType(CLibType):
-    """Abstract Base class for non-composed types
-    (BuiltinType and CustomType).
+    """Abstract Base class for non-composed types (BuiltinType and CustomType).
+
+    Parameters
+    ----------
+    type_name : str
+        Name of the C type
+
+    quals : list[str], optional
+        A list of type qualifiers attached to this type.
 
     Attributes
     ----------
     type_name : str
-        name of C type
+        Name of C type
 
     """
 
@@ -309,15 +313,13 @@ class AlgebraicDataType(CLibType):
     KEYWORD = ''   # has to be set
 
     def name_to_typename(self, name):
-        """maps a name to the corresponding typename.
-        i.e. "x -> struct x"
+        """Maps a name to the corresponding typename. i.e. "x -> struct x"
 
         """
         return self.KEYWORD + ' ' + name
 
     def typename_to_name(self, typename):
-        """maps a typename back to the corresponding name
-        i.e. struct x -> x
+        """Maps a typename back to the corresponding name  i.e. struct x -> x
 
         """
         if not typename.startswith(self.KEYWORD + ' '):
@@ -328,6 +330,7 @@ class AlgebraicDataType(CLibType):
     def _iter_sub_c_repr(self):
         """Internal, abstract method, that returns iterator over all lines
         within brackets of an algebraic data type.
+
         Is called by c_repr()/named_c_repr().
 
         Returns
@@ -340,21 +343,22 @@ class AlgebraicDataType(CLibType):
 
     def named_c_repr(self, typename=None, referrer_c_repr=None):
         """Returns the C representation of an algebraic data type including.
+
         In contrary to c_repr() this method allows to set a typename for the
         data type.
 
         Parameters
         ----------
-        typename : Optional[str]
+        typename : str, optional
             The name of the algebraic data type. If omitted the resulting
             string is a anonymous algebraic data type.
-        referrer_c_repr : Optional[str]
+        referrer_c_repr : str, optional
             The name of the algebraic data object. If omitted, this is only
             a type declaration, but no instantioation.
 
         Returns
         -------
-        str
+        named_repr : str
             C code, that represents this type
 
         """
@@ -383,6 +387,14 @@ class CompoundType(AlgebraicDataType):
     The common functionality managed by this class is management of
     multiple subfields (see 'fields')
 
+    Parameters
+    ----------
+    fields : list[tuple[str|None, CLibType]]
+        see Attributes
+
+    quals : list[str], optional
+        A list of type qualifiers attached to this type.
+
     Attributes
     ----------
     fields : list[tuple[str|None, CLibType]]
@@ -398,16 +410,6 @@ class CompoundType(AlgebraicDataType):
     KEYWORD = ''   # has to be set
 
     def __init__(self, fields, quals=None):
-        """Initialize CompuundType.
-
-        Parameters
-        ----------
-        fields : list[tuple]
-            see Attributes
-        quals : list[str]
-            see Attributes
-
-        """
         super(CompoundType, self).__init__(quals)
         self.fields = fields
 
@@ -419,9 +421,21 @@ class CompoundType(AlgebraicDataType):
 class StructType(CompoundType):
     """Model of C structure type definitions.
 
+    Parameters
+    ----------
+    fields : list[tuple[str|None, CLibType]]
+        see Attributes
+
+    packsize : int, optional
+        Size of packing of structure (see pack() pragma of MSVC). Has to be
+        2**x.
+
+    quals : list[str], optional
+        A list of type qualifiers attached to this type.
+
     Attributes
     ----------
-    packsize : Optional[int]
+    packsize : int
         Size of packing of structure (see pack() pragma of MSVC). Has to be
         2**x.
 
@@ -432,15 +446,6 @@ class StructType(CompoundType):
     KEYWORD = 'struct'
 
     def __init__(self, fields, packsize=None, quals=None):
-        """
-        fields : list[tuple[str, CLibType, int|None]]
-            see CompoundType
-        packsize : Optional[int]
-            see StructType
-        quals : list[str]
-            see CLibType
-
-        """
         if packsize is not None and 2**(packsize.bit_length() - 1) != packsize:
             raise ValueError('packsize has to be a value of format 2^n')
         super(StructType, self).__init__(fields, quals)
@@ -462,7 +467,9 @@ class StructType(CompoundType):
 
 
 class UnionType(CompoundType):
-    """Model of C union definition."""
+    """Model of C union definition.
+
+    """
 
     __slots__ = ()
 
@@ -476,6 +483,15 @@ class UnionType(CompoundType):
 class EnumType(AlgebraicDataType):
     """Model of C enum definition.
 
+    Parameters
+    ----------
+    values : list[tuple[str, int]]
+        See values Attribute
+
+    quals : list[str]
+        Has to be None
+        (only for interface compatibility with AlgebraicDataType)
+
     Attributes
     ----------
     values : list[tuple[str, int]]
@@ -488,17 +504,6 @@ class EnumType(AlgebraicDataType):
     KEYWORD = 'enum'
 
     def __init__(self, values, quals=None):
-        """Initialize EnumType.
-
-        Parameters
-        ----------
-        values : list[tuple[str, int]]
-            See values Attribute
-        quals : list[str]
-            Has to be None
-            (only for interface compatibility with AlgebraicDataType)
-
-        """
         super(EnumType, self).__init__(quals)
         self.values = values
 
@@ -512,6 +517,14 @@ class ComposedType(CLibType):
 
     The common functionality managed by this class is operator precedence
     and implementation of resolve
+
+    Parameters
+    ----------
+    base_type : CLibType
+        Base type, which is modified by this type modifier.
+
+    quals : list[str], optional
+        A list of type qualifiers attached to this type.
 
     Attributes
     ----------
@@ -531,16 +544,6 @@ class ComposedType(CLibType):
     PRECEDENCE = 100
 
     def __init__(self, base_type, quals=None):
-        """Initialize Composed Types.
-
-        Parameters
-        ----------
-        CLibType : base_type
-            Base type, which is modified by this type modifier.
-        quals : Optional[list[str]]
-            see CLibType
-
-        """
         super(ComposedType, self).__init__(quals)
         self.base_type = base_type
 
@@ -563,7 +566,7 @@ class ComposedType(CLibType):
 
         """
         if (isinstance(self.base_type, ComposedType) and
-            self.PRECEDENCE < self.base_type.PRECEDENCE):
+                self.PRECEDENCE < self.base_type.PRECEDENCE):
             return self.base_type.c_repr('(' + referrer_c_repr + ')')
         else:
             return self.base_type.c_repr(referrer_c_repr)
@@ -583,7 +586,9 @@ class ComposedType(CLibType):
 
 
 class PointerType(ComposedType):
-    """Model of C pointer definition."""
+    """Model of C pointer definition.
+
+    """
 
     __slots__ = ()
 
@@ -596,8 +601,21 @@ class PointerType(ComposedType):
 
 class ArrayType(ComposedType):
     """Model of C arrays definition.
+
     Does not only cover fixed size arrays, but also arrays of
     undefined size: ``arr[]``
+
+    Parameters
+    ----------
+    base_type : CLibType
+        see base_type Attribute.
+
+    size : int|None
+        see base type Attributes
+
+    quals : list[str], optional
+        has to be empty!!! Is only available
+        for compatibility with CLibType.copy/CLibType.eq
 
     Attributes
     ----------
@@ -610,19 +628,6 @@ class ArrayType(ComposedType):
     __slots__ = ('size',)
 
     def __init__(self, base_type, size=None, quals=None):
-        """Initialize ArrayType.
-
-        Parameters
-        ----------
-        base_type : CLibType:
-            see base_type Attribute.
-        size : int|None
-            see base type Attributes
-        quals : Optional[list[str]]:
-            has to be empty!!! Is only available
-            for compatibility with CLibType.copy/CLibType.eq
-
-        """
         if quals:
             raise ValueError('arrays do not support qualifiers')
         super(ArrayType, self).__init__(base_type, quals)
@@ -634,7 +639,18 @@ class ArrayType(ComposedType):
 
 
 class FunctionType(ComposedType):
-    """Model of C function signature
+    """Model of C function signature.
+
+    Parameters
+    ----------
+    base_type : CLibType
+        Return value of function.
+
+    params : list[tuples[str|None, CLibType]
+        see Attributes
+
+    quals : list[str], optional
+        A list of type qualifiers attached to this type.
 
     Attributes
     ----------
@@ -648,18 +664,6 @@ class FunctionType(ComposedType):
     __slots__ = ('params',)
 
     def __init__(self, base_type, params=(), quals=None):
-        """Initialize FunctionType.
-
-        Parameters
-        ----------
-        base_type CLibType:
-            Return value of function.
-        params : list[tuple[str|None, CLibType]]
-            See params Attribute.
-        quals : Optional[list[str]]
-            see CLibType.quals
-
-        """
         super(FunctionType, self).__init__(base_type, quals=quals)
         self.params = list(params)
 
@@ -671,7 +675,8 @@ class FunctionType(ComposedType):
 
         Returns
         -------
-        CLibType
+        rtype : CLibType
+            Function return type.
 
         """
         return self.base_type
@@ -708,7 +713,8 @@ class Macro(CLibBase):
 
         Returns
         -------
-        str
+        repr : str
+            String representation of the macro.
 
         """
         raise NotImplementedError()
@@ -721,6 +727,11 @@ class ValMacro(Macro):
     """Model of C Preprocessor define, that is not parametrized. i.E.:
     #define X 3
 
+    Parameters
+    ----------
+    content : str
+        See attributes.
+
     Attributes
     ----------
     content : str
@@ -732,14 +743,6 @@ class ValMacro(Macro):
     __slots__ = ('content',)
 
     def __init__(self, content):
-        """Initialize a C macro
-
-        Parameters
-        ----------
-        content : str
-            See attributes.
-
-        """
         super(ValMacro, self).__init__()
         self.content = content
 
@@ -751,6 +754,14 @@ class FnMacro(Macro):
     """Model of C Preprocessor define, that is parametrized. i.E.:
     #define X(a) a + 3
 
+    Parameters
+    ----------
+    content : str
+        See attributes.
+
+    params : list[str]
+        see attributes
+
     Attributes
     ----------
     compiled_content : str
@@ -758,6 +769,7 @@ class FnMacro(Macro):
         formatter template, where a dictionary of parameter names (see params)
         has to be passed to get the macro output when providing the
         corresponding parameters.
+
     params : list[str]
         A list of parameter names, that will be replaced in content when
         applying the macro.
@@ -774,16 +786,6 @@ class FnMacro(Macro):
         return ('content', 'params')
 
     def __init__(self, content, params):
-        """Initialize FnMacro.
-
-        Parameters
-        ----------
-        content : str
-            See attributes.
-        params : list[str]
-            see attributes
-
-        """
         super(FnMacro, self).__init__()
         self.params = params
         self.compiled_content = self._compile_content(content, params)
@@ -820,14 +822,14 @@ class FnMacro(Macro):
 
     def c_repr(self, name):
         return '#define {}({}) {}'.format(name, ', '.join(self.params),
-                                            self.content)
+                                          self.content)
 
 
 class CLibInterface(collections.Mapping):
     """A complete model of the (exposed/relevant) interface of a C
     library. Corresponds to a set of header files.
 
-    elements can either be retrieved by accessing CLibInterface as
+    Elements can either be retrieved by accessing CLibInterface as
     dictionary (and get a list of **all** objects), or by one of the
     following instance attributes, to get only objects of a specific
     class:
