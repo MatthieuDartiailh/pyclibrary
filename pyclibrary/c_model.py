@@ -87,9 +87,8 @@ class CLibBase(object):
     def __eq__(self, other):
         if type(self) != type(other):
             return False
-        return all(getattr(self, name) == getattr(other, name)
-                   for cls in type(self).__mro__
-                   for name in getattr(cls, '__slots__', ()))
+        return all(getattr(self, anm) == getattr(other, anm)
+                   for anm in self._getattrnames())
 
     def __ne__(self, other):
         return not self == other
@@ -827,6 +826,10 @@ class CLibInterface(collections.Mapping):
         A registry of all types of exposed global variables by name
     typedefs : dict[str, CLibType]
         A registry of all types of typedefs/enums/structs/unions by name
+    macros : dict[str, Macro]
+        A registry of all macros (no matter if ValMacro or FnMacro) by name
+    enum : dict[str, int]
+        A registry of all enum value definitions
     file_map : dict[str, str|None]
         A mapping of all names to file, where they are defined.
         If the file for a object is unknown it is None.
