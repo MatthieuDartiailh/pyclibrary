@@ -15,8 +15,9 @@ from __future__ import (division, unicode_literals, print_function,
 import os
 import sys
 from pytest import raises
-from pyclibrary.c_parser import CParser, Type, Struct, Union, Enum
+from pyclibrary.c_parser import CParser
 import pyclibrary.utils
+import pyclibrary.c_model as cm
 
 
 H_DIRECTORY = os.path.join(os.path.dirname(__file__), 'headers')
@@ -28,126 +29,6 @@ def compare_lines(lines, lines2):
     """
     for l, l_test in zip(lines, lines2):
         assert l.strip() == l_test.strip()
-
-
-class TestType(object):
-
-    def test_init(self):
-        with raises(ValueError):
-            Type('int', '*', type_quals=(('volatile',),))
-
-    def test_tuple_equality(self):
-        assert Type('int') == ('int',)
-        assert ('int',) == Type('int')
-
-        assert Type('int', '*', type_quals=[['const'], ['volatile']]) == \
-               ('int', '*')
-
-        assert issubclass(Type, tuple)
-
-    def test_Type_equality(self):
-        assert Type('int', '*', type_quals=(('const',), ('volatile',))) == \
-               Type('int', '*', type_quals=(('const',), ('volatile',)))
-        assert Type('int', '*', type_quals=(('const',), ())) != \
-               Type('int', '*', type_quals=(('const',), ('volatile',)))
-
-    def test_getters(self):
-        assert Type('int', '*').type_spec == 'int'
-        assert Type('int', '*', [1]).declarators == ('*', [1])
-        assert Type('int', '*', type_quals=(('volatile',), ())).type_quals == \
-               (('volatile',), ())
-
-    def test_is_fund_type(self):
-        assert not Type('custom_typedef').is_fund_type()
-
-        assert Type('int').is_fund_type()
-        assert Type('int', '*').is_fund_type()
-        assert Type('int', [1]).is_fund_type()
-        assert Type('int', ()).is_fund_type()
-        assert Type('int', type_quals=(('volatile',))).is_fund_type()
-
-        assert Type('unsigned').is_fund_type()
-        assert Type('short').is_fund_type()
-        assert Type('unsigned short int').is_fund_type()
-        assert Type('struct test').is_fund_type()
-
-    def test_eval(self):
-        type_map = {
-            'tq_parent_type': Type('int', '*',
-                                   type_quals=(('__tq1',), ('__tq2',))),
-            'parent_type': Type('int', '*', '*', [2]),
-            'child_type': Type('parent_type', '*', [3]) }
-
-        assert Type('parent_type', '*', [1]).eval(type_map) == \
-               Type('int', '*', '*', [2], '*', [1])
-        assert Type('child_type', (), '*').eval(type_map) == \
-               Type('int', '*', '*', [2], '*', [3], (), '*')
-        assert Type('tq_parent_type', [1],
-                    type_quals=(('__tq3',), ('__tq4',))).eval(type_map) == \
-               Type('int', '*', [1],
-                    type_quals=(('__tq1',), ('__tq2', '__tq3'), ('__tq4',)))
-
-    def test_compatibility_hack(self):
-        assert Type('int', '*', ()).add_compatibility_hack() == \
-               Type(Type('int', '*'), ())
-        assert Type('int', '*', (), '*').add_compatibility_hack() == \
-               Type('int', '*', (), '*')
-        assert Type('int', (), type_quals=(('const',), ('__interrupt',)))\
-                   .add_compatibility_hack() == \
-               Type(Type('int', type_quals=(('const',),)), (),
-                    type_quals=((), ('__interrupt',),))
-
-        assert Type(Type('int', '*'), ()).remove_compatibility_hack() == \
-               Type('int', '*', ())
-        assert Type('int', '*', ()).remove_compatibility_hack() == \
-               Type('int', '*', ())
-
-    def test_repr(self):
-        assert repr(Type('int', '*')) == "Type({!r}, {!r})".format('int', '*')
-        assert repr(Type('int', '*', type_quals=(('volatile',), ()))) == \
-               ('Type({!r}, {!r}, type_quals=(({!r},), ()))'
-                .format('int', '*', 'volatile'))
-
-
-class TestStructUnion(object):
-
-    TEST_MEMBERS = [ ('a', Type('int'), None),
-                     ('b', Type('char', '*'), None)]
-
-    def test_init(self):
-        assert Struct().members == []
-        assert Struct().pack == None
-        assert Struct(*self.TEST_MEMBERS).members == self.TEST_MEMBERS
-        assert Struct(pack=2).pack == 2
-
-        assert Union(*self.TEST_MEMBERS).members == self.TEST_MEMBERS
-
-    def test_list_equality(self):
-        assert Struct(*self.TEST_MEMBERS, pack=2) == {
-            'members': [ ('a', Type('int'), None),
-                         ('b', Type('char', '*'), None)],
-            'pack': 2 }
-        assert issubclass(Struct, dict)
-
-        assert Union(*self.TEST_MEMBERS)['members'] == self.TEST_MEMBERS
-
-    def test_repr(self):
-        assert repr(Struct()) == 'Struct()'
-        assert repr(Struct(*self.TEST_MEMBERS, pack=2)) == \
-               ( 'Struct(' + repr(self.TEST_MEMBERS[0]) + ', ' +
-                 repr(self.TEST_MEMBERS[1]) + ', pack=2)' )
-        assert repr(Union()) == 'Union()'
-
-
-class TestEnum(object):
-
-    def test_dict_equality(self):
-        assert Enum(a=1, b=2) == {'a':1, 'b':2}
-        assert issubclass(Enum, dict)
-
-
-    def test_repr(self):
-        assert repr(Enum(a=1, b=2)) == 'Enum(a=1, b=2)'
 
 
 class TestFileHandling(object):
@@ -251,74 +132,62 @@ class TestPreprocessing(object):
         self.parser.remove_comments(path)
         self.parser.preprocess(path)
 
-        macros = self.parser.defs['macros']
-        values = self.parser.defs['values']
+        macros = self.parser.clib_intf.macros
+        values = self.parser.macro_vals
 
-        assert 'M' in macros and macros['M'] == ''
-        assert 'N' in macros and macros['N'] == 'n' and values['N'] is None
+        assert macros['M'].content == ''
+        assert macros['N'].content == 'n' and values['N'] is None
 
         # Decimal integer
-        assert ('MACRO_D1' in macros and macros['MACRO_D1'] == '1' and
+        assert (macros['MACRO_D1'].content  == '1' and
                 values['MACRO_D1'] == 1)
-        assert ('MACRO_D2' in macros and macros['MACRO_D2'] == '-2U' and
+        assert (macros['MACRO_D2'].content == '-2U' and
                 values['MACRO_D2'] == -2)
-        assert ('MACRO_D3' in macros and macros['MACRO_D3'] == '+ 3UL' and
+        assert (macros['MACRO_D3'].content == '+ 3UL' and
                 values['MACRO_D3'] == 3)
 
         # Bit shifted decimal integer
-        assert ('MACRO_SD1' in macros and
-                macros['MACRO_SD1'] == '(1 << 1)' and
+        assert (macros['MACRO_SD1'].content == '(1 << 1)' and
                 values['MACRO_SD1'] == 2)
-        assert ('MACRO_SD2' in macros and
-                macros['MACRO_SD2'] == '(2U << 2)' and
+        assert (macros['MACRO_SD2'].content == '(2U << 2)' and
                 values['MACRO_SD2'] == 8)
-        assert ('MACRO_SD3' in macros and
-                macros['MACRO_SD3'] == '(3UL << 3)' and
+        assert (macros['MACRO_SD3'].content == '(3UL << 3)' and
                 values['MACRO_SD3'] == 24)
 
         # Hexadecimal integer
-        assert ('MACRO_H1' in macros and
-                macros['MACRO_H1'] == '+0x000000' and
+        assert (macros['MACRO_H1'].content == '+0x000000' and
                 values['MACRO_H1'] == 0)
-        assert ('MACRO_H2' in macros and
-                macros['MACRO_H2'] == '- 0x000001U' and
+        assert (macros['MACRO_H2'].content == '- 0x000001U' and
                 values['MACRO_H2'] == -1)
-        assert ('MACRO_H3' in macros and
-                macros['MACRO_H3'] == '0X000002UL' and
+        assert (macros['MACRO_H3'].content == '0X000002UL' and
                 values['MACRO_H3'] == 2)
 
         # Bit shifted hexadecimal integer
-        assert ('MACRO_SH1' in macros and
-                macros['MACRO_SH1'] == '(0x000000 << 1)' and
+        assert (macros['MACRO_SH1'].content == '(0x000000 << 1)' and
                 values['MACRO_SH1'] == 0)
-        assert ('MACRO_SH2' in macros and
-                macros['MACRO_SH2'] == '(0x000001U << 2)' and
+        assert (macros['MACRO_SH2'].content == '(0x000001U << 2)' and
                 values['MACRO_SH2'] == 4)
-        assert ('MACRO_H3' in macros and
-                macros['MACRO_SH3'] == '(0X000002UL << 3)' and
+        assert (macros['MACRO_SH3'].content == '(0X000002UL << 3)' and
                 values['MACRO_SH3'] == 16)
 
         # Floating point value
-        assert ('MACRO_F1' in macros and
-                macros['MACRO_F1'] == '1.0' and
+        assert (macros['MACRO_F1'].content == '1.0' and
                 values['MACRO_F1'] == 1.0)
-        assert ('MACRO_F2' in macros and
-                macros['MACRO_F2'] == '1.1e1' and
+        assert (macros['MACRO_F2'].content == '1.1e1' and
                 values['MACRO_F2'] == 11.)
-        assert ('MACRO_F3' in macros and
-                macros['MACRO_F3'] == '-1.1E-1' and
+        assert (macros['MACRO_F3'].content == '-1.1E-1' and
                 values['MACRO_F3'] == -0.11)
 
         # String macro
-        assert ('MACRO_S' in macros and macros['MACRO_S'] == '"test"' and
+        assert (macros['MACRO_S'].content == '"test"' and
                 values['MACRO_S'] == 'test')
 
         # Nested macros
-        assert ('NESTED' in macros and macros['NESTED'] == '1' and
+        assert (macros['NESTED'].content == '1' and
                 values['NESTED'] == 1)
-        assert ('NESTED2' in macros and macros['NESTED2'] == '1' and
+        assert (macros['NESTED2'].content == '1' and
                 values['NESTED2'] == 1)
-        assert ('MACRO_N' in macros and macros['MACRO_N'] == '1 + 2' and
+        assert (macros['MACRO_N'].content == '1 + 2' and
                 values['MACRO_N'] == 3)
 
         # Muliline macro
@@ -332,7 +201,7 @@ class TestPreprocessing(object):
         self.parser.preprocess(path)
         self.parser.parse_defs(path)
 
-        macros = self.parser.defs['macros']
+        macros = self.parser.clib_intf.macros
         stream = self.parser.files[path]
 
         # Test if defined conditional
@@ -399,23 +268,24 @@ class TestPreprocessing(object):
         self.parser.preprocess(path)
         self.parser.parse_defs(path)
 
-        values = self.parser.defs['values']
-        fnmacros = self.parser.defs['fnmacros']
+        values = self.parser.macro_vals
+        macros = self.parser.clib_intf.macros
         stream = self.parser.files[path]
 
         # Test macro declaration.
-        assert 'CARRE' in fnmacros
+        assert macros['CARRE'] == cm.FnMacro('a*a', ['a'])
         assert 'int carre = 2*2;' in stream
 
         assert 'int __declspec(dllexport) function2()' in stream
         assert '__declspec(dllexport) int function3()' in stream
 
         # Test defining a macro function as an alias for another one.
-        assert 'MAKEINTRESOURCEA' in fnmacros
-        assert 'MAKEINTRESOURCEW' in fnmacros
-        assert 'MAKEINTRESOURCE' in fnmacros
-        assert fnmacros['MAKEINTRESOURCE'] == fnmacros['MAKEINTRESOURCEA']
-        assert 'int x = ((LPSTR)((ULONG_PTR)((WORD)(4))))'
+        assert (macros['MAKEINTRESOURCEA'] ==
+                cm.FnMacro('((LPSTR)((ULONG_PTR)((WORD)(i))))', ['i']))
+        assert (macros['MAKEINTRESOURCEW'] ==
+                cm.FnMacro('((LPWSTR)((ULONG_PTR)((WORD)(i))))', ['i']))
+        assert macros['MAKEINTRESOURCE'] is macros['MAKEINTRESOURCEA']
+        assert 'int x = ((LPSTR)((ULONG_PTR)((WORD)(4))))' in stream
 
         # Test using a macro value in a macro function call
         assert 'BIT' in values and values['BIT'] == 1
@@ -423,11 +293,11 @@ class TestPreprocessing(object):
 
         # Test defining a macro function calling other macros (values and
         # functions)
-        assert 'SETBITS' in fnmacros
+        assert 'SETBITS' in macros
         assert 'int z1, z2 = (((1) |= (0x01)), ((2) |= (0x01)));' in stream
 
         # Test defining a macro function calling nested macro functions
-        assert 'SETBIT_AUTO' in fnmacros
+        assert 'SETBIT_AUTO' in macros
         assert 'int z3 = ((((3) |= (0x01)), ((3) |= (0x01))));' in stream
 
     def test_pragmas(self):
@@ -471,113 +341,91 @@ class TestParsing(object):
         self.parser.load_file(path)
         self.parser.process_all()
 
-        variables = self.parser.defs['variables']
+        vars = self.parser.clib_intf.vars
 
         # Integers
-        assert ('short1' in variables and
-                variables['short1'] == (1, Type('signed short')))
-        assert ('short_int' in variables and
-                variables['short_int'] == (1, Type('short int')))
-        assert ('short_un' in variables and
-                variables['short_un'] == (1, Type('unsigned short')))
-        assert ('short_int_un' in variables and
-                variables['short_int_un'] == (1, Type('unsigned short int')))
-        assert ('int1' in variables and
-                variables['int1'] == (1, Type('int')))
-        assert ('un' in variables and
-                variables['un'] == (1, Type('unsigned')))
-        assert ('int_un' in variables and
-                variables['int_un'] == (1, Type('unsigned int')))
-        assert ('long1' in variables and
-                variables['long1'] == (1, Type('long')))
-        assert ('long_int' in variables and
-                variables['long_int'] == (1, Type('long int')))
-        assert ('long_un' in variables and
-                variables['long_un'] == (1, Type('unsigned long')))
-        assert ('long_int_un' in variables and
-                variables['long_int_un'] == (1, Type('unsigned long int')))
-        if sys.platform == 'win32':
-            assert ('int64' in variables and
-                    variables['int64'] == (1, Type('__int64')))
-            assert ('int64_un' in variables and
-                    variables['int64_un'] == (1, Type('unsigned __int64')))
-        assert ('long_long' in variables and
-                variables['long_long'] == (1, Type('long long')))
-        assert ('long_long_int' in variables and
-                variables['long_long_int'] == (1, Type('long long int')))
-        assert ('long_long_un' in variables and
-                variables['long_long_un'] == (1, Type('unsigned long long')))
-        assert ('long_long_int_un' in variables and
-                variables['long_long_int_un'] == (1, Type('unsigned long '
-                                                          'long int')))
+        assert vars['short1'] == cm.BuiltinType('signed short')
+        assert vars['short_int'] == cm.BuiltinType('short int')
+        assert vars['short_un'] == cm.BuiltinType('unsigned short')
+        assert vars['short_int_un'] == cm.BuiltinType('unsigned short int')
+        assert vars['int1'] == cm.BuiltinType('int')
+        assert vars['un'] == cm.BuiltinType('unsigned')
+        assert vars['int_un'] == cm.BuiltinType('unsigned int')
+        assert vars['long1'] == cm.BuiltinType('long')
+        assert vars['long_int'] == cm.BuiltinType('long int')
+        assert vars['long_un'] == cm.BuiltinType('unsigned long')
+        assert vars['long_int_un'] == cm.BuiltinType('unsigned long int')
+        if sys.platform == 'win32':   ###TODO: this has to be dependend on CParser objects, not on hosting opering system
+            assert vars['int64'] == cm.BuiltinType('__int64')
+            assert vars['int64_un'] == cm.BuiltinType('unsigned __int64')
+        assert vars['long_long'] == cm.BuiltinType('long long')
+        assert vars['long_long_int'] == cm.BuiltinType('long long int')
+        assert vars['long_long_un'] == cm.BuiltinType('unsigned long long')
+        assert (vars['long_long_int_un'] ==
+                cm.BuiltinType('unsigned long long int'))
 
         # Floating point number
-        assert ('fl' in variables and variables['fl'] ==
-                (1., Type('float')))
-        assert ('db' in variables and variables['db'] ==
-                (0.1, Type('double')))
-        assert ('dbl' in variables and
-                variables['dbl'] == (-10., Type('long double')))
+        assert vars['fl'] == cm.BuiltinType('float')
+        assert vars['db'] == cm.BuiltinType('double')
+        assert vars['dbl'] == cm.BuiltinType('long double')
 
         # Const and static modif
-        assert ('int_const' in variables and
-                variables['int_const'] == (4, Type('int',
-                                                   type_quals=(('const',),))))
-        assert ('int_stat' in variables and
-                variables['int_stat'] == (4, Type('int')))
-        assert ('int_con_stat' in variables and
-                variables['int_con_stat'] == (4, Type('int',
-                                                      type_quals=(('const',),))))
-        assert ('int_extern' in variables and
-                variables['int_extern'] == (4, Type('int')))
+        assert vars['int_const'] == cm.BuiltinType('int', quals=['const'])
+        assert vars['int_stat'] == cm.BuiltinType('int')
+        assert vars['int_con_stat'] == cm.BuiltinType('int', quals=['const'])
+        assert vars['int_extern'] == cm.BuiltinType('int')
+        assert (self.parser.clib_intf.storage_classes['int_extern'] ==
+                ['extern'])
 
         # String
-        assert ('str1' in variables and
-                variables['str1'] == ("normal string", Type('char', '*')))
-        assert ('str2' in variables and
-                variables['str2'] == ("string with macro: INT",
-                                      Type('char', '*', '*')))
-        assert ('str3' in variables and
-                variables['str3'] == ("string with comment: /*comment inside string*/",
-                                      Type('char', '*', type_quals=(('const',), ('const',)))))
-        assert ('str4' in variables and
-                variables['str4'] == ("string with define #define MACRO5 macro5_in_string ",
-                                      Type('char', '*')))
-        assert ('str5' in variables and
-                variables['str5'] == ("string with \"escaped quotes\" ",
-                                      Type('char', '*')))
+        assert vars['str1'] == cm.PointerType(cm.BuiltinType('char'))
+        assert (vars['str2'] ==
+                cm.PointerType(cm.PointerType(cm.BuiltinType('char'))))
+        assert (vars['str3'] ==
+                cm.PointerType(cm.BuiltinType('char', quals=['const']),
+                               quals=['const']))
+        assert 'str4' in vars
+        assert 'str5' in vars
 
         # Test complex evaluation
-        assert ('x1' in variables and
-                variables['x1'] == (1., Type('float')))
+        assert 'x1' in vars
 
         # Test type casting handling.
-        assert ('x2' in variables and
-                variables['x2'] == (88342528, Type('int')))
+        assert 'x2' in vars
 
         # Test array handling
-        assert ('array' in variables and
-                variables['array'] == ([1, 3141500.0], Type('float', [2])))
-        assert ('intJunk' in variables and
-                variables['intJunk'] == (
-                    None,
-                    Type('int', '*', '*', '*', [4],
-                         type_quals=(('const',), ('const',), (), (), ())) ) )
+        assert vars['array'] == cm.ArrayType(cm.BuiltinType('float'), 2)
+        assert (vars['intJunk'] ==
+                cm.ArrayType(
+                    cm.PointerType(
+                        cm.PointerType(
+                            cm.PointerType(
+                                cm.BuiltinType('int', quals=['const']),
+                                quals=['const']))),
+                    4))
+        assert vars['undef_size_array'] == cm.ArrayType(cm.BuiltinType('int'))
 
         # test type qualifiers
-        assert variables.get('typeQualedIntPtrPtr') == \
-               (None, Type('int', '*', '*',
-                           type_quals=(('const',), ('volatile',), ())) )
-        assert variables.get('typeQualedIntPtr') == \
-               (None, Type('int', '*', type_quals=(('const', 'volatile',), ())))
+        assert (vars['typeQualedIntPtrPtr'] ==
+                cm.PointerType(
+                    cm.PointerType(
+                        cm.BuiltinType('int', quals=['const']),
+                        quals=['volatile'])))
+        assert (vars['typeQualedIntPtr'] ==
+                cm.PointerType(
+                    cm.BuiltinType('int', quals=['const', 'volatile'])))
 
         # test type definition precedence
-        assert variables.get('prec_ptr_of_arr') == \
-               (None, Type('int', [1], '*'))
-        assert variables.get('prec_arr_of_ptr') == \
-               (None, Type('int', '*', [1]))
-        assert variables.get('prec_arr_of_ptr2') == \
-               (None, Type('int', '*', [1]))
+        assert (vars['prec_ptr_of_arr'] ==
+                cm.PointerType(cm.ArrayType(cm.BuiltinType('int'), 1)))
+        assert (vars['prec_arr_of_ptr'] ==
+                cm.ArrayType(cm.PointerType(cm.BuiltinType('int')), 1))
+        assert (vars['prec_arr_of_ptr2'] == \
+                cm.ArrayType(cm.PointerType(cm.BuiltinType('int')), 1))
+
+        # test filemap
+        assert (os.path.basename(self.parser.clib_intf.file_map['short1']) ==
+                'variables.h')
 
     # No structure, no unions, no enum
     def test_typedef(self):
@@ -586,51 +434,49 @@ class TestParsing(object):
         self.parser.load_file(path)
         self.parser.process_all()
 
-        types = self.parser.defs['types']
-        variables = self.parser.defs['variables']
+        tdefs = self.parser.clib_intf.typedefs
+        vars = self.parser.clib_intf.vars
 
         # Test defining types from base types.
-        assert ('typeChar' in types and types['typeChar'] ==
-                Type('char', '*', '*'))
-        assert ('typeInt' in types and types['typeInt'] ==
-                Type('int'))
-        assert ('typeIntPtr' in types and types['typeIntPtr'] ==
-                Type('int', '*'))
-        assert ('typeIntArr' in types and types['typeIntArr'] ==
-                Type('int', [10]))
-        assert ('typeIntDArr' in types and types['typeIntDArr'] ==
-                Type('int', [5], [6]))
-        assert ('typeTypeInt' in types and
-                types['typeTypeInt'] == Type('typeInt'))
-        assert not self.parser.is_fund_type('typeTypeInt')
-        assert self.parser.eval_type(['typeTypeInt']) == Type('int')
-        assert ('ULONG' in types and types['ULONG'] == Type('unsigned long'))
+        assert (tdefs['typeChar'] ==
+                cm.PointerType(cm.PointerType(cm.BuiltinType('char'))))
+        assert tdefs['typeInt'] == cm.BuiltinType('int')
+        assert tdefs['typeIntPtr'] == cm.PointerType(cm.BuiltinType('int'))
+        assert tdefs['typeIntArr'] == cm.ArrayType(cm.BuiltinType('int'), 10)
+        assert (tdefs['typeIntDArr'] ==
+                cm.ArrayType(cm.ArrayType(cm.BuiltinType('int'), 6), 5))
+        assert tdefs['typeTypeInt'] == cm.CustomType('typeInt')
+        assert tdefs['typeTypeInt'].resolve(tdefs) == cm.BuiltinType('int')
+        assert tdefs['ULONG'] == cm.BuiltinType('unsigned long')
 
         # Test annotated types
-        assert ('voidpc' in types and types['voidpc'] ==
-                Type('void', '*', type_quals=(('const',), ())))
-        assert ('charf' in types and types['charf'] ==
-                Type('char', type_quals=(('far',),)))
+        assert (tdefs['voidpc'] ==
+                cm.PointerType(cm.BuiltinType('void', quals=['const'])))
+        assert (tdefs['charf'] == cm.BuiltinType('char', quals=['far']))
 
         # Test using custom type.
-        assert ('ttip5' in variables and
-                variables['ttip5'] == (None, Type('typeTypeInt', '*', [5])))
+        assert (vars['ttip5'] ==
+                cm.ArrayType(
+                    cm.PointerType(
+                        cm.CustomType('typeTypeInt')),
+                    5))
 
         # Handling undefined types
-        assert ('SomeOtherType' in types and
-                types['SomeOtherType'] == Type('someType'))
-        assert ('x' in variables and variables['x'] ==
-                (None, Type('undefined')))
-        assert not self.parser.is_fund_type('SomeOtherType')
-        with raises(Exception):
-            self.parser.eval_type(Type('undefined'))
+        assert tdefs['SomeOtherType'] == cm.CustomType('someType')
+        assert vars['x'] == cm.CustomType('undefined')
+        with raises(cm.UnknownCustomTypeError):
+            vars['x'].resolve(tdefs)
 
         # Testing recursive defs
-        assert 'recType1' in types
-        assert 'recType2' in types
-        assert 'recType3' in types
-        with raises(Exception):
-            self.parser.eval_type(Type('recType3'))
+        assert 'recType1' in tdefs
+        assert 'recType2' in tdefs
+        assert 'recType3' in tdefs
+        with raises(cm.UnknownCustomTypeError):
+            tdefs['recType3'].resolve(tdefs)
+
+        # test filemap
+        assert (os.path.basename(self.parser.clib_intf.file_map['ULONG']) ==
+                'typedefs.h')
 
     def test_enums(self):
 
@@ -638,17 +484,28 @@ class TestParsing(object):
         self.parser.load_file(path)
         self.parser.process_all()
 
-        enums = self.parser.defs['enums']
-        types = self.parser.defs['types']
-        variables = self.parser.defs['variables']
-        assert ('enum_name' in enums and 'enum enum_name' in types)
-        assert enums['enum_name'] == {'enum1': 2, 'enum2': 6, 'enum3': 7,
-                                      'enum4': 8}
-        assert types['enum enum_name'] == Type('enum', 'enum_name',)
-        assert ('enum_inst' in variables and
-                variables['enum_inst'] == (None, Type('enum enum_name',)))
+        tdefs = self.parser.clib_intf.typedefs
+        vars = self.parser.clib_intf.vars
+        enums = self.parser.clib_intf.enums
 
-        assert 'anon_enum0' in enums
+        # test all properties of enum
+        enum_name_type = cm.EnumType([('enum1', 9), ('enum2', 6),
+                                      ('enum3', 7), ('enum4', 8)])
+        assert tdefs['enum enum_name'] == enum_name_type
+        assert vars['enum_inst'] == cm.CustomType('enum enum_name')
+        assert vars['enum_inst2'] == cm.CustomType('enum enum_name')
+
+        # test anonymous enums
+        assert (vars['anonymous_enum_inst'] ==
+                cm.PointerType(cm.EnumType([('x', 0), ('y', 1)])))
+        assert set(tdefs) == { 'enum enum_name' }
+
+        assert enums['enum1'] == 9
+        assert enums['y'] == 1
+
+        # test filemap
+        enum_name_path = self.parser.clib_intf.file_map['enum enum_name']
+        assert os.path.basename(enum_name_path) == 'enums.h'
 
     def test_struct(self):
 
@@ -656,45 +513,64 @@ class TestParsing(object):
         self.parser.load_file(path)
         self.parser.process_all()
 
-        structs = self.parser.defs['structs']
-        types = self.parser.defs['types']
-        variables = self.parser.defs['variables']
+        tdefs = self.parser.clib_intf.typedefs
+        vars = self.parser.clib_intf.vars
 
         # Test creating a structure using only base types.
-        assert ('struct_name' in structs and 'struct struct_name' in types)
-        assert structs['struct_name'] == \
-               Struct(('x', Type('int'), 1),
-                      ('y', Type('type_type_int'), None, 2),
-                      ('str', Type('char', [10]), None))
-        assert ('struct_inst' in variables and
-                variables['struct_inst'] == (None, Type('struct struct_name')))
+        assert (tdefs['struct struct_name'] ==
+                cm.StructType([('x', cm.BuiltinType('int'), None),
+                               ('y', cm.CustomType('type_type_int'), 2),
+                               ('str', cm.ArrayType(cm.BuiltinType('char'),
+                                                    10), None)]))
+        assert vars['struct_inst'] == cm.CustomType('struct struct_name')
 
         # Test creating a pointer type from a structure.
-        assert ('struct_name_ptr' in types and
-                types['struct_name_ptr'] == Type('struct struct_name', '*'))
+        assert (tdefs['struct_name_ptr'] ==
+                cm.PointerType(cm.CustomType('struct struct_name')))
 
-        assert ('struct_name2_ptr' in types and
-                types['struct_name2_ptr'] == Type('struct anon_struct0', '*'))
+        assert (tdefs['struct_name2_ptr'] ==
+                cm.PointerType(cm.StructType([
+                    ('x', cm.BuiltinType('int'), None),
+                    ('y', cm.BuiltinType('int'), None),
+                ])))
 
         # Test declaring a recursive structure.
-        assert ('recursive_struct' in structs and
-                'struct recursive_struct' in types)
-        assert structs['recursive_struct'] == \
-               Struct(('next', Type('struct recursive_struct', '*'), None))
+        assert (tdefs['struct recursive_struct'] ==
+                cm.StructType([('next', cm.PointerType(
+                    cm.CustomType('struct recursive_struct')), None)]))
 
         # Test declaring near and far pointers.
-        assert 'tagWNDCLASSEXA' in structs
-        assert ('NPWNDCLASSEXA' in types and
-                ( types['NPWNDCLASSEXA'] ==
-                 Type('struct tagWNDCLASSEXA', '*', type_quals=(('near',), ()))))
+        assert (tdefs['NPWNDCLASSEXA'] ==
+                cm.PointerType(cm.CustomType('struct tagWNDCLASSEXA',
+                                             quals=['near'])))
 
         # Test altering the packing of a structure.
-        assert ('struct_name_p' in structs and 'struct struct_name_p' in types)
-        assert structs['struct_name_p'] == \
-               Struct(('x', Type('int'), None),
-                      ('y', Type('type_type_int'), None),
-                      ('str', Type('char', [10]), "brace }  \0"),
-                      pack=16)
+        assert (tdefs['struct struct_name_p'] ==
+               cm.StructType([('x', cm.BuiltinType('int'), None),
+                              ('y', cm.CustomType('type_type_int'), None),
+                              ('str', cm.ArrayType(cm.BuiltinType('char'),
+                                                   10),
+                               None)],
+                             packsize=16))
+
+        assert tdefs['struct default_packsize'].packsize is None
+
+        assert (tdefs['struct unnamed_struct'] ==
+                cm.StructType([
+                    (None, cm.CustomType('struct struct_name'), None)]))
+
+        sub_struct = cm.StructType([('y', cm.BuiltinType('int'), None)])
+        assert (vars['anonymous_struct_inst'] ==
+                cm.StructType([
+                    ('x', cm.BuiltinType('long'), None),
+                    (None, sub_struct, None)]))
+
+        assert tdefs['struct typequals'].quals == []
+        assert vars['typequals_var'].quals == ['const', 'volatile']
+
+        # test filemap
+        strct_name_path = self.parser.clib_intf.file_map['struct struct_name']
+        assert os.path.basename(strct_name_path) == 'structs.h'
 
     def test_unions(self):
 
@@ -702,43 +578,42 @@ class TestParsing(object):
         self.parser.load_file(path)
         self.parser.process_all()
 
-        unions = self.parser.defs['unions']
-        structs = self.parser.defs['structs']
-        types = self.parser.defs['types']
-        variables = self.parser.defs['variables']
+        tdefs = self.parser.clib_intf.typedefs
+        vars = self.parser.clib_intf.vars
 
         # Test declaring an union.
-        assert 'union_name' in unions and 'union union_name' in types
-        assert unions['union_name'] == \
-               Union(('x', Type('int'), 1),
-                     ('y', Type('int'), None),
-                     pack=None)
-        assert ('union_name_ptr' in types and
-                types['union_name_ptr'] == Type('union union_name', '*'))
+        assert (tdefs['union union_name'] ==
+                cm.UnionType([('x', cm.BuiltinType('int')),
+                              ('y', cm.BuiltinType('int'))]))
+        assert (tdefs['union_name_ptr'] ==
+                cm.PointerType(cm.CustomType('union union_name')))
 
         # Test defining an unnamed union
-        assert ('no_name_union_inst' in variables and
-                variables['no_name_union_inst'] == (None,
-                                                    Type('union anon_union0')))
+        assert (vars['no_name_union_inst'] ==
+                cm.UnionType([('x', cm.BuiltinType('int')),
+                              ('y', cm.BuiltinType('int'))]))
 
         # Test defining a structure using an unnamed union internally.
-        assert ('tagRID_DEVICE_INFO' in structs and
-                structs['tagRID_DEVICE_INFO'] == \
-                Struct(('cbSize', Type('DWORD'), None),
-                       ('dwType', Type('DWORD'), None),
-                       (None, Type('union anon_union1'), None)))
+        sub_union = cm.UnionType([
+            ('mouse', cm.CustomType('RID_DEVICE_INFO_MOUSE')),
+            ('keyboard', cm.CustomType('RID_DEVICE_INFO_KEYBOARD')),
+            ('hid', cm.CustomType('RID_DEVICE_INFO_HID'))])
+        assert (tdefs['struct tagRID_DEVICE_INFO'] ==
+                cm.StructType([
+                    ('cbSize', cm.CustomType('DWORD'), None),
+                    ('dwType', cm.CustomType('DWORD'), None),
+                    (None, sub_union, None)]))
 
-        assert ('RID_DEVICE_INFO' in types and
-                types['RID_DEVICE_INFO'] == Type('struct tagRID_DEVICE_INFO'))
-        assert ('PRID_DEVICE_INFO' in types and
-                types['PRID_DEVICE_INFO'] ==
-                    Type('struct tagRID_DEVICE_INFO', '*')
-                )
-        assert ('LPRID_DEVICE_INFO' in types and
-                ( types['LPRID_DEVICE_INFO'] ==
-                  Type('struct tagRID_DEVICE_INFO', '*')
-                  )
-                )
+        assert (tdefs['RID_DEVICE_INFO'] ==
+                cm.CustomType('struct tagRID_DEVICE_INFO'))
+        assert (tdefs['PRID_DEVICE_INFO'] ==
+                cm.PointerType(cm.CustomType('struct tagRID_DEVICE_INFO')))
+        assert (tdefs['LPRID_DEVICE_INFO'] ==
+                cm.PointerType(cm.CustomType('struct tagRID_DEVICE_INFO')))
+
+        # test filemap
+        union_name_path = self.parser.clib_intf.file_map['union union_name']
+        assert os.path.basename(union_name_path) == 'unions.h'
 
     def test_functions(self):
 
@@ -746,27 +621,52 @@ class TestParsing(object):
         self.parser.load_file(path)
         self.parser.process_all()
 
-        functions = self.parser.defs['functions']
-        variables = self.parser.defs['variables']
+        funcs = self.parser.clib_intf.funcs
+        vars = self.parser.clib_intf.vars
+        storage_classes = self.parser.clib_intf.storage_classes
 
-        assert functions.get('f') == \
-               Type(Type('void'), ( (None, Type('int'), None),
-                                    (None, Type('int'), None) ))
-        assert functions['g'] == \
-               Type(Type('int'), ( ('ch', Type('char', '*'), None),
-                                   ('str', Type('char', '*', '*'), None) ))
-        assert variables.get('fnPtr') == \
-               (None, Type('int',
-                           ( (None, Type('char'), None),
-                             (None, Type('float'), None) ),
-                           '*'))
-        assert functions.get('function1') == \
-               Type(Type('int', '__stdcall', type_quals=((), None)), ())
+        assert (funcs['f'] ==
+                cm.FunctionType(
+                    cm.BuiltinType('void'),
+                    [(None, cm.BuiltinType('int')),
+                     (None, cm.BuiltinType('int'))]))
+        assert (funcs['g'] ==
+                cm.FunctionType(
+                    cm.BuiltinType('int'),
+                    [('ch', cm.PointerType(cm.BuiltinType('char'))),
+                     ('str', cm.PointerType(cm.PointerType(
+                         cm.BuiltinType('char'))))]))
+        assert storage_classes['g'] == ['inline']
+        assert (vars['fnPtr'] ==
+                cm.PointerType(
+                    cm.FunctionType(
+                        cm.BuiltinType('int'),
+                        [(None, cm.BuiltinType('char')),
+                         (None, cm.BuiltinType('float'))])))
+        assert (funcs['function1'] ==
+                cm.FunctionType(cm.BuiltinType('int'), [], ['__stdcall']))
+        assert (storage_classes['function1'] ==
+                ['extern', '__declspec(dllexport)'])
+        assert (funcs['function2'] ==
+                cm.FunctionType(cm.BuiltinType('int'), []))
 
-        assert functions.get('function2') == Type(Type('int'), ())
+        assert 'externFunc' in funcs
+        assert storage_classes['externFunc'] == ['extern']
 
-        assert 'externFunc' in functions
+        ptyp = cm.PointerType(
+            cm.PointerType(
+                cm.BuiltinType('int', quals=['volatile']),
+                quals=['const']))
+        assert (funcs['typeQualedFunc'] ==
+                cm.FunctionType(cm.BuiltinType('int'), [(None, ptyp)]))
 
-        ptyp = Type('int', '*', '*', type_quals=(('volatile',), ('const',), ()))
-        assert functions.get('typeQualedFunc') == \
-               Type(Type('int'), ((None, ptyp, None),))
+        # test filemap
+        f_name_path = self.parser.clib_intf.file_map['f']
+        assert os.path.basename(f_name_path) == 'functions.h'
+        g_name_path = self.parser.clib_intf.file_map['g']
+        assert os.path.basename(g_name_path) == 'functions.h'
+
+        assert (funcs['array_param_func'] ==
+                cm.FunctionType(cm.BuiltinType('void'), [
+                    ('arr_params', cm.ArrayType(
+                        cm.BuiltinType('int'), None))]))

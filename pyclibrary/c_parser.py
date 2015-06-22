@@ -20,11 +20,13 @@ import os
 import logging
 from inspect import cleandoc
 from future.utils import istext, isbytes
+from past.builtins import basestring
 from ast import literal_eval
 from traceback import format_exc
 
 from .errors import DefinitionError
 from .utils import find_header
+from pyclibrary import c_model
 
 # Import parsing elements
 from .thirdparty.pyparsing import \
@@ -41,266 +43,13 @@ logger = logging.getLogger(__name__)
 __all__ = ['win_defs', 'CParser']
 
 
-class Type(tuple):
-    """
-    Representation of a C type. CParser uses this class to store the parsed
-    typedefs and the types of variable/func.
-
-    **ATTENTION:** Due to compatibility issues with 0.1.0 this class derives
-    from tuple and can be seen as the tuples from 0.1.0. In future this might
-    change to a tuple-like object!!!
-
-    Parameters
-    ----------
-    type_spec : str
-        a string referring the base type of this type defintion. This may
-        either be a fundametal type (i.e. 'int', 'enum x') or a type definition
-        made by a typedef-statement
-
-    declarators : str or list of tuple
-        all following parameters are deriving a type from the type defined
-        until now. Types can be derived by:
-
-        - The string '*': define a pointer to the base type
-          (i.E. Type('int', '*'))
-        - The string '&': a reference. T.B.D.
-        - A list of integers of len 1: define an array with N elements
-          (N is the first and single entry in the list of integers). If N is
-          -1, the array definition is seen as 'int x[]'
-          (i.E. Type('int', [1])
-        - a N-tuple of 3-tuples: defines a function of N parameters. Every
-          parameter is a 3 tuple of the form:
-          (<parameter-name-or-None>, <param-type>, None).
-          Due to compatibility reasons the return value of the function is
-          stored in Type.type_spec parameter
-          (This is **not** the case for function pointers):
-          (i.E. Type(Type('int', '*'), ( ('param1', Type('int'), None), ) ) )
-
-    type_quals : dict of int to list of str (optional)
-        this optional (keyword-)argument allows to optionally add type
-        qualifiers for every declarator level. The key 0 refers the type
-        qualifier of type_spec, while 1 refers to declarators[0], 2 refers to
-        declarators[1] and so on.
-
-    To build more complex types any number of declarators can be combined. i.E.
-
-    >>> int * (*a[2])(char *, signed c[]);
-
-    if represented as:
-
-    >>> Type('int', '*',
-    >>>      ( (None, Type('char', '*'), None),
-    >>>        ('c', Type('signed', [-1]), None) )),
-    >>>      '*', [2])
-
-    """
-    # Cannot slot a subclass of tuple.
-    def __new__(cls, type_spec, *declarators, **argv):
-        return super(Type, cls).__new__(cls, (type_spec,) + declarators)
-
-    def __init__(self, type_spec, *declarators, **argv):
-        super(Type, self).__init__()
-        self.type_quals = (argv.pop('type_quals', None) or
-                           ((),) * (1 + len(declarators)))
-        if len(self.type_quals) != 1 + len(declarators):
-            raise ValueError("wrong number of type qualifiers")
-        assert len(argv) == 0, 'Invalid Parameter'
-
-    def __eq__(self, other):
-        if isinstance(other, Type):
-            if self.type_quals != other.type_quals:
-                return False
-        return super(Type, self).__eq__(other)
-
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
-    @property
-    def declarators(self):
-        """Return a tuple of all declarators.
-
-        """
-        return tuple(self[1:])
-
-    @property
-    def type_spec(self):
-        """Return the base type of this type.
-
-        """
-        return self[0]
-
-    def is_fund_type(self):
-        """Returns True, if this type is a fundamental type.
-        Fundamental types are all types, that are not defined via typedef
-
-        """
-
-        if (self[0].startswith('struct ') or self[0].startswith('union ') or
-                self[0].startswith('enum ')):
-            return True
-
-        names = (num_types + nonnum_types + size_modifiers + sign_modifiers +
-                 extra_type_list)
-        for w in self[0].split():
-            if w not in names:
-                return False
-        return True
-
-    def eval(self, type_map, used=None):
-        """Resolves the type_spec of this type recursively if it is referring
-        to a typedef. For resolving the type type_map is used for lookup.
-        Returns a new Type object.
-
-        Parameters
-        ----------
-        type_map : dict of str to Type
-            All typedefs that shall be resolved have to be stored in this
-            type_map.
-
-        used : list of str
-            For internal use only to prevent circular typedefs
-
-        """
-        used = used or []
-
-        if self.is_fund_type():
-            # Remove 'signed' before returning evaluated type
-            return Type(re.sub(r'\bsigned\b', '', self.type_spec).strip(),
-                        *self.declarators,
-                        type_quals=self.type_quals)
-
-        parent = self.type_spec
-        if parent in used:
-            m = 'Recursive loop while evaluating types. (typedefs are {})'
-            raise DefinitionError(m.format(' -> '.join(used+[parent])))
-
-        used.append(parent)
-        if parent not in type_map:
-            m = 'Unknown type "{}" (typedefs are {})'
-            raise DefinitionError(m.format(parent, ' -> '.join(used)))
-
-        pt = type_map[parent]
-        evaled_type = Type(pt.type_spec, *(pt.declarators + self.declarators),
-                           type_quals=(pt.type_quals[:-1] +
-                                       (pt.type_quals[-1] +
-                                        self.type_quals[0],) +
-                                       self.type_quals[1:])
-                           )
-
-        return evaled_type.eval(type_map, used)
-
-    def add_compatibility_hack(self):
-        """If This Type is refering to a function (**not** a function pointer)
-        a new type is returned, that matches the hack from version 0.1.0.
-        This hack enforces the return value be encapsulated in a separated Type
-        object:
-
-            Type('int', '*', ())
-
-        is converted to
-
-            Type(Type('int', '*'), ())
-        """
-        if type(self[-1]) == tuple:
-            return Type(Type(*self[:-1], type_quals=self.type_quals[:-1]),
-                        self[-1],
-                        type_quals=((), self.type_quals[-1]))
-        else:
-            return self
-
-    def remove_compatibility_hack(self):
-        """Returns a Type object, where the hack from .add_compatibility_hack()
-        is removed
-
-        """
-        if len(self) == 2 and isinstance(self[0], Type):
-            return Type(*(self[0] + (self[1],)))
-        else:
-            return self
-
-    def __repr__(self):
-        type_qual_str = ('' if not any(self.type_quals) else
-                         ', type_quals='+repr(self.type_quals))
-        return (type(self).__name__ + '(' +
-                ', '.join(map(repr, self)) + type_qual_str + ')')
-
-
-class Compound(dict):
-    """Base class for representing object using a dict-like interface.
-
-    """
-    __slots__ = ()
-
-    def __init__(self, *members, **argv):
-        members = list(members)
-        pack = argv.pop('pack', None)
-        assert len(argv) == 0
-
-        super(Compound, self).__init__(dict(members=members, pack=pack))
-
-    def __repr__(self):
-        packParam = ', pack='+repr(self.pack) if self.pack is not None else ''
-        return (type(self).__name__ + '(' +
-                ', '.join(map(repr, self.members)) + packParam + ')')
-
-    @property
-    def members(self):
-        return self['members']
-
-    @property
-    def pack(self):
-        return self['pack']
-
-
-class Struct(Compound):
-    """Representation of a C struct. CParser uses this class to store the parsed
-    structs.
-
-    **ATTENTION:** Due to compatibility issues with 0.1.0 this class derives
-    from dict and can be seen as the dicts from 0.1.0. In future this might
-    change to a dict-like object!!!
-    """
-    __slots__ = ()
-
-
-class Union(Compound):
-    """Representation of a C union. CParser uses this class to store the parsed
-    unions.
-
-    **ATTENTION:** Due to compatibility issues with 0.1.0 this class derives
-    from dict and can be seen as the dicts from 0.1.0. In future this might
-    change to a dict-like object!!!
-    """
-    __slots__ = ()
-
-
-class Enum(dict):
-    """Representation of a C enum. CParser uses this class to store the parsed
-    enums.
-
-    **ATTENTION:** Due to compatibility issues with 0.1.0 this class derives
-    from dict and can be seen as the dicts from 0.1.0. In future this might
-    change to a dict-like object!!!
-    """
-    __slots__ = ()
-
-    def __init__(self, **args):
-        super(Enum, self).__init__(args)
-
-    def __repr__(self):
-        return (type(self).__name__ + '(' +
-                ', '.join(nm + '=' + repr(val)
-                          for nm, val in sorted(self.items())) +
-                ')')
-
-
-def win_defs(version='800'):
+def win_defs(version='1500'):
     """Loads selection of windows headers included with PyCLibrary.
 
     These definitions can either be accessed directly or included before
     parsing another file like this:
-    >>> windefs = c_parser.win_defs()
-    >>> p = c_parser.CParser("headerFile.h", copy_from=windefs)
+    >>> windefs = win_defs()
+    >>> p = CParser("headerFile.h", copy_from=windefs)
 
     Definitions are pulled from a selection of header files included in Visual
     Studio (possibly not legal to distribute? Who knows.), some of which have
@@ -322,10 +71,10 @@ def win_defs(version='800'):
     if not CParser._init:
         logger.warning('Automatic initialisation : OS is assumed to be win32')
         from .init import auto_init
-        auto_init('win32')
+        auto_init()
     d = os.path.dirname(__file__)
     p = CParser(
-        [os.path.join(d, 'headers', h) for h in header_files],
+        header_files,
         macros={'_WIN32': '', '_MSC_VER': version, 'CONST': 'const',
                 'NO_STRICT': None, 'MS_WIN32': ''},
         process_all=False
@@ -350,8 +99,8 @@ class CParser(object):
     files : str or iterable, optional
         File or files which should be parsed.
 
-    copy_from : CParser or iterable of CParser, optional
-        CParser whose definitions should be included.
+    copy_from : CLibInterface, that shall be used as template for this parsers
+        .clib_intf
 
     replace : dict, optional
         Specify som string replacements to perform before parsing. Format is
@@ -366,10 +115,8 @@ class CParser(object):
         definitions as parsing is an expensive operation.
 
     kwargs :
-        Extra parameters may be used to specify the starting state of the
-        parser. For example, one could provide a set of missing type
-        declarations by types={'UINT': ('unsigned int'), 'STRING': ('char', 1)}
-        Similarly, preprocessor macros can be specified: macros={'WINAPI': ''}
+        Extra macros may be used to specify the starting state of the
+        parser: WINAPI='', TESTMACRO='3'
 
     Example
     -------
@@ -387,8 +134,7 @@ class CParser(object):
 
     Access parsed declarations
 
-    >>> all_values = p.defs['values']
-    >>> functionSignatures = p.defs['functions']
+    >>> p.clib_intf
 
     To see what was not successfully parsed
 
@@ -399,7 +145,7 @@ class CParser(object):
     """
     #: Increment every time cache structure or parsing changes to invalidate
     #: old cache files.
-    cache_version = 1
+    cache_version = 2
 
     #: Private flag allowing to know if the parser has been initiliased.
     _init = False
@@ -407,24 +153,22 @@ class CParser(object):
     def __init__(self, files=None, copy_from=None, replace=None,
                  process_all=True, cache=None, **kwargs):
 
+        self.clib_intf = c_model.CLibInterface()
+        if copy_from is not None:
+            self.clib_intf.include(copy_from)
+        self.macro_vals = {}
+
         if not self._init:
             logger.warning('Automatic initialisation based on OS detection')
             from .init import auto_init
             auto_init()
 
-        # Holds all definitions
-        self.defs = {}
-        # Holds definitions grouped by the file they came from
-        self.file_defs = {}
         # Description of the struct packing rules as defined by #pragma pack
         self.pack_list = {}
 
         self.init_opts = kwargs.copy()
         self.init_opts['files'] = []
         self.init_opts['replace'] = {}
-
-        self.data_list = ['types', 'variables', 'fnmacros', 'macros',
-                          'structs', 'unions', 'enums', 'functions', 'values']
 
         self.file_order = []
         self.files = {}
@@ -435,26 +179,11 @@ class CParser(object):
             for f in self.find_headers(files):
                 self.load_file(f, replace)
 
-        # Initialize empty definition lists
-        for k in self.data_list:
-            self.defs[k] = {}
-
-        # Holds translations from typedefs/structs/unions to fundamental types
-        self.compiled_types = {}
-
         self.current_file = None
 
-        # Import extra arguments if specified
-        for t in kwargs:
-            for k in kwargs[t].keys():
-                self.add_def(t, k, kwargs[t][k])
-
-        # Import from other CParsers if specified
-        if copy_from is not None:
-            if not isinstance(copy_from, (list, tuple)):
-                copy_from = [copy_from]
-            for p in copy_from:
-                self.import_dict(p.file_defs)
+        # Import extra macros if specified
+        for name, value in kwargs:
+            self.clib_intf.add_macro(name, c_model.ValMacro(value))
 
         if process_all:
             self.process_all(cache=cache)
@@ -589,25 +318,12 @@ class CParser(object):
                     return False
 
             # Import all parse results
-            self.import_dict(cache['file_defs'])
+            self.clib_intf.include(cache['clib_intf'])
             return True
 
         except Exception:
             logger.exception("Warning--cache read failed:")
             return False
-
-    def import_dict(self, data):
-        """Import definitions from a dictionary.
-
-        The dict format should be the same as CParser.file_defs.
-        Used internally; does not need to be called manually.
-
-        """
-        for f in data.keys():
-            self.current_file = f
-            for k in self.data_list:
-                for n in data[f][k]:
-                    self.add_def(k, n, data[f][k][n])
 
     def write_cache(self, cache_file):
         """Store all parsed declarations to cache. Used internally.
@@ -615,7 +331,7 @@ class CParser(object):
         """
         cache = {}
         cache['opts'] = self.init_opts
-        cache['file_defs'] = self.file_defs
+        cache['clib_intf'] = self.clib_intf
         cache['version'] = self.cache_version
         import pickle
         pickle.dump(cache, open(cache_file, 'wb'))
@@ -674,23 +390,6 @@ class CParser(object):
         # systems.
         self.init_opts['files'].append(bn)
         return True
-
-    def print_all(self, filename=None):
-        """Print everything parsed from files. Useful for debugging.
-
-        Parameters
-        ----------
-        filename : unicode, optional
-            Name of the file whose definition should be printed.
-
-        """
-        from pprint import pprint
-        for k in self.data_list:
-            print("============== {} ==================".format(k))
-            if filename is None:
-                pprint(self.defs[k])
-            else:
-                pprint(self.file_defs[filename][k])
 
     # =========================================================================
     # --- Processing functions
@@ -780,9 +479,7 @@ class CParser(object):
                 # Evaluate 'defined' operator before expanding macros
                 if d in ['if', 'elif']:
                     def pa(t):
-                        is_macro = t['name'] in self.defs['macros']
-                        is_macro_func = t['name'] in self.defs['fnmacros']
-                        return ['0', '1'][is_macro or is_macro_func]
+                        return ['0', '1'][t['name'] in self.clib_intf.macros]
 
                     rest = (Keyword('defined') +
                             (name | lparen + name + rparen)
@@ -845,7 +542,7 @@ class CParser(object):
                     if not if_true[-1]:
                         continue
                     try:
-                        self.rem_def('macros', macroName.strip())
+                        self.clib_intf.del_macro(macroName.strip())
                     except Exception:
                         if sys.exc_info()[0] is not KeyError:
                             mess = "Error removing macro definition '{}'"
@@ -929,50 +626,32 @@ class CParser(object):
         """
         logger.debug("Processing MACRO: {}".format(t))
         macro_val = t.value.strip()
-        if macro_val in self.defs['fnmacros']:
-            self.add_def('fnmacros', t.macro, self.defs['fnmacros'][macro_val])
-            logger.debug("  Copy fn macro {} => {}".format(macro_val, t.macro))
+        if macro_val in self.clib_intf.macros:
+            # handle special case, where function macros are defined without
+            # parenthesis:
+            # #define FNMACRO1(x) x+1
+            # #define FNMACRO2 FNMACRO1     //FNMACRO2 is a function macro!!!
+            macro = self.clib_intf.macros[macro_val]
+            self.clib_intf.add_macro(t.macro, macro, self.current_file)
+            logger.debug("  Copy fnmacro {} => {}".format(macro_val, t.macro))
 
         else:
             if t.args == '':
+                macro = c_model.ValMacro(macro_val)
                 val = self.eval_expr(macro_val)
-                self.add_def('macros', t.macro, macro_val)
-                self.add_def('values', t.macro, val)
+                self.macro_vals[t.macro] = val
                 mess = "  Add macro: {} ({}); {}"
-                logger.debug(mess.format(t.macro, val,
-                                         self.defs['macros'][t.macro]))
+                logger.debug(mess.format(t.macro, val, macro))
 
             else:
-                self.add_def('fnmacros', t.macro,
-                             self.compile_fn_macro(macro_val,
-                                                   [x for x in t.args]))
+                fnmacro = c_model.FnMacro(macro_val, list(t.args))
+                self.clib_intf.add_macro(t.macro, fnmacro, self.current_file)
                 mess = "  Add fn macro: {} ({}); {}"
-                logger.debug(mess.format(t.macro, t.args,
-                                         self.defs['fnmacros'][t.macro]))
+                logger.debug(mess.format(t.macro, t.args, fnmacro))
 
-        return "#define " + t.macro + " " + macro_val
-
-    def compile_fn_macro(self, text, args):
-        """Turn a function macro spec into a compiled description.
-
-        """
-        # Find all instances of each arg in text.
-        args_str = '|'.join(args)
-        arg_regex = re.compile(r'("(\\"|[^"])*")|(\b({})\b)'.format(args_str))
-        start = 0
-        parts = []
-        arg_order = []
-        # The group number to check for macro names
-        N = 3
-        for m in arg_regex.finditer(text):
-            arg = m.groups()[N]
-            if arg is not None:
-                parts.append(text[start:m.start(N)] + '{}')
-                start = m.end(N)
-                arg_order.append(args.index(arg))
-        parts.append(text[start:])
-        return (''.join(parts), arg_order)
-
+        self.clib_intf.add_macro(t.macro, macro, self.current_file)
+        return macro.c_repr(t.macro)
+    
     def expand_macros(self, line):
         """Expand all the macro expressions in a string.
 
@@ -983,32 +662,32 @@ class CParser(object):
         parts = []
         # The group number to check for macro names
         N = 3
-        macros = self.defs['macros']
-        fnmacros = self.defs['fnmacros']
         while True:
             m = reg.search(line)
             if not m:
                 break
             name = m.groups()[N]
-            if name in macros:
-                parts.append(line[:m.start(N)])
-                line = line[m.end(N):]
-                parts.append(macros[name])
+            if name in self.clib_intf.macros:
+                macro = self.clib_intf.macros[name]
+                if isinstance(macro, c_model.ValMacro):
+                    parts.append(line[:m.start(N)])
+                    line = line[m.end(N):]
+                    parts.append(macro.content)
 
-            elif name in fnmacros:
-                # If function macro expansion fails, just ignore it.
-                try:
-                    exp, end = self.expand_fn_macro(name, line[m.end(N):])
-                except Exception:
-                    exp = name
-                    end = 0
-                    mess = "Function macro expansion failed: {}, {}"
-                    logger.error(mess.format(name, line[m.end(N):]))
+                elif isinstance(macro, c_model.FnMacro):
+                    # If function macro expansion fails, just ignore it.
+                    try:
+                        exp, end = self.expand_fn_macro(name, line[m.end(N):])
+                    except Exception:
+                        exp = name
+                        end = 0
+                        mess = "Function macro expansion failed: {}, {}"
+                        logger.error(mess.format(name, line[m.end(N):]))
 
-                parts.append(line[:m.start(N)])
-                start = end + m.end(N)
-                line = line[start:]
-                parts.append(exp)
+                    parts.append(line[:m.start(N)])
+                    start = end + m.end(N)
+                    line = line[start:]
+                    parts.append(exp)
 
             else:
                 start = m.end(N)
@@ -1022,9 +701,6 @@ class CParser(object):
         """Replace a function macro.
 
         """
-        # defn looks like ('%s + %s / %s', (0, 0, 1))
-        defn = self.defs['fnmacros'][name]
-
         arg_list = (stringStart + lparen +
                     Group(delimitedList(expression))('args') + rparen)
         res = [x for x in arg_list.scanString(text, 1)]
@@ -1033,8 +709,8 @@ class CParser(object):
             raise DefinitionError(0,  mess.format(name))
 
         args, start, end = res[0]
-        args = [self.expand_macros(arg) for arg in args[0]]
-        new_str = defn[0].format(*[args[i] for i in defn[1]])
+        exp_args = [self.expand_macros(arg) for arg in args[0]]
+        new_str = self.clib_intf.macros[name].parametrized_content(*exp_args)
 
         return (new_str, end)
 
@@ -1078,15 +754,13 @@ class CParser(object):
 
         self.struct_type = Forward()
         self.enum_type = Forward()
-        type_ = (fund_type |
-                 Optional(kwl(size_modifiers + sign_modifiers)) + ident |
-                 self.struct_type |
-                 self.enum_type)
-        if extra_modifier is not None:
-            type_ += extra_modifier
-        type_.setParseAction(recombine)
-        self.type_spec = (type_qualifier('pre_qual') +
-                          type_("name"))
+        custom_type = ident.copy()
+        type_astdef = (
+            fund_type.setParseAction(converter(c_model.BuiltinType)) |
+            custom_type.setParseAction(converter(c_model.CustomType)) |
+            self.struct_type |
+            self.enum_type)
+        self.type_spec = type_qualifier('pre_qual') + type_astdef('type')
 
         # --- Abstract declarators for use in function pointer arguments
         #   Thus begins the extremely hairy business of parsing C declarators.
@@ -1107,19 +781,18 @@ class CParser(object):
         #     *( )(int, int)[10]
         #     ...etc...
         self.abstract_declarator << Group(
-            type_qualifier('first_typequal') +
-            Group(ZeroOrMore(Group(Suppress('*') + type_qualifier)))('ptrs') +
-            ((Optional('&')('ref')) |
-             (lparen + self.abstract_declarator + rparen)('center')) +
+            Group(ZeroOrMore(Group(type_qualifier + Suppress('*'))))('ptrs') +
+            type_qualifier('qual') +
+            Optional((lparen + self.abstract_declarator + rparen)('center')) +
             Optional(lparen +
                      Optional(delimitedList(Group(
-                              self.type_spec('type') +
+                              self.type_spec +
                               self.abstract_declarator('decl') +
                               Optional(Literal('=').suppress() + expression,
                                        default=None)('val')
                               )), default=None) +
                      rparen)('args') +
-            Group(ZeroOrMore(lbrack + Optional(expression, default='-1') +
+            Group(ZeroOrMore(lbrack + Optional(expression, default='') +
                   rbrack))('arrays')
         )
 
@@ -1131,13 +804,12 @@ class CParser(object):
         #     * fnName(int arg1=0)[10]
         #     ...etc...
         self.declarator << Group(
-            type_qualifier('first_typequal') + call_conv +
-            Group(ZeroOrMore(Group(Suppress('*') + type_qualifier)))('ptrs') +
-            ((Optional('&')('ref') + ident('name')) |
-             (lparen + self.declarator + rparen)('center')) +
+            Group(ZeroOrMore(Group(type_qualifier + Suppress('*'))))('ptrs') +
+            type_qualifier('qual') +
+            (ident('name') | (lparen + self.declarator + rparen)('center')) +
             Optional(lparen +
                      Optional(delimitedList(
-                         Group(self.type_spec('type') +
+                         Group(self.type_spec +
                                (self.declarator |
                                 self.abstract_declarator)('decl') +
                                Optional(Literal('=').suppress() +
@@ -1145,20 +817,22 @@ class CParser(object):
                                )),
                               default=None) +
                      rparen)('args') +
-            Group(ZeroOrMore(lbrack + Optional(expression, default='-1') +
-                  rbrack))('arrays')
+            Group(ZeroOrMore(lbrack + Optional(expression, default='') +
+                             rbrack))('arrays')
         )
         self.declarator_list = Group(delimitedList(self.declarator))
 
         # Typedef
-        self.type_decl = (Keyword('typedef') + self.type_spec('type') +
+        self.type_decl = (Keyword('typedef') + self.type_spec +
                           self.declarator_list('decl_list') + semi)
         self.type_decl.setParseAction(self.process_typedef)
 
         # Variable declaration
         self.variable_decl = (
-            Group(storage_class_spec +
-                  self.type_spec('type') +
+            Group(type_qualifier('pre_qual') +
+                  storage_class_spec('pre_stor_cls') +
+                  type_astdef('type') +
+                  storage_class_spec('post_stor_cls') +
                   Optional(self.declarator_list('decl_list')) +
                   Optional(Literal('=').suppress() +
                            (expression('value') |
@@ -1173,12 +847,13 @@ class CParser(object):
         self.variable_decl.setParseAction(self.process_variable)
 
         # Function definition
-        self.typeless_function_decl = (self.declarator('decl') +
-                                       nestedExpr('{', '}').suppress())
-        self.function_decl = (storage_class_spec +
-                              self.type_spec('type') +
-                              self.declarator('decl') +
-                              nestedExpr('{', '}').suppress())
+        self.function_decl = (
+            type_qualifier('pre_qual') +
+            storage_class_spec('pre_stor_cls') +
+            type_astdef('type') +
+            storage_class_spec('post_stor_cls') +
+            self.declarator('decl') +
+            nestedExpr('{', '}').suppress())
         self.function_decl.setParseAction(self.process_function)
 
         # Struct definition
@@ -1187,7 +862,7 @@ class CParser(object):
         self.struct_member = (
             Group(self.variable_decl.copy().setParseAction(lambda: None)) |
             # Hack to handle bit width specification.
-            Group(Group(self.type_spec('type') +
+            Group(Group(self.type_spec +
                         Optional(self.declarator_list('decl_list')) +
                         colon + integer('bit') + semi)) |
             (self.type_spec + self.declarator +
@@ -1199,10 +874,10 @@ class CParser(object):
                           Group(OneOrMore(self.struct_member))('members') +
                           rbrace)
         self.struct_type << (struct_kw('struct_type') +
-                             ((Optional(ident)('name') +
+                             ((Optional(ident('name')) +
                                self.decl_list) | ident('name'))
                              )
-        self.struct_type.setParseAction(self.process_struct)
+        self.struct_type.setParseAction(self.process_compound)
 
         self.struct_decl = self.struct_type + semi
 
@@ -1212,7 +887,7 @@ class CParser(object):
                               (integer('value') | ident('valueName'))))
 
         self.enum_type << (Keyword('enum') +
-                           (Optional(ident)('name') +
+                           (Optional(ident('name')) +
                             lbrace +
                             Group(delimitedList(enum_var_decl))('members') +
                             Optional(comma) + rbrace | ident('name'))
@@ -1224,121 +899,86 @@ class CParser(object):
                        self.function_decl)
         return self.parser
 
-    def process_declarator(self, decl):
+    def process_declarator(self, decl, base_type):
         """Process a declarator (without base type) and return a tuple
         (name, [modifiers])
 
         See process_type(...) for more information.
 
         """
-        toks = []
-        quals = [tuple(decl.get('first_typequal', []))]
         name = None
+        quals = list(decl.get('qual', []))
         logger.debug("DECL: {}".format(decl))
 
-        if 'call_conv' in decl and len(decl['call_conv']) > 0:
-            toks.append(decl['call_conv'])
-            quals.append(None)
-
         if 'ptrs' in decl and len(decl['ptrs']) > 0:
-            toks += ('*',) * len(decl['ptrs'])
-            quals += map(tuple, decl['ptrs'])
+            for ptr_level in decl['ptrs']:
+                base_type = c_model.PointerType(
+                    base_type.with_quals(list(ptr_level)))
+
+        if 'args' not in decl or len(decl['args']) == 0:
+            base_type = base_type.with_quals(quals)
+        else:
+            if decl['args'][0] is None:
+                params = []
+            else:
+                params = [self.process_type(a, a['decl'])
+                          for a in decl['args']]
+            base_type = c_model.FunctionType(base_type, params, quals)
 
         if 'arrays' in decl and len(decl['arrays']) > 0:
-            toks.extend([self.eval_expr(x)] for x in decl['arrays'])
-            quals += [()] * len(decl['arrays'])
-
-        if 'args' in decl and len(decl['args']) > 0:
-            if decl['args'][0] is None:
-                toks.append(())
-            else:
-                toks.append(tuple([self.process_type(a['type'],
-                                                     a['decl']) +
-                                   (a['val'][0],) for a in decl['args']]
-                                  )
-                            )
-            quals.append(())
-        if 'ref' in decl:
-            toks.append('&')
-            quals.append(())
+            for ast_arrsize in reversed(decl['arrays']):
+                arrsize = (self.eval_expr(ast_arrsize) if ast_arrsize != ''
+                           else None)
+                base_type = c_model.ArrayType(base_type, arrsize)
 
         if 'center' in decl:
-            (n, t, q) = self.process_declarator(decl['center'][0])
+            (n, base_type) = self.process_declarator(
+                decl['center'][0],
+                base_type)
             if n is not None:
                 name = n
-            toks.extend(t)
-            quals = quals[:-1] + [quals[-1] + q[0]] + list(q[1:])
 
         if 'name' in decl:
             name = decl['name']
 
-        return (name, toks, tuple(quals))
+        return (name, base_type)
 
-    def process_type(self, typ, decl):
-        """Take a declarator + base type and return a serialized name/type
-        description.
-
-        The description will be a list of elements (name, [basetype, modifier,
-        modifier, ...]):
-
-        - name is the string name of the declarator or None for an abstract
-          declarator
-        - basetype is the string representing the base type
-        - modifiers can be:
-            - '*'    : pointer (multiple pointers "***" allowed)
-            - '&'    : reference
-            - '__X'  : calling convention (windows only). X can be 'cdecl' or
-              'stdcall'
-            - list   : array. Value(s) indicate the length of each array, -1
-              for incomplete type.
-            - tuple  : function, items are the output of processType for each
-              function argument.
-
-        Examples:
-          - int *x[10]            =>  ('x', ['int', [10], '*'])
-          - char fn(int x)         =>  ('fn', ['char', [('x', ['int'])]])
-          - struct s (*)(int, int*)   =>
-            (None, ["struct s", ((None, ['int']), (None, ['int', '*'])), '*'])
-
+    def process_type(self, type_ast, decl):
+        """Take a declarator + base type and return a CLibType object.
         """
-        logger.debug("PROCESS TYPE/DECL: {}/{}".format(typ['name'], decl))
-        (name, decl, quals) = self.process_declarator(decl)
-        pre_typequal = tuple(typ.get('pre_qual', []))
-        return (name, Type(typ['name'], *decl,
-                           type_quals=(pre_typequal + quals[0],) + quals[1:]))
+        pre_quals = list(type_ast.get('pre_qual', []))
+        base_type = type_ast.get('type').with_quals(pre_quals)
+        logger.debug("PROCESS TYPE/DECL: {}".format(base_type))
+        return self.process_declarator(decl, base_type)
 
     def process_enum(self, s, l, t):
         """
         """
         try:
             logger.debug("ENUM: {}".format(t))
-            if t.name == '':
-                n = 0
-                while True:
-                    name = 'anon_enum{}'.format(n)
-                    if name not in self.defs['enums']:
-                        break
-                    n += 1
-            else:
-                name = t.name[0]
+            ename = 'enum ' + t.name if t.name else None
 
-            logger.debug("  name: {}".format(name))
+            logger.debug("  name: {}".format(ename))
 
-            if name not in self.defs['enums']:
-                i = 0
-                enum = {}
+            if ename not in self.clib_intf.typedefs:
+                enum_vals = []
+                cur_enum_val = 0
                 for v in t.members:
                     if v.value != '':
-                        i = literal_eval(v.value)
+                        cur_enum_val = literal_eval(v.value)
                     if v.valueName != '':
-                        i = enum[v.valueName]
-                    enum[v.name] = i
-                    self.add_def('values', v.name, i)
-                    i += 1
-                logger.debug("  members: {}".format(enum))
-                self.add_def('enums', name, enum)
-                self.add_def('types', 'enum '+name, Type('enum', name))
-            return ('enum ' + name)
+                        cur_enum_val = dict(enum_vals)[v.valueName]
+                    enum_vals.append((v.name, cur_enum_val))
+                    cur_enum_val += 1
+                logger.debug("  members: {}".format(enum_vals))
+
+                etyp = c_model.EnumType(enum_vals)
+                if not ename:
+                    return etyp
+                else:
+                    self.clib_intf.add_typedef(ename, etyp, self.current_file)
+
+            return c_model.CustomType(ename)
         except:
             logger.exception("Error processing enum: {}".format(t))
 
@@ -1349,14 +989,16 @@ class CParser(object):
         logger.debug("FUNCTION {} : {}".format(t, t.keys()))
 
         try:
-            (name, decl) = self.process_type(t.type, t.decl[0])
-            if len(decl) == 0 or type(decl[-1]) != tuple:
+            (name, func_sig) = self.process_type(t, t.decl[0])
+            storage_classes = (list(t.pre_stor_cls or []) +
+                               list(t.post_stor_cls or []))
+            if not isinstance(func_sig, c_model.FunctionType):
                 logger.error('{}'.format(t))
                 mess = "Incorrect declarator type for function definition."
                 raise DefinitionError(mess)
-            logger.debug("  name: {}".format(name))
-            logger.debug("  sig: {}".format(decl))
-            self.add_def('functions', name, decl.add_compatibility_hack())
+            logger.debug("  sig/name: {}".format(func_sig.c_repr(name)))
+            self.clib_intf.add_func(name, func_sig, self.current_file,
+                                    storage_classes)
 
         except Exception:
             logger.exception("Error processing function: {}".format(t))
@@ -1373,7 +1015,7 @@ class CParser(object):
                 break
         return packing
 
-    def process_struct(self, s, l, t):
+    def process_compound(self, s, l, t):
         """
         """
         try:
@@ -1383,50 +1025,52 @@ class CParser(object):
             packing = self.packing_at(lineno(l, s))
 
             logger.debug('{} {} {}'.format(str_typ.upper(), t.name, t))
-            if t.name == '':
-                n = 0
-                while True:
-                    sname = 'anon_{}{}'.format(str_typ, n)
-                    if sname not in self.defs[str_typ+'s']:
-                        break
-                    n += 1
-            else:
-                if istext(t.name):
-                    sname = t.name
-                else:
-                    sname = t.name[0]
+            sname = str_typ + ' ' + t.name if t.name else None
 
             logger.debug("  NAME: {}".format(sname))
-            if (len(t.members) > 0 or sname not in self.defs[str_typ+'s'] or
-                    self.defs[str_typ+'s'][sname] == {}):
+            if len(t.members) > 0 or sname not in self.clib_intf.typedefs:
                 logger.debug("  NEW " + str_typ.upper())
-                struct = []
+                fields = []
                 for m in t.members:
-                    typ = m[0].type
+                    typ = m[0]
                     val = self.eval_expr(m[0].value)
                     logger.debug("    member: {}, {}, {}".format(
                                  m, m[0].keys(), m[0].decl_list))
 
                     if len(m[0].decl_list) == 0:  # anonymous member
-                        member = [None, Type(typ[0]), None]
-                        if m[0].bit:
-                            member.append(int(m[0].bit))
-                        struct.append(tuple(member))
+                        if str_typ == 'struct':
+                            field = (None, typ.type, None)
+                        else:
+                            field = (None, typ.type)
+                        fields.append(field)
 
                     for d in m[0].decl_list:
-                        (name, decl) = self.process_type(typ, d)
-                        member = [name, decl, val]
-                        if m[0].bit:
-                            member.append(int(m[0].bit))
-                        struct.append(tuple(member))
-                        logger.debug("      {} {} {} {}".format(name, decl,
-                                     val, m[0].bit))
+                        (name, field_type) = self.process_type(typ, d)
 
-                str_cls = (Struct if str_typ == 'struct' else Union)
-                self.add_def(str_typ + 's', sname,
-                             str_cls(*struct, pack=packing))
-                self.add_def('types', str_typ+' '+sname, Type(str_typ, sname))
-            return str_typ + ' ' + sname
+                        if str_typ == 'struct':
+                            bitsize = int(m[0].bit) if m[0].bit else None
+                            field = (name, field_type, bitsize)
+                        else:
+                            bitsize = None
+                            field = (name, field_type)
+                        fields.append(field)
+
+                        logger.debug("      {0[0]} {0[1]} {1} {2}".format(
+                            field, val, bitsize))
+
+                if str_typ == 'struct':
+                    type_ = c_model.StructType(fields, packing)
+                else:
+                    type_ = c_model.UnionType(fields)
+
+                if sname is None:
+                    # anonymous struct/union => return directly
+                    return type_
+                else:
+                    self.clib_intf.add_typedef(sname, type_,
+                                               self.current_file)
+
+            return c_model.CustomType(sname)
 
         except Exception:
             logger.exception('Error processing struct: {}'.format(t))
@@ -1438,19 +1082,21 @@ class CParser(object):
         try:
             val = self.eval_expr(t[0])
             for d in t[0].decl_list:
-                (name, typ) = self.process_type(t[0].type, d)
+                (name, type_) = self.process_type(t[0], d)
                 # This is a function prototype
-                if type(typ[-1]) is tuple:
-                    logger.debug("  Add function prototype: {} {} {}".format(
-                                 name, typ, val))
-                    self.add_def('functions', name,
-                                 typ.add_compatibility_hack())
+                storage_classes = (list(t[0].pre_stor_cls or []) +
+                                   list(t[0].post_stor_cls or []))
+                if isinstance(type_, c_model.FunctionType):
+                    logger.debug("  Add function prototype: {}".format(
+                                 type_.c_repr(name)))
+                    self.clib_intf.add_func(name, type_, self.current_file,
+                                            storage_classes)
                 # This is a variable
                 else:
                     logger.debug("  Add variable: {} {} {}".format(name,
-                                 typ, val))
-                    self.add_def('variables', name, (val, typ))
-                    self.add_def('values', name, val)
+                                 type_, val))
+                    self.clib_intf.add_var(name, type_, self.current_file,
+                                           storage_classes)
 
         except Exception:
             logger.exception('Error processing variable: {}'.format(t))
@@ -1459,11 +1105,10 @@ class CParser(object):
         """
         """
         logger.debug("TYPE: {}".format(t))
-        typ = t.type
         for d in t.decl_list:
-            (name, decl) = self.process_type(typ, d)
-            logger.debug("  {} {}".format(name, decl))
-            self.add_def('types', name, decl)
+            (name, type_) = self.process_type(t, d)
+            logger.debug("  {}: {}".format(name, type_))
+            self.clib_intf.add_typedef(name, type_, self.current_file)
 
     # --- Utility methods
 
@@ -1477,12 +1122,12 @@ class CParser(object):
         logger.debug("Eval: {}".format(toks))
         try:
             if istext(toks) or isbytes(toks):
-                val = self.eval(toks, None, self.defs['values'])
+                val = self.eval(toks, None, self.macro_vals)
             elif toks.array_values != '':
-                val = [self.eval(x, None, self.defs['values'])
+                val = [self.eval(x, None, self.macro_vals)
                        for x in toks.array_values]
             elif toks.value != '':
-                val = self.eval(toks.value, None, self.defs['values'])
+                val = self.eval(toks.value, None, self.macro_vals)
             else:
                 val = None
             return val
@@ -1500,73 +1145,6 @@ class CParser(object):
         if expr == '':
             return None
         return eval(expr, *args)
-
-    def add_def(self, typ, name, val):
-        """Add a definition of a specific type to both the definition set for
-        the current file and the global definition set.
-
-        """
-        self.defs[typ][name] = val
-        if self.current_file is None:
-            base_name = None
-        else:
-            base_name = os.path.basename(self.current_file)
-        if base_name not in self.file_defs:
-            self.file_defs[base_name] = {}
-            for k in self.data_list:
-                self.file_defs[base_name][k] = {}
-        self.file_defs[base_name][typ][name] = val
-
-    def rem_def(self, typ, name):
-        """Remove a definition of a specific type to both the definition set
-        for the current file and the global definition set.
-
-        """
-        if self.current_file is None:
-            base_name = None
-        else:
-            base_name = os.path.basename(self.current_file)
-        del self.defs[typ][name]
-        del self.file_defs[base_name][typ][name]
-
-    def is_fund_type(self, typ):
-        """Return True if this type is a fundamental C type, struct, or
-        union.
-
-        **ATTENTION: This function is legacy and should be replaced by
-        Type.is_fund_type()**
-
-        """
-        return Type(typ).is_fund_type()
-
-    def eval_type(self, typ):
-        """Evaluate a named type into its fundamental type.
-
-        **ATTENTION: This function is legacy and should be replaced by
-        Type.eval()**
-
-        """
-        if not isinstance(typ, Type):
-            typ = Type(*typ)
-        return typ.eval(self.defs['types'])
-
-    def find(self, name):
-        """Search all definitions for the given name.
-
-        """
-        res = []
-        for f in self.file_defs:
-            fd = self.file_defs[f]
-            for t in fd:
-                typ = fd[t]
-                for k in typ:
-                    if istext(name):
-                        if k == name:
-                            res.append((f, t))
-                    else:
-                        if re.match(name, k):
-                            res.append((f, t, k))
-        return res
 
     def find_text(self, text):
         """Search all file strings for text, return matching lines.
@@ -1598,11 +1176,13 @@ def flatten(lst):
         return res
 
 
-def recombine(tok):
-    """Flattens a tree of tokens and joins into one big string.
-
+def converter(converter):
+    """Flattens a tree of tokens and joins into one big string and converts
+    the str by 'converter'.
     """
-    return " ".join(flatten(tok.asList()))
+    def recombine(tok):
+        return converter(' '.join(flatten(tok.asList())))
+    return recombine
 
 
 def print_parse_results(pr, depth=0, name=''):
@@ -1659,10 +1239,8 @@ expression = Forward()
 array_op = lbrack + expression + rbrack
 base_types = None
 ident = None
-call_conv = None
 type_qualifier = None
 storage_class_spec = None
-extra_modifier = None
 fund_type = None
 extra_type_list = []
 
@@ -1670,23 +1248,25 @@ num_types = ['int', 'float', 'double']
 nonnum_types = ['char', 'bool', 'void']
 
 
-# Define some common language elements when initialising.
-def _init_cparser(extra_types=None, extra_modifiers=None):
+# Macro some common language elements when initialising.
+def _init_cparser(extra_types=None, extra_modifiers=()):
     global expression
-    global call_conv, ident
+    global ident
     global base_types
-    global type_qualifier, storage_class_spec, extra_modifier
+    global type_qualifier, storage_class_spec
     global fund_type
     global extra_type_list
 
     # Some basic definitions
     extra_type_list = [] if extra_types is None else list(extra_types)
     base_types = nonnum_types + num_types + extra_type_list
-    storage_classes = ['inline', 'static', 'extern']
-    qualifiers = ['const', 'volatile', 'restrict', 'near', 'far']
+    storage_classes = ['inline', 'static', 'extern', '__declspec']
+    ###TODO: extend storage classes by stanard and custom ones (i.e. 'auto', 'register', '__declspec()')
+    qualifiers = ['const', 'volatile', 'restrict', 'near', 'far', '__cdecl', '__stdcall', 'call_conv']
 
     keywords = (['struct', 'enum', 'union', '__stdcall', '__cdecl'] +
-                qualifiers + base_types + size_modifiers + sign_modifiers)
+                qualifiers + base_types + size_modifiers + sign_modifiers +
+                storage_classes)
 
     keyword = kwl(keywords)
     wordchars = alphanums+'_$'
@@ -1694,24 +1274,26 @@ def _init_cparser(extra_types=None, extra_modifiers=None):
              Word(alphas + "_", alphanums + "_$") +
              WordEnd(wordchars)).setParseAction(lambda t: t[0])
 
-    call_conv = Optional(Keyword('__cdecl') |
-                         Keyword('__stdcall'))('call_conv')
-
     # Removes '__name' from all type specs. may cause trouble.
     underscore_2_ident = (WordStart(wordchars) + ~keyword + '__' +
                           Word(alphanums, alphanums+"_$") +
-                          WordEnd(wordchars)).setParseAction(lambda t: t[0])
-    type_qualifier = ZeroOrMore((underscore_2_ident + Optional(nestedExpr())) |
-                                kwl(qualifiers))
+                          WordEnd(wordchars)
+                          )
 
-    storage_class_spec = Optional(kwl(storage_classes))
-
+    special_quals = underscore_2_ident   ###TODO: remove / has to be done via extra_modifiers in future
     if extra_modifiers:
-        extra_modifier = ZeroOrMore(kwl(extra_modifiers) +
-                                    Optional(nestedExpr())).suppress()
+        special_quals |= kwl(extra_modifiers)
+    def mergeNested(t):
+        return ''.join((part if isinstance(part, basestring)
+                        else '(' + mergeNested(part) + ')')
+                       for part in t)
+    type_qualifier = ZeroOrMore(
+        (special_quals + Optional(nestedExpr())).setParseAction(mergeNested) |
+        kwl(qualifiers))
 
-    else:
-        extra_modifier = None
+    storage_class_spec = ZeroOrMore(
+        (kwl(storage_classes) + Optional(nestedExpr()))
+        .setParseAction(mergeNested))
 
     # Language elements
     fund_type = OneOrMore(kwl(sign_modifiers + size_modifiers +
@@ -1742,4 +1324,39 @@ def _init_cparser(extra_types=None, extra_modifiers=None):
     atom = cast_atom | uncast_atom
 
     expression << Group(atom + ZeroOrMore(bi_operator + atom))
-    expression.setParseAction(recombine)
+    expression.setParseAction(converter(str))
+
+
+###TODO: remove this and adapt interface of CParser
+class NewCParser(object):
+    """
+    This object shall replace CParser in future.
+    """
+
+    def __init__(self, cust_type_quals=None, stdlib_hdrs=None):
+        """
+        creates a parser object, that is customized for a specific
+        compiler (i.e. the microsoft compiler will support different
+        type_quals than GCC
+        """
+        pass
+
+    def derive(self, stdlib_hdrs):
+        """
+        create a cloned parser with different stdlib
+
+        :param stdlib_hdrs:
+        :return:
+        """
+        pass
+
+    def parse(self, hdr_files):
+        clibIntf = c_model.CLibInterface()
+
+        for hdr_file in hdr_files:
+            if isinstance(hdr_file, basestring):
+                hdr_file = open(hdr_file, "rt")
+
+            # parse types, macrodefs and global objects of hdr_file into clib_intf
+
+        return clibIntf

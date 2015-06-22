@@ -29,7 +29,6 @@ def test_init(init_fixture):
 
     init({'new_type': int}, ['__modifier'])
     assert 'new_type' in cp.base_types
-    assert cp.extra_modifier is not None
     from pyclibrary.backends.ctypes import CTypesCLibrary
     assert 'new_type' in CTypesCLibrary._types_
 
@@ -46,7 +45,6 @@ def test_auto_init():
     auto_init({'new_type': int}, ['__modifier'], 'win32')
     assert 'new_type' in cp.base_types
     assert '__int64' in cp.base_types
-    assert cp.extra_modifier is not None
     from pyclibrary.backends.ctypes import CTypesCLibrary
     assert 'new_type' in CTypesCLibrary._types_
     assert '__int64' in CTypesCLibrary._types_

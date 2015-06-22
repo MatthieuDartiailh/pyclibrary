@@ -18,7 +18,7 @@ int(*fnPtr)(char, float);
 
 
 // Adding dllexport and stdcall annotation to a function.
-int __declspec(dllexport) __stdcall function1();
+extern int __declspec(dllexport) __stdcall function1();
 
 #define EXPORT(x) x __declspec(dllexport)
 
@@ -28,3 +28,5 @@ extern int externFunc(void);
 
 //define typequals in abstract typedef
 int typeQualedFunc(int volatile * const *);
+
+void array_param_func(int arr_params[]);

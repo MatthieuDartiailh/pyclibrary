@@ -26,3 +26,8 @@ class DefinitionError(PyCLibError):
 
     """
     pass
+
+
+class UnknownCustomTypeError(PyCLibError):
+    """Thrown when a CLibType could not be resolved"""
+    pass

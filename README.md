@@ -11,7 +11,7 @@
 
 C parser and bindings automation for Python.
 
-Fork of https://launchpad.net/pyclibrary.
+Fork of the unmaintained https://launchpad.net/pyclibrary.
 
 PyCLibrary includes 1) a pure-python C parser and 2) an automation library
 that uses C header file definitions to simplify the use of c bindings. The
