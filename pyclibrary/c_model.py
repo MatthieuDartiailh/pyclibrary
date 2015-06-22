@@ -55,6 +55,22 @@ def _lpadded_str(text):
 
 
 class CLibBase(object):
+    """Base class for all objects managed by CLibInterface.
+    It primarly provides basic python funtionality like comparing, copying
+    and displaying for all derived classes.
+
+    To make this generic approach working all derived classes have to follow
+    the following conventions:
+    * __slots__ has to be defined, where all attributes added by a derived
+      class are inserted into. This is for optimization purposes and allows
+      CLibBase to find out the attributes used by the class which is important
+      for compare/copy/repr. If more/less attributes should be involved
+      in CLibBase operations _getattrnames() has to be overwritten
+    * The derived classes __init__ has to provide **all** attributes of
+      the class (including attributes from the parent class) as parameters
+      with the same name as the attributes.
+
+    """
 
     __slots__ = ()
 
@@ -405,7 +421,7 @@ class StructType(CompoundType):
 
     Attributes
     ----------
-    packsize : int
+    packsize : Optional[int]
         Size of packing of structure (see pack() pragma of MSVC). Has to be
         2**x.
 
@@ -417,14 +433,12 @@ class StructType(CompoundType):
 
     def __init__(self, fields, packsize=None, quals=None):
         """
-        :param list[tuple[str, CLibType, int|None]] fields: ordered list of
-            fields in this structure. Every field is represented by a tuple of
-            field-name and field-type and optionally a bitsize of the field
-        :param int|None packsize: if not None, the packing size of the
-            structure has to be 2^n and defines the alignment of the
-            members. If None, the default (=machine word size) alignment
-            is used.
-        :param list[str] quals: see CLibType.quals
+        fields : list[tuple[str, CLibType, int|None]]
+            see CompoundType
+        packsize : Optional[int]
+            see StructType
+        quals : list[str]
+            see CLibType
 
         """
         if packsize is not None and 2**(packsize.bit_length() - 1) != packsize:
