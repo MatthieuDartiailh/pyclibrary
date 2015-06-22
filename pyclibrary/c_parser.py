@@ -75,9 +75,12 @@ def win_defs(version='1500'):
     d = os.path.dirname(__file__)
     p = CParser(
         header_files,
-        macros={'_WIN32': '', '_MSC_VER': version, 'CONST': 'const',
-                'NO_STRICT': None, 'MS_WIN32': ''},
-        process_all=False
+        process_all=False,
+        _WIN32='',
+        _MSC_VER=version,
+        CONST='const',
+        NO_STRICT=None,
+        MS_WIN32='',
         )
 
     p.process_all(cache=os.path.join(d, 'headers', 'WinDefs.cache'))
@@ -182,7 +185,7 @@ class CParser(object):
         self.current_file = None
 
         # Import extra macros if specified
-        for name, value in kwargs:
+        for name, value in kwargs.items():
             self.clib_intf.add_macro(name, c_model.ValMacro(value))
 
         if process_all:

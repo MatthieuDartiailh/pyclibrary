@@ -29,5 +29,5 @@ if __name__ == '__main__':
     add_header_locations([SDK_DIR])
     parser = win_defs()
     print('parsed:')
-    for objcls in ['variables', 'functions', 'types', 'macros', 'fnmacros']:
-        print('   ', len(parser.defs[objcls]), objcls)
+    for objtypename, objmap in parser.clib_intf.obj_maps.items():
+        print('   ', len(objmap), objtypename)
