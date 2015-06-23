@@ -693,8 +693,8 @@ class FunctionType(ComposedType):
 
     def __iter__(self):
         yield self.base_type
-        for param in self.params:
-            yield param
+        for pname, ptype in self.params:
+            yield ptype
 
 
 class Macro(CLibBase):

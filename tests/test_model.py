@@ -303,7 +303,9 @@ class TestFunctionType(object):
         ret_type = cm.BuiltinType('char')
         arg1_type = cm.BuiltinType('int')
         arg2_type = cm.BuiltinType('long')
-        assert (list(cm.FunctionType(ret_type, [arg1_type, arg2_type])) ==
+        assert (list(cm.FunctionType(ret_type,
+                                     [('arg1_name', arg1_type),
+                                      ('arg2_name', arg2_type)])) ==
                 [ret_type, arg1_type, arg2_type])
 
 
