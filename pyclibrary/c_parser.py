@@ -331,7 +331,7 @@ class CParser(object):
         cache['clib_intf'] = self.clib_intf
         cache['version'] = self.cache_version
         import pickle
-        pickle.dump(cache, open(cache_file, 'wb'))
+        pickle.dump(cache, open(cache_file, 'wb'), protocol=2)
 
     def find_headers(self, headers):
         """Try to find the specified headers.
