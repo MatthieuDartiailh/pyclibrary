@@ -464,7 +464,8 @@ class TestParsing(object):
         # Test annotated types
         assert (tdefs['voidpc'] ==
                 cm.PointerType(cm.BuiltinType('void', quals=['const'])))
-        assert (tdefs['charf'] == cm.BuiltinType('char', quals=['far']))
+        assert (tdefs['charv'] ==
+                cm.BuiltinType('char', quals=['volatile']))
 
         # Test using custom type.
         assert (vars['ttip5'] ==
@@ -554,7 +555,7 @@ class TestParsing(object):
         # Test declaring near and far pointers.
         assert (tdefs['NPWNDCLASSEXA'] ==
                 cm.PointerType(cm.CustomType('struct tagWNDCLASSEXA',
-                                             quals=['near'])))
+                                             quals=['__allowed("N")'])))
 
         # Test altering the packing of a structure.
         assert (tdefs['struct struct_name_p'] ==

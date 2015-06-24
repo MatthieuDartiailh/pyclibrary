@@ -33,7 +33,7 @@ def init(extra_types=None):
     if CLibrary._init:
         raise RuntimeError('Can only initialise the parser once')
 
-    init_libraries(extra_types)
+    init_libraries(extra_types or {})
 
     CLibrary._init = True
 

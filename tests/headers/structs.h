@@ -29,7 +29,7 @@ struct recursive_struct {
 typedef struct tagWNDCLASSEXA {
     int         cbClsExtra;
     int         cbWndExtra;
-} WNDCLASSEXA, *PWNDCLASSEXA, near *NPWNDCLASSEXA, far *LPWNDCLASSEXA;
+} WNDCLASSEXA, *PWNDCLASSEXA, __allowed("N") *NPWNDCLASSEXA, __allowed("L") *LPWNDCLASSEXA;
 
 // Test altering the packing of a structure.
 #pragma pack(push, 16)

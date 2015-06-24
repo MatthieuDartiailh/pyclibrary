@@ -97,9 +97,10 @@ def win_defs(version='1500', force_update=False):
 
 
 WIN_TYPES = {'__int64': None}
-WIN_MODIFIERS = ['__based', '__fastcall',
-                 '__restrict', '__sptr', '__uptr', '__w64',
-                 '__unaligned', '__nullterminated']
+WIN_TYPEQUALS = ['__based', '__cdecl', '__fastcall', '__stdcall', '__restrict', '__sptr', '__uptr', '__ptr64', '__w64',
+                 '__allowed', #(...)
+                 ]
+WIN_STORAGE_CLASSES = ['__declspec', '__forceinline', '__inline']
 
 
 class CParser(object):
@@ -856,16 +857,15 @@ class CParser(object):
 
         """
         # Some basic definitions
-        extra_type_list = list(WIN_TYPES)
-        extra_modifiers = list(WIN_MODIFIERS)
+        extra_types = list(WIN_TYPES)
+        extra_quals = list(WIN_TYPEQUALS)
+        extra_storcls = list(WIN_STORAGE_CLASSES)
 
-        base_types = self.nonnum_types + self.num_types + extra_type_list
-        storage_classes = ['inline', 'static', 'extern', '__declspec']
-        ###TODO: extend storage classes by stanard and custom ones (i.e. 'auto', 'register', '__declspec()')
-        qualifiers = ['const', 'volatile', 'restrict', 'near', 'far',
-                      '__cdecl', '__stdcall', 'call_conv']
+        base_types = self.nonnum_types + self.num_types + extra_types
+        storage_classes = ['static', 'extern', 'inline'] + extra_storcls
+        qualifiers = ['const', 'volatile', 'restrict',]
 
-        keywords = (['struct', 'enum', 'union', '__stdcall', '__cdecl'] +
+        keywords = (['struct', 'enum', 'union'] +
                     qualifiers + base_types + self.size_modifiers +
                     self.sign_modifiers + storage_classes)
 
@@ -875,22 +875,12 @@ class CParser(object):
                       Word(alphas + "_$", wordchars) +
                       WordEnd(wordchars)).setParseAction(lambda t: t[0])
 
-        # Removes '__name' from all type specs. may cause trouble.
-        underscore_2_ident = (WordStart(wordchars) + ~keyword + '__' +
-                              Word(wordchars) +
-                              WordEnd(wordchars)
-                              )
-
-        special_quals = underscore_2_ident   ###TODO: remove / has to be done via extra_modifiers in future
-        if extra_modifiers:
-            special_quals |= self._kwl(extra_modifiers)
-
         def mergeNested(t):
             return ''.join((part if isinstance(part, basestring)
                             else '(' + mergeNested(part) + ')')
                            for part in t)
         self.type_qualifier = ZeroOrMore(
-            (special_quals + Optional(nestedExpr()))
+            (self._kwl(extra_quals) + Optional(nestedExpr()))
                 .setParseAction(mergeNested) |
             self._kwl(qualifiers))
 
