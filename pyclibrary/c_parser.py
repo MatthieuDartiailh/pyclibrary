@@ -104,37 +104,8 @@ WIN_STORAGE_CLASSES = ['__declspec', '__forceinline', '__inline']
 
 
 class CParser(object):
-    """Class for parsing C code to extract variable, struct, enum, and function
-    declarations as well as preprocessor macros.
-
-    This is not a complete C parser; instead, it is meant to simplify the
-    process of extracting definitions from header files in the absence of a
-    complete build system. Many files will require some amount of manual
-    intervention to parse properly (see 'replace' and extra arguments)
-
-    Parameters
-    ----------
-    files : str or iterable, optional
-        File or files which should be parsed.
-
-    copy_from : CLibInterface, that shall be used as template for this parsers
-        .clib_intf
-
-    replace : dict, optional
-        Specify som string replacements to perform before parsing. Format is
-        {'searchStr': 'replaceStr', ...}
-
-    process_all : bool, optional
-        Flag indicating whether files should be parsed immediatly. True by
-        default.
-
-    cache : unicode, optional
-        Path of the cache file from which to load definitions/to which save
-        definitions as parsing is an expensive operation.
-
-    kwargs :
-        Extra macros may be used to specify the starting state of the
-        parser: WINAPI='', TESTMACRO='3'
+    ###TODO: update docstring
+    """...
 
     Example
     -------
@@ -165,12 +136,56 @@ class CParser(object):
     #: old cache files.
     cache_version = 2
 
-    def __init__(self, files=None, copy_from=None, replace=None,
-                 process_all=True, cache=None, **kwargs):
+    def __init__(self, stdlib_intf=None,
+                 custom_type_quals=None,
+                 custom_storage_cls=None,
+                 custom_types=None):
+        self.custom_type_quals = custom_type_quals or []
+        self.custom_storage_cls = custom_storage_cls or []
+        self.custom_types = custom_types or []
+        self._build_parser()
 
+        self.stdlib_intf = stdlib_intf or c_model.CLibInterface()
+        self.clib_intf = None
+        self.macro_vals = {}
+        self.pack_list = {}
+        self.init_opts = {}
+        self.file_order = []
+        self.files = {}
+        self.current_file = None
+
+    def parse(self, hdr_files=None, replace_texts=None, cache=None,
+              print_after_preprocess=False, force_update=False,
+              load_only=False, uncomment_only=False, preprocess_only=False,
+              **kwargs):
+        ###TODO: rework docstring
+        """ Remove comments, preprocess, and parse declarations from all files.
+
+        This operates in memory, and thus does not alter the original files.
+
+        Parameters
+        ----------
+        cache : unicode, optional
+            File path where cached results are be stored or retrieved. The
+            cache is automatically invalidated if any of the arguments to
+            __init__ are changed, or if the C files are newer than the cache.
+        return_unparsed : bool, optional
+           Passed directly to _parse_defs.
+
+        print_after_preprocess : bool, optional
+            If true prints the result of preprocessing each file.
+
+        Returns
+        -------
+        results : list
+            List of the results from _parse_defs.
+
+        """
         self.clib_intf = c_model.CLibInterface()
-        if copy_from is not None:
-            self.clib_intf.include(copy_from)
+        self.clib_intf.include(self.stdlib_intf)
+        for name, value in kwargs.items():  # Import extra macros if specified
+            self.clib_intf.add_macro(name, c_model.ValMacro(value))
+
         self.macro_vals = {}
 
         # Description of the struct packing rules as defined by #pragma pack
@@ -183,52 +198,23 @@ class CParser(object):
         self.file_order = []
         self.files = {}
 
-        if files is not None:
-            if istext(files) or isbytes(files):
-                files = [files]
-            for f in self.find_headers(files):
-                self.load_file(f, replace)
+        if hdr_files is not None:
+            if istext(hdr_files) or isbytes(hdr_files):
+                hdr_files = [hdr_files]
+            for f in self.find_headers(hdr_files):
+                self.load_file(f, replace_texts)
 
         self.current_file = None
 
-        # Import extra macros if specified
-        for name, value in kwargs.items():
-            self.clib_intf.add_macro(name, c_model.ValMacro(value))
+        if load_only:
+            return self.clib_intf
 
-        if process_all:
-            self.process_all(cache=cache)
-
-    def process_all(self, cache=None, return_unparsed=False,
-                    print_after_preprocess=False, force_update=False):
-        """ Remove comments, preprocess, and parse declarations from all files.
-
-        This operates in memory, and thus does not alter the original files.
-
-        Parameters
-        ----------
-        cache : unicode, optional
-            File path where cached results are be stored or retrieved. The
-            cache is automatically invalidated if any of the arguments to
-            __init__ are changed, or if the C files are newer than the cache.
-        return_unparsed : bool, optional
-           Passed directly to parse_defs.
-
-        print_after_preprocess : bool, optional
-            If true prints the result of preprocessing each file.
-
-        Returns
-        -------
-        results : list
-            List of the results from parse_defs.
-
-        """
         if cache is not None and not force_update:
             if self.load_cache(cache, check_validity=True):
                 logger.debug("Loaded cached definitions; will skip parsing.")
                 # Cached values loaded successfully, nothing left to do here
                 return
 
-        results = []
         logger.debug(cleandoc('''Parsing C header files (no valid cache found).
                               This could take several minutes...'''))
         for f in self.file_order:
@@ -241,9 +227,13 @@ class CParser(object):
 
             logger.debug("Removing comments from file '{}'...".format(f))
             self.remove_comments(f)
+            if uncomment_only:
+                continue
 
             logger.debug("Preprocessing file '{}'...".format(f))
             self.preprocess(f)
+            if preprocess_only:
+                continue
 
             if print_after_preprocess:
                 print("===== PREPROCSSED {} =======".format(f))
@@ -251,13 +241,13 @@ class CParser(object):
 
             logger.debug("Parsing definitions in file '{}'...".format(f))
 
-            results.append(self.parse_defs(f, return_unparsed))
+            self._parse_defs(f)
 
         if cache is not None:
             logger.debug("Writing cache file '{}'".format(cache))
             self.write_cache(cache)
 
-        return results
+        return self.clib_intf
 
     def load_cache(self, cache_file, check_validity=False):
         """Load a cache file.
@@ -733,7 +723,7 @@ class CParser(object):
 
     # --- Compilation functions
 
-    def parse_defs(self, path, return_unparsed=False):
+    def _parse_defs(self, path, return_unparsed=False):
         """Scan through the named file for variable, struct, enum, and function
         declarations.
 
@@ -873,7 +863,7 @@ class CParser(object):
         wordchars = alphanums+'_$'
         self.ident = (WordStart(wordchars) + ~keyword +
                       Word(alphas + "_$", wordchars) +
-                      WordEnd(wordchars)).setParseAction(lambda t: t[0])
+                      WordEnd(wordchars)).setParseAction(self._converter(str))
 
         def mergeNested(t):
             return ''.join((part if isinstance(part, basestring)
@@ -1352,37 +1342,14 @@ class CParser(object):
                     res.append((f, i, l[i]))
         return res
 
-
-###TODO: remove this and adapt interface of CParser
-class NewCParser(object):
-    """
-    This object shall replace CParser in future.
-    """
-
-    def __init__(self, cust_type_quals=None, stdlib_hdrs=None):
-        """
-        creates a parser object, that is customized for a specific
-        compiler (i.e. the microsoft compiler will support different
-        type_quals than GCC
-        """
-        pass
-
-    def derive(self, stdlib_hdrs):
-        """
-        create a cloned parser with different stdlib
-
-        :param stdlib_hdrs:
-        :return:
-        """
-        pass
-
-    def parse(self, hdr_files):
-        clibIntf = c_model.CLibInterface()
-
-        for hdr_file in hdr_files:
-            if isinstance(hdr_file, basestring):
-                hdr_file = open(hdr_file, "rt")
-
-            # parse types, macrodefs and global objects of hdr_file into clib_intf
-
-        return clibIntf
+    def derive(self, stdlib_intf=None,
+               custom_type_quals=None,
+               custom_storage_cls=None,
+               custom_types=None):
+        derived_stdlib_intf = c_model.CLibInterface()
+        derived_stdlib_intf.include(self.stdlib_intf)
+        derived_stdlib_intf.include(stdlib_intf)
+        return CParser(derived_stdlib_intf,
+                       self.custom_type_quals + custom_type_quals,
+                       self.custom_storage_cls + custom_storage_cls,
+                       self.custom_types + custom_types)
