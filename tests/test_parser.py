@@ -427,6 +427,8 @@ class TestParsing(object):
         assert (os.path.basename(self.parser.clib_intf.file_map['short1']) ==
                 'variables.h')
 
+        assert '$ms_type_qual_test' in vars
+
     # No structure, no unions, no enum
     def test_typedef(self):
 

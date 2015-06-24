@@ -1,3 +1,4 @@
+int __$decl $ms_type_qual_test;
 /* Test the parsing of variables of standard types in a header*/
 
 #define INT 1

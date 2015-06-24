@@ -855,12 +855,12 @@ class CParser(object):
         keyword = self._kwl(keywords)
         wordchars = alphanums+'_$'
         self.ident = (WordStart(wordchars) + ~keyword +
-                      Word(alphas + "_", alphanums + "_$") +
+                      Word(alphas + "_$", wordchars) +
                       WordEnd(wordchars)).setParseAction(lambda t: t[0])
 
         # Removes '__name' from all type specs. may cause trouble.
         underscore_2_ident = (WordStart(wordchars) + ~keyword + '__' +
-                              Word(alphanums, alphanums+"_$") +
+                              Word(wordchars) +
                               WordEnd(wordchars)
                               )
 
