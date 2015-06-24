@@ -24,7 +24,7 @@ from past.builtins import basestring
 from ast import literal_eval
 from traceback import format_exc
 
-from .errors import DefinitionError
+from .errors import DefinitionError, InvalidCacheError
 from .utils import find_header
 from pyclibrary import c_model
 
@@ -79,21 +79,21 @@ def win_defs(version='1500', force_update=False):
     clib_intf.add_macro('DECLARE_HANDLE',
                         c_model.FnMacro('typedef HANDLE name', ['name']))
 
-    parser = CParser(
+    parser = CParser(clib_intf)
+
+    dir = os.path.dirname(__file__)
+    cache_dir = os.path.join(dir, 'headers', 'WinDefs.cache')
+    clib_intf = parser.parse(
         header_files,
-        clib_intf,
-        process_all=False,
+        cache=cache_dir,
+        force_update=force_update,
         _WIN32='',
         _MSC_VER=version,
         _M_IX86='',   # must be _M_AMD64 in 64bit systems
         NO_STRICT='',
         )
 
-    dir = os.path.dirname(__file__)
-    parser.process_all(cache=os.path.join(dir, 'headers', 'WinDefs.cache'),
-                       force_update=force_update)
-
-    return parser
+    return clib_intf, parser.macro_vals
 
 
 WIN_TYPES = {'__int64': None}
@@ -210,10 +210,15 @@ class CParser(object):
             return self.clib_intf
 
         if cache is not None and not force_update:
-            if self.load_cache(cache, check_validity=True):
+            try:
+                self.clib_intf, self.macro_vals = self.load_cache(
+                    cache, check_validity=True)
+            except InvalidCacheError:
+                pass
+            else:
                 logger.debug("Loaded cached definitions; will skip parsing.")
                 # Cached values loaded successfully, nothing left to do here
-                return
+                return self.clib_intf
 
         logger.debug(cleandoc('''Parsing C header files (no valid cache found).
                               This could take several minutes...'''))
@@ -268,8 +273,8 @@ class CParser(object):
 
         Returns
         -------
-        result : bool
-            Did the loading succeeded.
+        result : CLibInterface
+            cache lib interface read from interface.
 
         """
 
@@ -316,15 +321,14 @@ class CParser(object):
                 if cache['version'] < self.cache_version:
                     mess = "Cache file is not valid--cache format has changed."
                     logger.debug(mess)
-                    return False
+                    raise InvalidCacheError('Cache Expired')
 
             # Import all parse results
-            self.clib_intf.include(cache['clib_intf'])
-            return True
+            return cache['clib_intf'], cache['macro_vals']
 
         except Exception:
             logger.exception("Warning--cache read failed:")
-            return False
+            raise InvalidCacheError('failed to read cache file')
 
     def write_cache(self, cache_file):
         """Store all parsed declarations to cache. Used internally.
@@ -333,6 +337,7 @@ class CParser(object):
         cache = {}
         cache['opts'] = self.init_opts
         cache['clib_intf'] = self.clib_intf
+        cache['macro_vals'] = self.macro_vals
         cache['version'] = self.cache_version
         import pickle
         pickle.dump(cache, open(cache_file, 'wb'), protocol=2)

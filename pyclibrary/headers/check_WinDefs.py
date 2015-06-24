@@ -23,8 +23,8 @@ SDK_DIR = r'c:\program files\microsoft sdks\windows\v6.0a\include'
 def load_cached_win_defs():
     this_dir = os.path.dirname(__file__)
     parser = CParser()
-    parser.load_cache(os.path.join(this_dir, 'WinDefs.cache'))
-    return parser
+    clib_intf = parser.load_cache(os.path.join(this_dir, 'WinDefs.cache'))
+    return parser, clib_intf
 
 def generate_win_defs(version='1500'):
     header_files = ['specstrings.h', 'specstrings_strict.h', 'Rpcsal.h',
@@ -33,30 +33,28 @@ def generate_win_defs(version='1500'):
     clib_intf = CLibInterface()
     clib_intf.add_macro('DECLARE_HANDLE',
                         FnMacro('typedef HANDLE name', ['name']))
-    parser = CParser(
+    parser = CParser(clib_intf)
+    clib_intf = parser.parse(
         header_files,
-        clib_intf,
-        process_all=False,
         _WIN32='',
         _MSC_VER=version,
         _M_IX86='',   # must be _M_AMD64 in 64bit systems
         NO_STRICT='',
         )
 
-    parser.process_all()
-    return parser
+    return parser, clib_intf
 
 if __name__ == "__main__":
     add_header_locations([SDK_DIR])
 
-    ok_parser = load_cached_win_defs()
+    ok_parser, ok_clib_intf = load_cached_win_defs()
     print('parsing windows definitions (may take some while)')
     start_time = time.time()
-    chk_parser = generate_win_defs()
+    chk_parser, chk_clib_intf = generate_win_defs()
     print('required time: {:1.3f}'.format(time.time()-start_time))
 
-    for objtypename, ok_objmap in ok_parser.clib_intf.obj_maps.items():
-        chk_objmap = chk_parser.clib_intf.obj_maps[objtypename]
+    for objtypename, ok_objmap in ok_clib_intf.obj_maps.items():
+        chk_objmap = chk_clib_intf.obj_maps[objtypename]
 
         if ok_objmap.keys() != chk_objmap.keys():
             print(objtypename,'differs')
@@ -69,11 +67,11 @@ if __name__ == "__main__":
                     print('    unknown:', ', '.join(unknown))
             print()
 
-    common_stors = (set(ok_parser.clib_intf.storage_classes) &
-                    set(chk_parser.clib_intf.storage_classes))
+    common_stors = (set(ok_clib_intf.storage_classes) &
+                    set(chk_clib_intf.storage_classes))
     for stor_name in common_stors:
-        ok_stor_cls = ok_parser.clib_intf.storage_classes[stor_name]
-        chk_stor_cls = chk_parser.clib_intf.storage_classes[stor_name]
+        ok_stor_cls = ok_clib_intf.storage_classes[stor_name]
+        chk_stor_cls = chk_clib_intf.storage_classes[stor_name]
         if chk_stor_cls != ok_stor_cls:
             print('storage classes of', stor_name, 'differs')
             if ok_stor_cls is None:
