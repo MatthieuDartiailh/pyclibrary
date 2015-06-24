@@ -66,22 +66,32 @@ def win_defs(version='1500'):
         CParser containing all the infos from te windows headers.
 
     """
-    header_files = ['WinNt.h', 'WinDef.h', 'WinBase.h', 'BaseTsd.h',
-                    'WTypes.h', 'WinUser.h']
-    d = os.path.dirname(__file__)
-    p = CParser(
+    # this fix header file order is very fragile, as there is no clean
+    # dependency tree between them. This is why the 'clib_intf' has to be
+    # provided (DECLARE_HANDLE is defined in WinNt.h, but used in WinDef.h,
+    # although WinNt.h uses a lot of defines from WinDef.h. By manually
+    # defining DECLARE_HANDLE WinDef.h can be parsed before WinNt.h and
+    # WinNt.h can then use all definitions from WinDef.h when being parsed)
+    header_files = ['specstrings.h', 'specstrings_strict.h', 'Rpcsal.h',
+                    'WinDef.h', 'BaseTsd.h', 'WTypes.h',
+                    'WinNt.h', 'WinBase.h', 'WinUser.h']
+    clib_intf = c_model.CLibInterface()
+    clib_intf.add_macro('DECLARE_HANDLE',
+                        c_model.FnMacro('typedef HANDLE name', ['name']))
+
+    parser = CParser(
         header_files,
+        clib_intf,
         process_all=False,
         _WIN32='',
         _MSC_VER=version,
-        CONST='const',
-        NO_STRICT=None,
-        MS_WIN32='',
+        NO_STRICT='',
         )
 
-    p.process_all(cache=os.path.join(d, 'headers', 'WinDefs.cache'))
+    dir = os.path.dirname(__file__)
+    parser.process_all(cache=os.path.join(dir, 'headers', 'WinDefs.cache'))
 
-    return p
+    return parser
 
 
 WIN_TYPES = {'__int64': None}

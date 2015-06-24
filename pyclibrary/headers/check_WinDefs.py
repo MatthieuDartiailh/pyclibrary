@@ -12,14 +12,13 @@ windows header files return the same results.
 """
 from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
-from pyclibrary.c_parser import CParser, win_defs
+from pyclibrary.c_parser import CParser
+from pyclibrary.c_model import CLibInterface, FnMacro
 from pyclibrary.utils import add_header_locations
 import os
 import time
 
 SDK_DIR = r'c:\program files\microsoft sdks\windows\v6.0a\include'
-HEADER_FILES = ['SpecStrings.h', 'WinNt.h', 'WinDef.h', r'WinBase.h',
-                'BaseTsd.h', 'WTypes.h', 'WinUser.h']
 
 def load_cached_win_defs():
     this_dir = os.path.dirname(__file__)
@@ -28,20 +27,27 @@ def load_cached_win_defs():
     return parser
 
 def generate_win_defs(version='1500'):
+    header_files = ['specstrings.h', 'specstrings_strict.h', 'Rpcsal.h',
+                    'WinDef.h', 'BaseTsd.h', 'WTypes.h',
+                    'WinNt.h', 'WinBase.h', 'WinUser.h']
+    clib_intf = CLibInterface()
+    clib_intf.add_macro('DECLARE_HANDLE',
+                        FnMacro('typedef HANDLE name', ['name']))
     parser = CParser(
-        HEADER_FILES,
+        header_files,
+        clib_intf,
         process_all=False,
         _WIN32='',
         _MSC_VER=version,
-        CONST='const',
-        NO_STRICT=None,  ### not needed?
-        MS_WIN32='',  ### not needed?
+        NO_STRICT='',
         )
 
     parser.process_all()
     return parser
 
-def main():
+if __name__ == "__main__":
+    add_header_locations([SDK_DIR])
+
     ok_parser = load_cached_win_defs()
     print('parsing windows definitions (may take some while)')
     start_time = time.time()
@@ -59,7 +65,3 @@ def main():
                     print('    missing:', missing)
                 if unknown:
                     print('    unknown:', unknown)
-
-if __name__ == "__main__":
-    add_header_locations([SDK_DIR])
-    main()
