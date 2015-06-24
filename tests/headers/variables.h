@@ -1,4 +1,3 @@
-int __$decl $ms_type_qual_test;
 /* Test the parsing of variables of standard types in a header*/
 
 #define INT 1
@@ -56,3 +55,5 @@ const int * volatile * typeQualedIntPtrPtr, volatile * typeQualedIntPtr;
 
 // Test type definition precedence
 int (*prec_ptr_of_arr)[1], *(prec_arr_of_ptr[1]), *prec_arr_of_ptr2[1];
+
+int __$decl $ms_type_qual_test;

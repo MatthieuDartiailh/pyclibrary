@@ -435,7 +435,7 @@ class CParser(object):
         text = Literal('\\\n').suppress().transformString(text)
 
         # Define the structure of a macro definition
-        name = Word(alphas+'_', alphanums+'_')('name')
+        name = Word(alphas+'_$', alphanums+'_$')('name')
         deli_list = Optional(self.lparen + delimitedList(name) + self.rparen)
         self.pp_define = (name.setWhitespaceChars(' \t')("macro") +
                           deli_list.setWhitespaceChars(' \t')('args') +
@@ -483,8 +483,12 @@ class CParser(object):
                             ).setParseAction(pa).transformString(rest)
 
                 elif d in ['define', 'undef']:
-                    match = re.match(r'\s*([a-zA-Z_][a-zA-Z0-9_]*)(.*)$', rest)
-                    macroName, rest = match.groups()
+                    match = re.match(r'\s*([a-zA-Z_$][a-zA-Z0-9_$]*)(.*)$',
+                                     rest)
+                    if match is None:
+                        raise DefinitionError('invalid macro definition: {!r}'
+                                              .format(line))
+                    macro_name, rest = match.groups()
 
                 # Expand macros if needed
                 if rest is not None and (all(if_true) or d in ['if', 'elif']):
@@ -527,23 +531,23 @@ class CParser(object):
                     if not if_true[-1]:
                         continue
                     logger.debug("  "*(len(if_true)-1) + "define: " +
-                                 '{}, {}'.format(macroName, rest))
+                                 '{}, {}'.format(macro_name, rest))
                     try:
                         # Macro is registered here
-                        self.pp_define.parseString(macroName + ' ' + rest)
+                        self.pp_define.parseString(macro_name + ' ' + rest)
                     except Exception:
                         logger.exception("Error processing macro definition:" +
-                                         '{}, {}'.format(macroName, rest))
+                                         '{}, {}'.format(macro_name, rest))
 
                 elif d == 'undef':
                     if not if_true[-1]:
                         continue
                     try:
-                        self.clib_intf.del_macro(macroName.strip())
+                        self.clib_intf.del_macro(macro_name.strip())
                     except Exception:
                         if sys.exc_info()[0] is not KeyError:
                             mess = "Error removing macro definition '{}'"
-                            logger.exception(mess.format(macroName.strip()))
+                            logger.exception(mess.format(macro_name.strip()))
 
                 # Check for changes in structure packing
                 # Support only for #pragme pack (with all its variants

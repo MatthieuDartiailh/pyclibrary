@@ -17,6 +17,7 @@ import sys
 from pytest import raises
 from pyclibrary.c_parser import CParser
 import pyclibrary.utils
+from pyclibrary import errors as err
 import pyclibrary.c_model as cm
 
 
@@ -125,6 +126,14 @@ class TestPreprocessing(object):
 
         self.parser = CParser(process_all=False)
 
+    def test_invalid_define(self):
+
+        path = os.path.join(self.h_dir, 'macro_invalid.h')
+        self.parser.load_file(path)
+        self.parser.remove_comments(path)
+        with raises(err.DefinitionError):
+            self.parser.preprocess(path)
+
     def test_values(self):
 
         path = os.path.join(self.h_dir, 'macro_values.h')
@@ -192,6 +201,7 @@ class TestPreprocessing(object):
 
         # Muliline macro
         assert 'MACRO_ML' in macros and values['MACRO_ML'] == 2
+        assert '$MACRO$' in macros
 
     def test_conditionals(self):
 

@@ -41,3 +41,6 @@
 // Multiline macro
 #define MACRO_ML MACRO\
                   *MACRO2
+
+// macros with dollar sign (visual studio/gcc)
+#define $MACRO$ 3
