@@ -19,6 +19,7 @@ int(*fnPtr)(char, float);
 
 // Adding dllexport and stdcall annotation to a function.
 extern int __declspec(dllexport) __stdcall function1();
+__declspec(noreturn) void __stdcall pre_declspec_func(void);
 
 #define EXPORT(x) x __declspec(dllexport)
 

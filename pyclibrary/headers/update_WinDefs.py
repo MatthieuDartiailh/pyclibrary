@@ -27,7 +27,7 @@ SDK_DIR = r'c:\program files\microsoft sdks\windows\v6.0a\include'
 if __name__ == '__main__':
     print('parsing windows definitions (may take some while)')
     add_header_locations([SDK_DIR])
-    parser = win_defs()
+    parser = win_defs(force_update=True)
     print('parsed:')
     for objtypename, objmap in sorted(parser.clib_intf.obj_maps.items()):
 

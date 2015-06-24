@@ -39,6 +39,7 @@ def generate_win_defs(version='1500'):
         process_all=False,
         _WIN32='',
         _MSC_VER=version,
+        _M_IX86='',   # must be _M_AMD64 in 64bit systems
         NO_STRICT='',
         )
 
@@ -56,11 +57,30 @@ if __name__ == "__main__":
 
     for objtypename, ok_objmap in ok_parser.clib_intf.obj_maps.items():
         chk_objmap = chk_parser.clib_intf.obj_maps[objtypename]
-        if ok_objmap != chk_objmap:
+
+        if ok_objmap.keys() != chk_objmap.keys():
+            print(objtypename,'differs')
             missing = set(ok_objmap) - set(chk_objmap)
             unknown = set(chk_objmap) - set(ok_objmap)
             if missing or unknown:
-                print(objtypename,'differs:')
+                if missing:
+                    print('    missing:', ', '.join(missing))
+                if unknown:
+                    print('    unknown:', ', '.join(unknown))
+            print()
+
+    common_stors = (set(ok_parser.clib_intf.storage_classes) &
+                    set(chk_parser.clib_intf.storage_classes))
+    for stor_name in common_stors:
+        ok_stor_cls = ok_parser.clib_intf.storage_classes[stor_name]
+        chk_stor_cls = chk_parser.clib_intf.storage_classes[stor_name]
+        if chk_stor_cls != ok_stor_cls:
+            print('storage classes of', stor_name, 'differs')
+            if ok_stor_cls is None:
+                continue
+            missing = set(ok_stor_cls) - set(chk_stor_cls)
+            unknown = set(chk_stor_cls) - set(ok_stor_cls)
+            if missing or unknown:
                 if missing:
                     print('    missing:', missing)
                 if unknown:

@@ -659,6 +659,8 @@ class TestParsing(object):
                 cm.FunctionType(cm.BuiltinType('int'), [], ['__stdcall']))
         assert (storage_classes['function1'] ==
                 ['extern', '__declspec(dllexport)'])
+        assert (storage_classes['pre_declspec_func'] ==
+                ['__declspec(noreturn)'])
         assert (funcs['function2'] ==
                 cm.FunctionType(cm.BuiltinType('int'), []))
 

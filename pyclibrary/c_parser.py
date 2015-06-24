@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 __all__ = ['win_defs', 'CParser']
 
 
-def win_defs(version='1500'):
+def win_defs(version='1500', force_update=False):
     """Loads selection of windows headers included with PyCLibrary.
 
     These definitions can either be accessed directly or included before
@@ -85,17 +85,19 @@ def win_defs(version='1500'):
         process_all=False,
         _WIN32='',
         _MSC_VER=version,
+        _M_IX86='',   # must be _M_AMD64 in 64bit systems
         NO_STRICT='',
         )
 
     dir = os.path.dirname(__file__)
-    parser.process_all(cache=os.path.join(dir, 'headers', 'WinDefs.cache'))
+    parser.process_all(cache=os.path.join(dir, 'headers', 'WinDefs.cache'),
+                       force_update=force_update)
 
     return parser
 
 
 WIN_TYPES = {'__int64': None}
-WIN_MODIFIERS = ['__based', '__declspec', '__fastcall',
+WIN_MODIFIERS = ['__based', '__fastcall',
                  '__restrict', '__sptr', '__uptr', '__w64',
                  '__unaligned', '__nullterminated']
 
@@ -196,7 +198,7 @@ class CParser(object):
             self.process_all(cache=cache)
 
     def process_all(self, cache=None, return_unparsed=False,
-                    print_after_preprocess=False):
+                    print_after_preprocess=False, force_update=False):
         """ Remove comments, preprocess, and parse declarations from all files.
 
         This operates in memory, and thus does not alter the original files.
@@ -219,10 +221,11 @@ class CParser(object):
             List of the results from parse_defs.
 
         """
-        if cache is not None and self.load_cache(cache, check_validity=True):
-            logger.debug("Loaded cached definitions; will skip parsing.")
-            # Cached values loaded successfully, nothing left to do here
-            return
+        if cache is not None and not force_update:
+            if self.load_cache(cache, check_validity=True):
+                logger.debug("Loaded cached definitions; will skip parsing.")
+                # Cached values loaded successfully, nothing left to do here
+                return
 
         results = []
         logger.debug(cleandoc('''Parsing C header files (no valid cache found).
