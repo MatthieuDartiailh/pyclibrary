@@ -43,8 +43,6 @@ logger = logging.getLogger(__name__)
 
 __all__ = ['win_defs', 'CParser']
 
-###TODO: removed automatic caching mechanism. Has to be introduced later again in reworked variant
-
 def win_defs_parser(version=1500, force_update=False):
     ###TODO: update docstring
     """Loads selection of windows headers included with PyCLibrary.
@@ -161,7 +159,6 @@ class CParser(object):
             self.clib_intf = c_model.CLibInterface()
         else:
             self.clib_intf = clib_intf
-        self.macro_vals = {}
         self.pack_list = {}
         self.file_order = []
         self.files = {}
@@ -195,11 +192,10 @@ class CParser(object):
 
         """
         self.pack_list = {}
-        self.file_order = []
-        self.files = {}
 
         abspath_hdr_file, = self.find_headers([hdr_file])
         self.load_file(abspath_hdr_file, replace_texts)
+
         if load_only:
             return
 
@@ -242,7 +238,6 @@ class CParser(object):
             self.clib_intf = c_model.CLibInterface()
         else:
             self.clib_intf = clib_intf
-        self.macro_vals = dict()
 
     def load_cache(self, cache_file, check_validity=False):
         """Load a cache file.
@@ -267,7 +262,6 @@ class CParser(object):
             cache lib interface read from interface.
 
         """
-
         # Make sure cache file exists
         if not istext(cache_file):
             raise ValueError("Cache file option must be a unicode.")
@@ -279,8 +273,27 @@ class CParser(object):
                 logger.debug("Can't find requested cache file.")
                 raise InvalidCacheError("Can't find requested cache file.")
 
-        # Make sure cache is newer than all input files
+        try:
+            # Read cache file
+            cache = pickle.load(open(cache_file, 'rb'))
+        except Exception:
+            logger.exception("Warning--cache read failed:")
+            raise InvalidCacheError('failed to read cache file')
+        else:
+            self.clib_intf = cache['clib_intf']
+            self.file_order = cache['file_order']
+            version = cache['version']
+
         if check_validity:
+            ###TODO: add check for clib_intf settings before parsing files
+
+            # Make sure __init__ options match
+            if version < self.cache_version:
+                mess = "Cache file is not valid--cache format has changed."
+                logger.debug(mess)
+                raise InvalidCacheError('Cache Expired')
+
+            # Make sure cache is newer than all input files
             mtime = os.stat(cache_file).st_mtime
             for f in self.file_order:
                 # If file does not exist, then it does not count against the
@@ -289,24 +302,6 @@ class CParser(object):
                     logger.debug("Cache file is out of date.")
                     raise InvalidCacheError('Cache file is out of date.')
 
-        try:
-            # Read cache file
-            cache = pickle.load(open(cache_file, 'rb'))
-
-            # Make sure __init__ options match
-            if check_validity:
-                if cache['version'] < self.cache_version:
-                    mess = "Cache file is not valid--cache format has changed."
-                    logger.debug(mess)
-                    raise InvalidCacheError('Cache Expired')
-
-            # Import all parse results
-            self.clib_intf = cache['clib_intf']
-            self.macro_vals = cache['macro_vals']
-
-        except Exception:
-            logger.exception("Warning--cache read failed:")
-            raise InvalidCacheError('failed to read cache file')
 
     def write_cache(self, cache_file):
         """Store all parsed declarations to cache. Used internally.
@@ -314,8 +309,8 @@ class CParser(object):
         """
         cache = {}
         cache['clib_intf'] = self.clib_intf
-        cache['macro_vals'] = self.macro_vals
         cache['version'] = self.cache_version
+        cache['file_order'] = self.file_order
         pickle.dump(cache, open(cache_file, 'wb'), protocol=2)
 
     def find_headers(self, headers):
@@ -366,7 +361,6 @@ class CParser(object):
                 self.files[path] = re.sub(s, replace[s], self.files[path])
 
         self.file_order.append(path)
-        bn = os.path.basename(path)
         return True
 
     # =========================================================================
@@ -621,7 +615,7 @@ class CParser(object):
             if t.args == '':
                 macro = c_model.ValMacro(macro_val)
                 val = self.eval_expr(macro_val)
-                self.macro_vals[t.macro] = val
+                self.clib_intf.macro_vals[t.macro] = val
                 mess = "  Add macro: {} ({}); {}"
                 logger.debug(mess.format(t.macro, val, macro))
 
@@ -1283,12 +1277,12 @@ class CParser(object):
         logger.debug("Eval: {}".format(toks))
         try:
             if istext(toks) or isbytes(toks):
-                val = self.eval(toks, None, self.macro_vals)
+                val = self.eval(toks, None, self.clib_intf.macro_vals)
             elif toks.array_values != '':
-                val = [self.eval(x, None, self.macro_vals)
+                val = [self.eval(x, None, self.clib_intf.macro_vals)
                        for x in toks.array_values]
             elif toks.value != '':
-                val = self.eval(toks.value, None, self.macro_vals)
+                val = self.eval(toks.value, None, self.clib_intf.macro_vals)
             else:
                 val = None
             return val

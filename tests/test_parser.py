@@ -14,8 +14,10 @@ from __future__ import (division, unicode_literals, print_function,
 
 import os
 import sys
+import tempfile
+import shutil
 from pytest import raises
-from pyclibrary.c_parser import CParser
+from pyclibrary.c_parser import CParser, InvalidCacheError
 import pyclibrary.utils
 from pyclibrary import errors as err
 import pyclibrary.c_model as cm
@@ -119,6 +121,39 @@ class TestFileHandling(object):
         assert 'MACRO_B' not in parser.clib_intf
         assert clib_intf['MACRO_A'].content == 'replaced_val_a'
 
+    def test_caching(self):
+        temp_dir = tempfile.mkdtemp()
+        try:
+            cache_file_name = os.path.join(temp_dir, 'temp.cache')
+            multi_file1_name = os.path.join(temp_dir, 'multi_file1.h')
+            shutil.copy(self.hdr_file_path('multi_file1.h'), multi_file1_name)
+
+            # create cache of clib_intf of multi_file2 & temporary multi_file1
+            self.parser.parse(multi_file1_name)
+            self.parser.parse(self.hdr_file_path('multi_file2.h'))
+            self.parser.write_cache(cache_file_name)
+
+            # test caching ok
+            parser2 = CParser()
+            parser2.load_cache(cache_file_name)
+            assert parser2.clib_intf['MACRO_B'].content == 'base_val_b'
+
+            # test header file modification detection
+            open(multi_file1_name, "wt").write('\n//modification')
+            with raises(InvalidCacheError):
+                parser2.load_cache(cache_file_name, check_validity=True)
+
+            # test ignoring outdated file
+            parser3 = CParser()
+            parser3.load_cache(cache_file_name)
+            assert parser3.clib_intf['MACRO_B'].content == 'base_val_b'
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+        parser = CParser()
+        with raises(InvalidCacheError):
+            parser.load_cache('invalid_file_name')
+
 
 class TestPreprocessing(object):
     """Test preprocessing.
@@ -140,7 +175,7 @@ class TestPreprocessing(object):
         self.parser.parse(self.hdr_file_path('macro_values.h'))
 
         macros = self.parser.clib_intf.macros
-        values = self.parser.macro_vals
+        values = self.parser.clib_intf.macro_vals
 
         assert macros['M'].content == ''
         assert macros['N'].content == 'n' and values['N'] is None
@@ -268,7 +303,7 @@ class TestPreprocessing(object):
         path = self.hdr_file_path('macro_functions.h')
         self.parser.parse(path)
 
-        values = self.parser.macro_vals
+        values = self.parser.clib_intf.macro_vals
         macros = self.parser.clib_intf.macros
         stream = self.parser.files[path]
 

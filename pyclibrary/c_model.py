@@ -878,6 +878,10 @@ class CLibInterface(collections.Mapping):
         self.file_map = dict()
         self.storage_classes = dict()
 
+        # Attention: macro_vals has to be updated manually when
+        # adding/removing macros
+        self.macro_vals = {}
+
     def include(self, from_clib_intf):
         """Merges another clib_intf values into this one (overwriting values,
         that are already defined in self
