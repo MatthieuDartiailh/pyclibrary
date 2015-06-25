@@ -3,6 +3,6 @@
 
 # define MACRO {placeholder}
 
-# ifdef MACRO:
+# ifdef MACRO
     # define MACRO2 placeholder2
 # endifdef

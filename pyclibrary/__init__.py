@@ -11,7 +11,7 @@ from __future__ import (division, unicode_literals, print_function,
 import logging
 logging.getLogger('pyclibrary').addHandler(logging.NullHandler())
 
-from .c_parser import win_defs, CParser
+from .c_parser import CParser, win_defs_parser
 from .c_library import CLibrary, build_array, cast_to
 from .errors import DefinitionError
 from .init import init, auto_init

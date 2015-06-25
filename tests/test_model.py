@@ -404,6 +404,13 @@ class TestCLibInterface(object):
                             cm.ValMacro('content'),
                             cm.ValMacro('othercontent'))
 
+        clib.add_macro('MACRO_NAME', 'MACRO CONTENT')
+        assert clib.macros['MACRO_NAME'] == cm.ValMacro('MACRO CONTENT')
+
+        clib.add_macro('MACRO_EXISTS')
+        assert clib.macros['MACRO_EXISTS'] == cm.ValMacro('')
+
+
     def test_include(self):
         clib = cm.CLibInterface()
         clib.add_func('f', cm.FunctionType(cm.BuiltinType('int'), []),

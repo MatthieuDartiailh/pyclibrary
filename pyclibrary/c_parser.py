@@ -23,6 +23,7 @@ from future.utils import istext, isbytes
 from past.builtins import basestring
 from ast import literal_eval
 from traceback import format_exc
+import pickle
 
 from .errors import DefinitionError, InvalidCacheError
 from .utils import find_header
@@ -42,8 +43,10 @@ logger = logging.getLogger(__name__)
 
 __all__ = ['win_defs', 'CParser']
 
+###TODO: removed automatic caching mechanism. Has to be introduced later again in reworked variant
 
-def win_defs(version='1500', force_update=False):
+def win_defs_parser(version=1500, force_update=False):
+    ###TODO: update docstring
     """Loads selection of windows headers included with PyCLibrary.
 
     These definitions can either be accessed directly or included before
@@ -66,6 +69,9 @@ def win_defs(version='1500', force_update=False):
         CParser containing all the infos from te windows headers.
 
     """
+    dir = os.path.dirname(__file__)
+    cache_file_name = os.path.join(dir, 'headers', 'WinDefs.cache')
+
     # this fix header file order is very fragile, as there is no clean
     # dependency tree between them. This is why the 'clib_intf' has to be
     # provided (DECLARE_HANDLE is defined in WinNt.h, but used in WinDef.h,
@@ -76,24 +82,30 @@ def win_defs(version='1500', force_update=False):
                     'WinDef.h', 'BaseTsd.h', 'WTypes.h',
                     'WinNt.h', 'WinBase.h', 'WinUser.h']
     clib_intf = c_model.CLibInterface()
+    clib_intf.add_macro('_WIN32')
+    clib_intf.add_macro('_MSC_VER', str(version))
+    clib_intf.add_macro('_M_IX86')  # must be '_M_AMD64' in 64bit systems
+    clib_intf.add_macro('NO_STRICT')
     clib_intf.add_macro('DECLARE_HANDLE',
                         c_model.FnMacro('typedef HANDLE name', ['name']))
 
     parser = CParser(clib_intf)
+    if not force_update:
+        try:
+            parser.load_cache(cache_file_name, check_validity=True)
+        except InvalidCacheError:
+            pass
+        else:
+            logger.debug("Loaded cached definitions; will skip parsing.")
+            # Cached values loaded successfully, nothing left to do here
+            return parser
 
-    dir = os.path.dirname(__file__)
-    cache_dir = os.path.join(dir, 'headers', 'WinDefs.cache')
-    clib_intf = parser.parse(
-        header_files,
-        cache=cache_dir,
-        force_update=force_update,
-        _WIN32='',
-        _MSC_VER=version,
-        _M_IX86='',   # must be _M_AMD64 in 64bit systems
-        NO_STRICT='',
-        )
+    for header_file in header_files:
+        clib_intf = parser.parse(header_file)
 
-    return clib_intf, parser.macro_vals
+    logger.debug("Writing cache file '{}'".format(cache_file_name))
+    parser.write_cache(cache_file_name)
+    return parser
 
 
 WIN_TYPES = {'__int64': None}
@@ -136,7 +148,7 @@ class CParser(object):
     #: old cache files.
     cache_version = 2
 
-    def __init__(self, stdlib_intf=None,
+    def __init__(self, clib_intf=None,
                  custom_type_quals=None,
                  custom_storage_cls=None,
                  custom_types=None):
@@ -145,21 +157,22 @@ class CParser(object):
         self.custom_types = custom_types or []
         self._build_parser()
 
-        self.stdlib_intf = stdlib_intf or c_model.CLibInterface()
-        self.clib_intf = None
+        if clib_intf is None:
+            self.clib_intf = c_model.CLibInterface()
+        else:
+            self.clib_intf = clib_intf
         self.macro_vals = {}
         self.pack_list = {}
-        self.init_opts = {}
         self.file_order = []
         self.files = {}
         self.current_file = None
 
-    def parse(self, hdr_files=None, replace_texts=None, cache=None,
-              print_after_preprocess=False, force_update=False,
-              load_only=False, uncomment_only=False, preprocess_only=False,
-              **kwargs):
+    def parse(self, hdr_file, replace_texts=None,
+              print_after_preprocess=False,
+              load_only=False, uncomment_only=False, preprocess_only=False):
         ###TODO: rework docstring
-        """ Remove comments, preprocess, and parse declarations from all files.
+        """ Remove comments, preprocess, and parse declarations from all
+        files.
 
         This operates in memory, and thus does not alter the original files.
 
@@ -181,49 +194,20 @@ class CParser(object):
             List of the results from _parse_defs.
 
         """
-        self.clib_intf = c_model.CLibInterface()
-        self.clib_intf.include(self.stdlib_intf)
-        for name, value in kwargs.items():  # Import extra macros if specified
-            self.clib_intf.add_macro(name, c_model.ValMacro(value))
-
-        self.macro_vals = {}
-
-        # Description of the struct packing rules as defined by #pragma pack
         self.pack_list = {}
-
-        self.init_opts = kwargs.copy()
-        self.init_opts['files'] = []
-        self.init_opts['replace'] = {}
-
         self.file_order = []
         self.files = {}
 
-        if hdr_files is not None:
-            if istext(hdr_files) or isbytes(hdr_files):
-                hdr_files = [hdr_files]
-            for f in self.find_headers(hdr_files):
-                self.load_file(f, replace_texts)
+        abspath_hdr_file, = self.find_headers([hdr_file])
+        self.load_file(abspath_hdr_file, replace_texts)
+        if load_only:
+            return
 
         self.current_file = None
-
-        if load_only:
-            return self.clib_intf
-
-        if cache is not None and not force_update:
-            try:
-                self.clib_intf, self.macro_vals = self.load_cache(
-                    cache, check_validity=True)
-            except InvalidCacheError:
-                pass
-            else:
-                logger.debug("Loaded cached definitions; will skip parsing.")
-                # Cached values loaded successfully, nothing left to do here
-                return self.clib_intf
 
         logger.debug(cleandoc('''Parsing C header files (no valid cache found).
                               This could take several minutes...'''))
         for f in self.file_order:
-
             if self.files[f] is None:
                 # This means the file could not be loaded and there was no
                 # cache.
@@ -248,11 +232,17 @@ class CParser(object):
 
             self._parse_defs(f)
 
-        if cache is not None:
-            logger.debug("Writing cache file '{}'".format(cache))
-            self.write_cache(cache)
+    def swap_clib_intf(self, clib_intf=None):
+        ###TODO: add docstring
+        self.pack_list = {}
+        self.file_order = []
+        self.files = {}
 
-        return self.clib_intf
+        if clib_intf is None:
+            self.clib_intf = c_model.CLibInterface()
+        else:
+            self.clib_intf = clib_intf
+        self.macro_vals = dict()
 
     def load_cache(self, cache_file, check_validity=False):
         """Load a cache file.
@@ -287,7 +277,7 @@ class CParser(object):
             cache_file = os.path.join(d, "headers", cache_file)
             if not os.path.isfile(cache_file):
                 logger.debug("Can't find requested cache file.")
-                return False
+                raise InvalidCacheError("Can't find requested cache file.")
 
         # Make sure cache is newer than all input files
         if check_validity:
@@ -297,34 +287,22 @@ class CParser(object):
                 # validity of the cache.
                 if os.path.isfile(f) and os.stat(f).st_mtime > mtime:
                     logger.debug("Cache file is out of date.")
-                    return False
+                    raise InvalidCacheError('Cache file is out of date.')
 
         try:
             # Read cache file
-            import pickle
             cache = pickle.load(open(cache_file, 'rb'))
 
             # Make sure __init__ options match
             if check_validity:
-                if cache['opts'] != self.init_opts:
-                    db = logger.debug
-                    db("Cache file is not valid")
-                    db("It was created using different initialization options")
-                    db('{}'.format(cache['opts']))
-                    db('{}'.format(self.init_opts))
-                    return False
-
-                else:
-                    logger.debug("Cache init opts are OK:")
-                    logger.debug('{}'.format(cache['opts']))
-
                 if cache['version'] < self.cache_version:
                     mess = "Cache file is not valid--cache format has changed."
                     logger.debug(mess)
                     raise InvalidCacheError('Cache Expired')
 
             # Import all parse results
-            return cache['clib_intf'], cache['macro_vals']
+            self.clib_intf = cache['clib_intf']
+            self.macro_vals = cache['macro_vals']
 
         except Exception:
             logger.exception("Warning--cache read failed:")
@@ -335,11 +313,9 @@ class CParser(object):
 
         """
         cache = {}
-        cache['opts'] = self.init_opts
         cache['clib_intf'] = self.clib_intf
         cache['macro_vals'] = self.macro_vals
         cache['version'] = self.cache_version
-        import pickle
         pickle.dump(cache, open(cache_file, 'wb'), protocol=2)
 
     def find_headers(self, headers):
@@ -391,10 +367,6 @@ class CParser(object):
 
         self.file_order.append(path)
         bn = os.path.basename(path)
-        self.init_opts['replace'][bn] = replace
-        # Only interested in the file names, the directory may change between
-        # systems.
-        self.init_opts['files'].append(bn)
         return True
 
     # =========================================================================
@@ -1346,15 +1318,3 @@ class CParser(object):
                 if text in l[i]:
                     res.append((f, i, l[i]))
         return res
-
-    def derive(self, stdlib_intf=None,
-               custom_type_quals=None,
-               custom_storage_cls=None,
-               custom_types=None):
-        derived_stdlib_intf = c_model.CLibInterface()
-        derived_stdlib_intf.include(self.stdlib_intf)
-        derived_stdlib_intf.include(stdlib_intf)
-        return CParser(derived_stdlib_intf,
-                       self.custom_type_quals + custom_type_quals,
-                       self.custom_storage_cls + custom_storage_cls,
-                       self.custom_types + custom_types)

@@ -1,6 +1,6 @@
 // This is file is used to test the removal of C++ style comments
 
-# define MACRO 1 // inline comment
+# define MACRO 2 // inline comment
 
 //char* str4 = "string inside comment"
 
