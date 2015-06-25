@@ -476,26 +476,27 @@ class CParser(object):
                     if_hit.append(ev)
 
                 elif d == 'define':
-                    if not if_true[-1]:
-                        continue
-                    logger.debug("  "*(len(if_true)-1) + "define: " +
-                                 '{}, {}'.format(macro_name, rest))
-                    try:
-                        # Macro is registered here
-                        self.pp_define.parseString(macro_name + ' ' + rest)
-                    except Exception:
-                        logger.exception("Error processing macro definition:" +
-                                         '{}, {}'.format(macro_name, rest))
+                    if if_true[-1]:
+                        logger.debug("  "*(len(if_true)-1) + "define: " +
+                                     '{}, {}'.format(macro_name, rest))
+                        try:
+                            # Macro is registered here
+                            self.pp_define.parseString(
+                                macro_name + ' ' + rest)
+                        except Exception:
+                            logger.exception(
+                                'Error processing macro definition:{}, {}'
+                                .format(macro_name, rest))
 
                 elif d == 'undef':
-                    if not if_true[-1]:
-                        continue
-                    try:
-                        self.clib_intf.del_macro(macro_name.strip())
-                    except Exception:
-                        if sys.exc_info()[0] is not KeyError:
-                            mess = "Error removing macro definition '{}'"
-                            logger.exception(mess.format(macro_name.strip()))
+                    if if_true[-1]:
+                        try:
+                            self.clib_intf.del_macro(macro_name.strip())
+                        except Exception:
+                            if sys.exc_info()[0] is not KeyError:
+                                mess = "Error removing macro definition '{}'"
+                                logger.exception(
+                                    mess.format(macro_name.strip()))
 
                 # Check for changes in structure packing
                 # Support only for #pragme pack (with all its variants
@@ -506,44 +507,42 @@ class CParser(object):
                 # http://msdn.microsoft.com/fr-fr/library/2e70t5y1.aspx
                 # The current implementation follows the MSVC doc.
                 elif d == 'pragma':
-                    if not if_true[-1]:
-                        continue
                     m = re.match(r'\s+pack\s*\(([^\)]*)\)', rest)
-                    if not m:
-                        continue
-                    if m.groups():
-                        opts = [s.strip() for s in m.groups()[0].split(',')]
+                    if if_true[-1] and m:
+                        if m.groups():
+                            opts = [s.strip() for s in m.groups()[0].split(',')]
 
-                    pushpop = id = val = None
-                    for o in opts:
-                        if o in ['push', 'pop']:
-                            pushpop = o
-                        elif o.isdigit():
-                            val = int(o)
-                        else:
-                            id = o
+                        pushpop = id = val = None
+                        for o in opts:
+                            if o in ['push', 'pop']:
+                                pushpop = o
+                            elif o.isdigit():
+                                val = int(o)
+                            else:
+                                id = o
 
-                    packing = val
+                        packing = val
 
-                    if pushpop == 'push':
-                        pack_stack.append((packing, id))
-                    elif opts[0] == 'pop':
-                        if id is None:
-                            pack_stack.pop()
-                        else:
-                            ind = None
-                            for j, s in enumerate(pack_stack):
-                                if s[1] == id:
-                                    ind = j
-                                    break
-                            if ind is not None:
-                                pack_stack = pack_stack[:ind]
-                        if val is None:
-                            packing = pack_stack[-1][0]
+                        if pushpop == 'push':
+                            pack_stack.append((packing, id))
+                        elif opts[0] == 'pop':
+                            if id is None:
+                                pack_stack.pop()
+                            else:
+                                ind = None
+                                for j, s in enumerate(pack_stack):
+                                    if s[1] == id:
+                                        ind = j
+                                        break
+                                if ind is not None:
+                                    pack_stack = pack_stack[:ind]
+                            if val is None:
+                                packing = pack_stack[-1][0]
 
-                    mess = ">> Packing changed to {} at line {}"
-                    logger.debug(mess.format(str(packing), i))
-                    pack_list.append((i, packing))
+                        mess = ">> Packing changed to {} at line {}"
+                        logger.debug(mess.format(str(packing), i))
+                        pack_list.append((i, packing))
+
                 else:
                     # Ignore any other directives
                     mess = 'Ignored directive {} at line {}'

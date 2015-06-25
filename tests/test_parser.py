@@ -337,17 +337,26 @@ class TestPreprocessing(object):
     def test_pragmas(self):
         path = self.hdr_file_path('pragmas.h')
         pack_list = []
-        self.parser.read(path, pack_list=pack_list)
+        srccode = self.parser.remove_comments(open(path).read())
+        preproc_srccode = self.parser.preprocess(srccode, pack_list=pack_list)
 
-        assert pack_list[1][1] is None
-        assert pack_list[2][1] == 4
-        assert pack_list[3][1] == 16
-        assert pack_list[4][1] is None
-        assert pack_list[5][1] is None
-        assert pack_list[6][1] == 4
-        assert pack_list[7][1] == 16
-        assert pack_list[8][1] is None
+        # Check if no line was removed/added to ensure that lineno references
+        # are correct
+        assert preproc_srccode.count('\n') == srccode.count('\n')
 
+        # Check all pragmas instructions have been removed.
+        assert preproc_srccode.strip() == ''
+
+        assert pack_list == [
+            (0, None),
+            (17, None),
+            (20, 4),
+            (24, 16),
+            (27, None),
+            (30, None),
+            (31, 4),
+            (34, 16),
+            (35, None)]
 
 class TestParsing(object):
     """Test parsing.
