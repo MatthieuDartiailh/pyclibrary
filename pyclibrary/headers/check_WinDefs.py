@@ -40,7 +40,7 @@ def generate_win_defs(version='1500'):
 
     parser = CParser(clib_intf)
     for header_file in header_files:
-        parser.parse(header_file)
+        parser.read(header_file)
 
     return parser
 

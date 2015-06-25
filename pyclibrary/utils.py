@@ -76,7 +76,7 @@ def find_header(h_name, dirs=None):
 
     Raises
     ------
-    OSError : if no matching file can be found.
+    IOError : if no matching file can be found.
 
     """
     if dirs:
@@ -100,7 +100,7 @@ def find_header(h_name, dirs=None):
         if os.path.isfile(path):
             return path
 
-    raise OSError("Can't find header with h_name {}".format(h_name))
+    raise IOError("Can't find header with h_name {}".format(h_name))
 
 
 LIBRARY_DIRS = []

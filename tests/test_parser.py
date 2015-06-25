@@ -16,6 +16,7 @@ import os
 import sys
 import tempfile
 import shutil
+import io
 from pytest import raises
 from pyclibrary.c_parser import CParser, InvalidCacheError
 import pyclibrary.utils
@@ -65,19 +66,11 @@ class TestFileHandling(object):
         assert len(self.parser.find_headers(
                    [abs_hdr_path, abs_hdr_path2])) == 2
 
-
-    def test_load_file(self):
-        path = self.hdr_file_path('replace.h')
-        self.parser.parse(path, load_only=True)
-        assert self.parser.files[path] is not None
-        assert self.parser.file_order == [path]
-
     def test_load_file_and_replace(self):
-        path = self.hdr_file_path('replace.h')
         rep = {'{placeholder}': '1', 'placeholder2': '2'}
-        self.parser.parse(path, rep, load_only=True)
+        path = self.hdr_file_path('replace.h')
+        lines = self.parser.load_file(path, rep).split('\n')
 
-        lines = self.parser.files[path].split('\n')
         assert lines[3] == '# define MACRO 1'
         assert lines[6] == '    # define MACRO2 2'
 
@@ -86,37 +79,39 @@ class TestFileHandling(object):
         with open(path) as f:
             compare_lines(lines, f.readlines())
 
-        assert self.parser.file_order == [path]
-
     def test_load_non_existing_file(self):
         path = self.hdr_file_path('no.h')
-        with raises(OSError):
-            self.parser.parse(path, load_only=True)
-        assert path not in self.parser.files
+        with raises(IOError):
+            self.parser.read(path)
+        assert path not in self.parser.file_order
 
     def test_removing_c_comments(self):
-        path = self.hdr_file_path('c_comments.h')
-        self.parser.parse(path, uncomment_only=True)
+        srccode = open(self.hdr_file_path('c_comments.h')).read()
+        nocomment_srccode = self.parser.remove_comments(srccode)
+
         with open(self.hdr_file_path('c_comments_removed.h'), 'rU') as f:
-            compare_lines(self.parser.files[path].split('\n'), f.readlines())
+            compare_lines(nocomment_srccode.split('\n'), f.readlines())
 
     def test_removing_cpp_comments(self):
-        path = self.hdr_file_path('cpp_comments.h')
-        self.parser.parse(path, uncomment_only=True)
+        srccode = open(self.hdr_file_path('cpp_comments.h')).read()
+        nocomment_srccode = self.parser.remove_comments(srccode)
         with open(self.hdr_file_path('cpp_comments_removed.h'), 'rU') as f:
-            compare_lines(self.parser.files[path].split('\n'), f.readlines())
+            compare_lines(nocomment_srccode.split('\n'), f.readlines())
 
     def test_process_multiple_files(self):
         clib_intf = cm.CLibInterface()
         parser = CParser(clib_intf)
-        parser.parse(self.hdr_file_path('multi_file1.h'))
-        parser.parse(self.hdr_file_path('multi_file2.h'))
+        parser.read(self.hdr_file_path('multi_file1.h'))
+        parser.read(self.hdr_file_path('multi_file2.h'))
+        assert parser.file_order == [self.hdr_file_path('multi_file1.h'),
+                                     self.hdr_file_path('multi_file2.h')]
         assert clib_intf['MACRO_A'].content == 'replaced_val_a'
         assert clib_intf['MACRO_B'].content == 'base_val_b'
 
         new_clib_intf = cm.CLibInterface()
         parser.swap_clib_intf(new_clib_intf)
-        parser.parse(self.hdr_file_path('multi_file3.h'))
+        assert parser.file_order == []
+        parser.read(self.hdr_file_path('multi_file3.h'))
         assert parser.clib_intf['MACRO_A'].content == 'other_val_a'
         assert 'MACRO_B' not in parser.clib_intf
         assert clib_intf['MACRO_A'].content == 'replaced_val_a'
@@ -129,14 +124,16 @@ class TestFileHandling(object):
             shutil.copy(self.hdr_file_path('multi_file1.h'), multi_file1_name)
 
             # create cache of clib_intf of multi_file2 & temporary multi_file1
-            self.parser.parse(multi_file1_name)
-            self.parser.parse(self.hdr_file_path('multi_file2.h'))
+            self.parser.read(multi_file1_name)
+            self.parser.read(self.hdr_file_path('multi_file2.h'))
             self.parser.write_cache(cache_file_name)
 
             # test caching ok
             parser2 = CParser()
             parser2.load_cache(cache_file_name)
             assert parser2.clib_intf['MACRO_B'].content == 'base_val_b'
+            assert (parser2.file_order ==
+                    [multi_file1_name, self.hdr_file_path('multi_file2.h')])
 
             # test header file modification detection
             open(multi_file1_name, "wt").write('\n//modification')
@@ -169,10 +166,10 @@ class TestPreprocessing(object):
 
     def test_invalid_define(self):
         with raises(err.DefinitionError):
-            self.parser.parse(self.hdr_file_path('macro_invalid.h'))
+            self.parser.read(self.hdr_file_path('macro_invalid.h'))
 
     def test_values(self):
-        self.parser.parse(self.hdr_file_path('macro_values.h'))
+        self.parser.read(self.hdr_file_path('macro_values.h'))
 
         macros = self.parser.clib_intf.macros
         values = self.parser.clib_intf.macro_vals
@@ -238,10 +235,11 @@ class TestPreprocessing(object):
 
     def test_conditionals(self):
         path = self.hdr_file_path('macro_conditionals.h')
-        self.parser.parse(path)
+        preproc_srccode_fileobj = io.StringIO()
+        self.parser.read(path, preproc_out_file=preproc_srccode_fileobj)
 
         macros = self.parser.clib_intf.macros
-        stream = self.parser.files[path]
+        stream = preproc_srccode_fileobj.getvalue()
 
         # Test if defined conditional
         assert 'DEFINE_IF' in macros
@@ -301,11 +299,12 @@ class TestPreprocessing(object):
 
     def test_macro_function(self):
         path = self.hdr_file_path('macro_functions.h')
-        self.parser.parse(path)
+        preproc_srccode_fileobj = io.StringIO()
+        self.parser.read(path, preproc_out_file=preproc_srccode_fileobj)
 
         values = self.parser.clib_intf.macro_vals
         macros = self.parser.clib_intf.macros
-        stream = self.parser.files[path]
+        stream = preproc_srccode_fileobj.getvalue()
 
         # Test macro declaration.
         assert macros['CARRE'] == cm.FnMacro('a*a', ['a'])
@@ -337,22 +336,17 @@ class TestPreprocessing(object):
 
     def test_pragmas(self):
         path = self.hdr_file_path('pragmas.h')
-        self.parser.parse(path)
+        pack_list = []
+        self.parser.read(path, pack_list=pack_list)
 
-        stream = self.parser.files[path]
-        packings = self.parser.pack_list[path]
-
-        # Check all pragmas instructions have been removed.
-        assert stream.strip() == ''
-
-        assert packings[1][1] is None
-        assert packings[2][1] == 4
-        assert packings[3][1] == 16
-        assert packings[4][1] is None
-        assert packings[5][1] is None
-        assert packings[6][1] == 4
-        assert packings[7][1] == 16
-        assert packings[8][1] is None
+        assert pack_list[1][1] is None
+        assert pack_list[2][1] == 4
+        assert pack_list[3][1] == 16
+        assert pack_list[4][1] is None
+        assert pack_list[5][1] is None
+        assert pack_list[6][1] == 4
+        assert pack_list[7][1] == 16
+        assert pack_list[8][1] is None
 
 
 class TestParsing(object):
@@ -369,7 +363,7 @@ class TestParsing(object):
         self.parser = CParser(self.clib_intf)
 
     def test_variables(self):
-        self.parser.parse(self.hdr_file_path('variables.h'))
+        self.parser.read(self.hdr_file_path('variables.h'))
         vars = self.clib_intf.vars
 
         # Integers
@@ -460,7 +454,7 @@ class TestParsing(object):
 
     # No structure, no unions, no enum
     def test_typedef(self):
-        self.parser.parse(self.hdr_file_path('typedefs.h'))
+        self.parser.read(self.hdr_file_path('typedefs.h'))
 
         tdefs = self.clib_intf.typedefs
         vars = self.clib_intf.vars
@@ -508,7 +502,7 @@ class TestParsing(object):
                 'typedefs.h')
 
     def test_enums(self):
-        self.parser.parse(self.hdr_file_path('enums.h'))
+        self.parser.read(self.hdr_file_path('enums.h'))
 
         tdefs = self.clib_intf.typedefs
         vars = self.clib_intf.vars
@@ -534,7 +528,7 @@ class TestParsing(object):
         assert os.path.basename(enum_name_path) == 'enums.h'
 
     def test_struct(self):
-        self.parser.parse(self.hdr_file_path('structs.h'))
+        self.parser.read(self.hdr_file_path('structs.h'))
 
         tdefs = self.clib_intf.typedefs
         vars = self.clib_intf.vars
@@ -596,7 +590,7 @@ class TestParsing(object):
         assert os.path.basename(strct_name_path) == 'structs.h'
 
     def test_unions(self):
-        self.parser.parse(self.hdr_file_path('unions.h'))
+        self.parser.read(self.hdr_file_path('unions.h'))
 
         tdefs = self.clib_intf.typedefs
         vars = self.clib_intf.vars
@@ -636,7 +630,7 @@ class TestParsing(object):
         assert os.path.basename(union_name_path) == 'unions.h'
 
     def test_functions(self):
-        self.parser.parse(self.hdr_file_path('functions.h'))
+        self.parser.read(self.hdr_file_path('functions.h'))
 
         funcs = self.clib_intf.funcs
         vars = self.clib_intf.vars

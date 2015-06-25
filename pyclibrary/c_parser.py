@@ -99,7 +99,7 @@ def win_defs_parser(version=1500, force_update=False):
             return parser
 
     for header_file in header_files:
-        clib_intf = parser.parse(header_file)
+        clib_intf = parser.read(header_file)
 
     logger.debug("Writing cache file '{}'".format(cache_file_name))
     parser.write_cache(cache_file_name)
@@ -150,23 +150,25 @@ class CParser(object):
                  custom_type_quals=None,
                  custom_storage_cls=None,
                  custom_types=None):
+        # here the parser is defined
         self.custom_type_quals = custom_type_quals or []
         self.custom_storage_cls = custom_storage_cls or []
         self.custom_types = custom_types or []
         self._build_parser()
 
+        # these objects are extended when parsing a file
         if clib_intf is None:
             self.clib_intf = c_model.CLibInterface()
         else:
             self.clib_intf = clib_intf
-        self.pack_list = {}
         self.file_order = []
-        self.files = {}
-        self.current_file = None
 
-    def parse(self, hdr_file, replace_texts=None,
-              print_after_preprocess=False,
-              load_only=False, uncomment_only=False, preprocess_only=False):
+        # these attributes are needed only temporarly, while parsing a file
+        self.cur_pack_list = None
+        self.cur_file_name = None
+        
+    def read(self, hdr_file, replace_texts=None,
+              pack_list=None, preproc_out_file=None):
         ###TODO: rework docstring
         """ Remove comments, preprocess, and parse declarations from all
         files.
@@ -180,7 +182,7 @@ class CParser(object):
             cache is automatically invalidated if any of the arguments to
             __init__ are changed, or if the C files are newer than the cache.
         return_unparsed : bool, optional
-           Passed directly to _parse_defs.
+           Passed directly to parse.
 
         print_after_preprocess : bool, optional
             If true prints the result of preprocessing each file.
@@ -188,56 +190,43 @@ class CParser(object):
         Returns
         -------
         results : list
-            List of the results from _parse_defs.
+            List of the results from parse.
 
         """
-        self.pack_list = {}
+        if pack_list is None:
+            pack_list = []
 
-        abspath_hdr_file, = self.find_headers([hdr_file])
-        self.load_file(abspath_hdr_file, replace_texts)
+        self.cur_file_name, = self.find_headers([hdr_file])
+        try:
+            srccode = self.load_file(self.cur_file_name, replace_texts)
+            logger.debug(cleandoc('Parsing C header files (no valid cache '
+                                  'found). This could take several minutes.'))
+    
+            logger.debug("Removing comments from file '{}'..."
+                         .format(self.cur_file_name))
+            nocomments_srccode = self.remove_comments(srccode)
 
-        if load_only:
-            return
+            logger.debug("Preprocessing file '{}'..."
+                         .format(self.cur_file_name))
+            preproc_srccode = self.preprocess(nocomments_srccode, pack_list)
+            if preproc_out_file is not None:
+                preproc_out_file.write(preproc_srccode)
 
-        self.current_file = None
+            logger.debug("Parsing definitions in file '{}'..."
+                         .format(self.cur_file_name))
 
-        logger.debug(cleandoc('''Parsing C header files (no valid cache found).
-                              This could take several minutes...'''))
-        for f in self.file_order:
-            if self.files[f] is None:
-                # This means the file could not be loaded and there was no
-                # cache.
-                mess = 'Could not find header file "{}" or a cache file.'
-                raise IOError(mess.format(f))
-
-            logger.debug("Removing comments from file '{}'...".format(f))
-            self.remove_comments(f)
-            if uncomment_only:
-                continue
-
-            logger.debug("Preprocessing file '{}'...".format(f))
-            self.preprocess(f)
-            if preprocess_only:
-                continue
-
-            if print_after_preprocess:
-                print("===== PREPROCSSED {} =======".format(f))
-                print(self.files[f])
-
-            logger.debug("Parsing definitions in file '{}'...".format(f))
-
-            self._parse_defs(f)
+            self.parse(preproc_srccode, pack_list)
+            self.file_order.append(self.cur_file_name)
+        finally:
+            self.cur_file_name = None
 
     def swap_clib_intf(self, clib_intf=None):
         ###TODO: add docstring
-        self.pack_list = {}
-        self.file_order = []
-        self.files = {}
-
         if clib_intf is None:
             self.clib_intf = c_model.CLibInterface()
         else:
             self.clib_intf = clib_intf
+        self.file_order = []
 
     def load_cache(self, cache_file, check_validity=False):
         """Load a cache file.
@@ -344,45 +333,33 @@ class CParser(object):
             when loading the file.
 
         """
-        if not os.path.isfile(path):
-            # Not a fatal error since we might be able to function properly if
-            # there is a cache file.
-            mess = "Warning: C header '{}' is missing, this may cause trouble."
-            logger.warning(mess.format(path))
-            self.files[path] = None
-            return False
-
         # U causes all newline types to be converted to \n
         with open(path, 'rU') as fd:
-            self.files[path] = fd.read()
+            result = fd.read()
 
         if replace is not None:
             for s in replace:
-                self.files[path] = re.sub(s, replace[s], self.files[path])
+                result = re.sub(s, replace[s], result)
 
-        self.file_order.append(path)
-        return True
+        return result
 
     # =========================================================================
     # --- Processing functions
     # =========================================================================
 
-    def remove_comments(self, path):
+    def remove_comments(self, srccode):
         """Remove all comments from file.
 
         Operates in memory, does not alter the original files.
 
         """
-        text = self.files[path]
         cplusplus_line_comment = Literal("//") + restOfLine
         # match quoted strings first to prevent matching comments inside quotes
         comment_remover = (quotedString | cStyleComment.suppress() |
                            cplusplus_line_comment.suppress())
-        self.files[path] = comment_remover.transformString(text)
+        return comment_remover.transformString(srccode)
 
-    # --- Pre processing
-
-    def preprocess(self, path):
+    def preprocess(self, srccode, pack_list):
         """Scan named file for preprocessor directives, removing them while
         expanding macros.
 
@@ -395,19 +372,15 @@ class CParser(object):
         - pragmas : pragma
 
         """
-        # We need this so that eval_expr works properly
-        self._build_parser()
-        self.current_file = path
-
         # Stack for #pragma pack push/pop
+        assert len(pack_list) == 0
+        pack_list.append((0, None))
+
         pack_stack = [(None, None)]
-        self.pack_list[path] = [(0, None)]
         packing = None  # Current packing value
 
-        text = self.files[path]
-
         # First join together lines split by \\n
-        text = Literal('\\\n').suppress().transformString(text)
+        joined_srccode = Literal('\\\n').suppress().transformString(srccode)
 
         # Define the structure of a macro definition
         name = Word(alphas+'_$', alphanums+'_$')('name')
@@ -418,7 +391,7 @@ class CParser(object):
         self.pp_define.setParseAction(self.process_macro_defn)
 
         # Comb through lines, process all directives
-        lines = text.split('\n')
+        lines = joined_srccode.split('\n')
 
         result = []
 
@@ -570,14 +543,15 @@ class CParser(object):
 
                     mess = ">> Packing changed to {} at line {}"
                     logger.debug(mess.format(str(packing), i))
-                    self.pack_list[path].append((i, packing))
+                    pack_list.append((i, packing))
                 else:
                     # Ignore any other directives
                     mess = 'Ignored directive {} at line {}'
                     logger.debug(mess.format(d, i))
 
             result.append(new_line)
-        self.files[path] = '\n'.join(result)
+
+        return '\n'.join(result)
 
     def eval_preprocessor_expr(self, expr):
         # Make a few alterations so the expression can be eval'd
@@ -608,7 +582,7 @@ class CParser(object):
             # #define FNMACRO1(x) x+1
             # #define FNMACRO2 FNMACRO1     //FNMACRO2 is a function macro!!!
             macro = self.clib_intf.macros[macro_val]
-            self.clib_intf.add_macro(t.macro, macro, self.current_file)
+            self.clib_intf.add_macro(t.macro, macro, self.cur_file_name)
             logger.debug("  Copy fnmacro {} => {}".format(macro_val, t.macro))
 
         else:
@@ -621,11 +595,11 @@ class CParser(object):
 
             else:
                 fnmacro = c_model.FnMacro(macro_val, list(t.args))
-                self.clib_intf.add_macro(t.macro, fnmacro, self.current_file)
+                self.clib_intf.add_macro(t.macro, fnmacro, self.cur_file_name)
                 mess = "  Add fn macro: {} ({}); {}"
                 logger.debug(mess.format(t.macro, t.args, fnmacro))
 
-        self.clib_intf.add_macro(t.macro, macro, self.current_file)
+        self.clib_intf.add_macro(t.macro, macro, self.cur_file_name)
         return macro.c_repr(t.macro)
 
     def expand_macros(self, line):
@@ -694,18 +668,20 @@ class CParser(object):
 
     # --- Compilation functions
 
-    def _parse_defs(self, path, return_unparsed=False):
+    def parse(self, srccode, pack_list):
         """Scan through the named file for variable, struct, enum, and function
         declarations.
 
         Parameters
         ----------
-        path : unicode
-            Path of the file to parse for definitions.
+        srccode : str
+            Preprocessed Sourcecode, that will be analysed and added to
+            self.clib_intf
 
-        return_unparsed : bool, optional
-            If true, return a string of all lines that failed to match (for
-            debugging purposes).
+        pack_list : list[tuple[int, int]]
+            a list of line ranges with the according struct packings
+            (#pragma pack). All structs defined within a specific range
+            use the according packing.
 
         Returns
         -------
@@ -713,14 +689,11 @@ class CParser(object):
             Entire tree of successfully parsed tokens.
 
         """
-        self.current_file = path
-
-        parser = self._build_parser()
-        if return_unparsed:
-            text = parser.suppress().transformString(self.files[path])
-            return re.sub(r'\n\s*\n', '\n', text)
-        else:
-            return [x[0] for x in parser.scanString(self.files[path])]
+        self.cur_pack_list = pack_list
+        try:
+            return [x[0] for x in self.parser.scanString(srccode)]
+        finally:
+            self.cur_pack_list = None
 
     # Syntatic delimiters
     comma = Literal(",").ignore(quotedString).suppress()
@@ -1131,7 +1104,7 @@ class CParser(object):
                 if not ename:
                     return etyp
                 else:
-                    self.clib_intf.add_typedef(ename, etyp, self.current_file)
+                    self.clib_intf.add_typedef(ename, etyp, self.cur_file_name)
 
             return c_model.CustomType(ename)
         except:
@@ -1152,7 +1125,7 @@ class CParser(object):
                 mess = "Incorrect declarator type for function definition."
                 raise DefinitionError(mess)
             logger.debug("  sig/name: {}".format(func_sig.c_repr(name)))
-            self.clib_intf.add_func(name, func_sig, self.current_file,
+            self.clib_intf.add_func(name, func_sig, self.cur_file_name,
                                     storage_classes)
 
         except Exception:
@@ -1163,7 +1136,7 @@ class CParser(object):
 
         """
         packing = None
-        for p in self.pack_list[self.current_file]:
+        for p in self.cur_pack_list:
             if p[0] <= line:
                 packing = p[1]
             else:
@@ -1223,7 +1196,7 @@ class CParser(object):
                     return type_
                 else:
                     self.clib_intf.add_typedef(sname, type_,
-                                               self.current_file)
+                                               self.cur_file_name)
 
             return c_model.CustomType(sname)
 
@@ -1244,13 +1217,13 @@ class CParser(object):
                 if isinstance(type_, c_model.FunctionType):
                     logger.debug("  Add function prototype: {}".format(
                                  type_.c_repr(name)))
-                    self.clib_intf.add_func(name, type_, self.current_file,
+                    self.clib_intf.add_func(name, type_, self.cur_file_name,
                                             storage_classes)
                 # This is a variable
                 else:
                     logger.debug("  Add variable: {} {} {}".format(name,
                                  type_, val))
-                    self.clib_intf.add_var(name, type_, self.current_file,
+                    self.clib_intf.add_var(name, type_, self.cur_file_name,
                                            storage_classes)
 
         except Exception:
@@ -1263,7 +1236,7 @@ class CParser(object):
         for d in t.decl_list:
             (name, type_) = self.process_type(t, d)
             logger.debug("  {}: {}".format(name, type_))
-            self.clib_intf.add_typedef(name, type_, self.current_file)
+            self.clib_intf.add_typedef(name, type_, self.cur_file_name)
 
     # --- Utility methods
 
@@ -1300,15 +1273,3 @@ class CParser(object):
         if expr == '':
             return None
         return eval(expr, *args)
-
-    def find_text(self, text):
-        """Search all file strings for text, return matching lines.
-
-        """
-        res = []
-        for f in self.files:
-            l = self.files[f].split('\n')
-            for i in range(len(l)):
-                if text in l[i]:
-                    res.append((f, i, l[i]))
-        return res
