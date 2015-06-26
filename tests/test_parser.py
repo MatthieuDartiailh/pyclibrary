@@ -48,23 +48,18 @@ class TestFileHandling(object):
         self.parser = CParser()
 
     def test_find_file(self):
-        ###TODO: assign find-headers to cparser (not global!)
-        saved_headers = pyclibrary.utils.HEADER_DIRS
-        try:
-            this_dir = os.path.dirname(__file__)
-            h_dir = os.path.join(this_dir, H_DIRECTORY, 'file_handling')
-            pyclibrary.utils.add_header_locations([h_dir])
-            assert h_dir in pyclibrary.utils.HEADER_DIRS
-            assert self.parser.find_headers(['test.h']) == \
-                   [os.path.join(h_dir, 'test.h')]
-        finally:
-            pyclibrary.utils.HEADER_DIRS = saved_headers
+        this_dir = os.path.dirname(__file__)
+        h_dir = os.path.join(this_dir, H_DIRECTORY, 'file_handling')
+        abs_hdr_path = self.hdr_file_path('test.h')
 
-        abs_hdr_path = os.path.join(h_dir, 'test.h')
-        assert self.parser.find_headers([abs_hdr_path]) == [abs_hdr_path]
-        abs_hdr_path2 = os.path.join(h_dir, 'test2.h')
-        assert len(self.parser.find_headers(
-                   [abs_hdr_path, abs_hdr_path2])) == 2
+        parser_withdir = CParser(header_dirs=[h_dir])
+        assert (parser_withdir.find_header('test.h') ==
+                os.path.join(h_dir, 'test.h'))
+        assert parser_withdir.find_header(abs_hdr_path) == abs_hdr_path
+
+        with raises(IOError):
+            self.parser.find_header('test.h')
+        assert self.parser.find_header(abs_hdr_path) == abs_hdr_path
 
     def test_fix_bad_code(self):
         rep = {'{placeholder}': '1', 'placeholder2': '2'}
@@ -188,19 +183,17 @@ class TestPreprocessing(object):
 
     """
 
-    def hdr_file_path(self, name):
-        this_dir = os.path.dirname(__file__)
-        return os.path.join(this_dir, H_DIRECTORY, 'macros', name)
-
     def setup(self):
-        self.parser = CParser()
+        this_dir = os.path.dirname(__file__)
+        self.parser = CParser(header_dirs=[
+            os.path.join(this_dir, H_DIRECTORY, 'macros')])
 
     def test_invalid_define(self):
         with raises(err.DefinitionError):
-            self.parser.read(self.hdr_file_path('macro_invalid.h'))
+            self.parser.read('macro_invalid.h')
 
     def test_values(self):
-        self.parser.read(self.hdr_file_path('macro_values.h'))
+        self.parser.read('macro_values.h')
 
         macros = self.parser.clib_intf.macros
         values = self.parser.clib_intf.macro_vals
@@ -264,9 +257,9 @@ class TestPreprocessing(object):
         assert 'MACRO_ML' in macros and values['MACRO_ML'] == 2
 
     def test_conditionals(self):
-        path = self.hdr_file_path('macro_conditionals.h')
         preproc_srccode_fileobj = io.StringIO()
-        self.parser.read(path, preproc_out_file=preproc_srccode_fileobj)
+        self.parser.read('macro_conditionals.h',
+                         preproc_out_file=preproc_srccode_fileobj)
 
         macros = self.parser.clib_intf.macros
         stream = preproc_srccode_fileobj.getvalue()
@@ -328,9 +321,9 @@ class TestPreprocessing(object):
         assert 'UNDEF' not in macros
 
     def test_macro_function(self):
-        path = self.hdr_file_path('macro_functions.h')
         preproc_srccode_fileobj = io.StringIO()
-        self.parser.read(path, preproc_out_file=preproc_srccode_fileobj)
+        self.parser.read('macro_functions.h',
+                         preproc_out_file=preproc_srccode_fileobj)
 
         values = self.parser.clib_intf.macro_vals
         macros = self.parser.clib_intf.macros
@@ -365,7 +358,8 @@ class TestPreprocessing(object):
         assert 'int z3 = ((((3) |= (0x01)), ((3) |= (0x01))));' in stream
 
     def test_pragmas(self):
-        path = self.hdr_file_path('pragmas.h')
+        this_dir = os.path.dirname(__file__)
+        path = os.path.join(this_dir, H_DIRECTORY, 'macros/pragmas.h')
         pack_list = []
         srccode = self.parser.remove_comments(open(path).read())
         preproc_srccode = self.parser.preprocess(srccode, pack_list=pack_list)
@@ -393,16 +387,14 @@ class TestParsing(object):
 
     """
 
-    def hdr_file_path(self, name):
-        this_dir = os.path.dirname(__file__)
-        return os.path.join(this_dir, H_DIRECTORY, name)
-
     def setup(self):
         self.clib_intf = cm.CLibInterface()
-        self.parser = MSVCParser(self.clib_intf)
+        this_dir = os.path.dirname(__file__)
+        hdr_dir = os.path.join(this_dir, H_DIRECTORY)
+        self.parser = MSVCParser(self.clib_intf, header_dirs=[hdr_dir])
 
     def test_variables(self):
-        self.parser.read(self.hdr_file_path('variables.h'))
+        self.parser.read('variables.h')
         vars = self.clib_intf.vars
 
         # Integers
@@ -486,7 +478,7 @@ class TestParsing(object):
 
     # No structure, no unions, no enum
     def test_typedef(self):
-        self.parser.read(self.hdr_file_path('typedefs.h'))
+        self.parser.read('typedefs.h')
 
         tdefs = self.clib_intf.typedefs
         vars = self.clib_intf.vars
@@ -530,7 +522,7 @@ class TestParsing(object):
             tdefs['recType3'].resolve(tdefs)
 
     def test_enums(self):
-        self.parser.read(self.hdr_file_path('enums.h'))
+        self.parser.read('enums.h')
 
         tdefs = self.clib_intf.typedefs
         vars = self.clib_intf.vars
@@ -556,7 +548,7 @@ class TestParsing(object):
         assert os.path.basename(enum_name_path) == 'enums.h'
 
     def test_struct(self):
-        self.parser.read(self.hdr_file_path('structs.h'))
+        self.parser.read('structs.h')
 
         tdefs = self.clib_intf.typedefs
         vars = self.clib_intf.vars
@@ -618,7 +610,7 @@ class TestParsing(object):
         assert os.path.basename(strct_name_path) == 'structs.h'
 
     def test_unions(self):
-        self.parser.read(self.hdr_file_path('unions.h'))
+        self.parser.read('unions.h')
 
         tdefs = self.clib_intf.typedefs
         vars = self.clib_intf.vars
@@ -654,7 +646,7 @@ class TestParsing(object):
                 cm.PointerType(cm.CustomType('struct tagRID_DEVICE_INFO')))
 
     def test_functions(self):
-        self.parser.read(self.hdr_file_path('functions.h'))
+        self.parser.read('functions.h')
 
         funcs = self.clib_intf.funcs
         vars = self.clib_intf.vars

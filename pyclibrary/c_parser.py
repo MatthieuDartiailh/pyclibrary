@@ -26,7 +26,6 @@ from traceback import format_exc
 import pickle
 
 from .errors import DefinitionError, InvalidCacheError
-from .utils import find_header
 from pyclibrary import c_model
 
 # Import parsing elements
@@ -40,10 +39,19 @@ ParserElement.enablePackrat()
 
 logger = logging.getLogger(__name__)
 
+__all__ = ['win_defs', 'CParser', 'MSVCParser', 'SYS_HEADER_DIRS']
 
-__all__ = ['win_defs', 'CParser']
+if sys.platform == 'darwin':
+    SYS_HEADER_DIRS = ('/usr/local/include', '/usr/include',
+                       '/System/Library/Frameworks', '/Library/Frameworks')
+elif sys.platform == 'linux2':
+    SYS_HEADER_DIRS = ('/usr/local/include', '/usr/target/include',
+                       '/usr/include')
+else:
+    SYS_HEADER_DIRS = ()
 
-def win_defs_parser(version=1500, force_update=False):
+
+def win_defs_parser(version=1500, force_update=False, sdk_dir=None):
     ###TODO: update docstring
     """Loads selection of windows headers included with PyCLibrary.
 
@@ -67,6 +75,8 @@ def win_defs_parser(version=1500, force_update=False):
         CParser containing all the infos from te windows headers.
 
     """
+    if sdk_dir is None:
+        sdk_dir = []
     dir = os.path.dirname(__file__)
     cache_file_name = os.path.join(dir, 'headers', 'WinDefs.cache')
 
@@ -87,7 +97,7 @@ def win_defs_parser(version=1500, force_update=False):
     clib_intf.add_macro('DECLARE_HANDLE',
                         c_model.FnMacro('typedef HANDLE name', ['name']))
 
-    parser = MSVCParser(clib_intf)
+    parser = MSVCParser(clib_intf, header_dirs=[sdk_dir])
     if not force_update:
         try:
             parser.load_cache(cache_file_name, check_validity=True)
@@ -99,7 +109,7 @@ def win_defs_parser(version=1500, force_update=False):
             return parser
 
     for header_file in header_files:
-        clib_intf = parser.read(header_file)
+        parser.read(header_file)
 
     logger.debug("Writing cache file '{}'".format(cache_file_name))
     parser.write_cache(cache_file_name)
@@ -139,7 +149,7 @@ class CParser(object):
     #: old cache files.
     cache_version = 2
 
-    def __init__(self, clib_intf=None):
+    def __init__(self, clib_intf=None, header_dirs=None):
         self._build_parser()
 
         # these objects are extended when parsing a file
@@ -148,6 +158,7 @@ class CParser(object):
         else:
             self.clib_intf = clib_intf
         self.file_order = []
+        self.header_dirs = header_dirs or []
 
         # these attributes are needed only temporarly, while parsing a file
         self.cur_pack_list = None
@@ -183,7 +194,7 @@ class CParser(object):
             pack_list = []
 
         if isinstance(hdr_file, basestring):
-            filename, = self.find_headers([hdr_file])
+            filename = self.find_header(hdr_file)
             hdr_file = open(filename, 'rU')
         else:
             filename = getattr(hdr_file, 'name', None)
@@ -297,21 +308,19 @@ class CParser(object):
         cache['file_order'] = self.file_order
         pickle.dump(cache, open(cache_file, 'wb'), protocol=2)
 
-    def find_headers(self, headers):
+    def find_header(self, hdr_filename):
         """Try to find the specified headers.
 
         """
-        hs = []
-        for header in headers:
-            if os.path.isfile(header):
-                hs.append(header)
-            else:
-                h = find_header(header)
-                if not h:
-                    raise OSError('Cannot find header: {}'.format(header))
-                hs.append(h)
+        if os.path.isabs(hdr_filename):
+            return hdr_filename
 
-        return hs
+        for dir in self.header_dirs:
+            path = os.path.join(dir, hdr_filename)
+            if os.path.isfile(path):
+                return path
+        else:
+            raise IOError('cannot find header file {!r}'.format(hdr_filename))
 
     def fix_bad_code(self, srccode, replace=None):
         """Replaces all occurences of patterns in source code, that are not
@@ -1293,6 +1302,7 @@ class CParser(object):
 
 
 class MSVCParser(CParser):
+    ###TODO: update docstring
 
     supported_base_types = CParser.supported_base_types + [
         '__int64']

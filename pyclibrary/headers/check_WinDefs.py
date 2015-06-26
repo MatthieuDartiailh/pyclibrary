@@ -14,7 +14,6 @@ from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 from pyclibrary.c_parser import MSVCParser
 from pyclibrary.c_model import CLibInterface, FnMacro
-from pyclibrary.utils import add_header_locations
 import os
 import time
 
@@ -22,7 +21,7 @@ SDK_DIR = r'c:\program files\microsoft sdks\windows\v6.0a\include'
 
 def load_cached_win_defs():
     this_dir = os.path.dirname(__file__)
-    parser = MSVCParser()
+    parser = MSVCParser(header_dirs=[SDK_DIR])
     parser.load_cache(os.path.join(this_dir, 'WinDefs.cache'))
     return parser
 
@@ -38,15 +37,13 @@ def generate_win_defs(version='1500'):
     clib_intf.add_macro('DECLARE_HANDLE',
                         FnMacro('typedef HANDLE name', ['name']))
 
-    parser = MSVCParser(clib_intf)
+    parser = MSVCParser(clib_intf, header_dirs=[SDK_DIR])
     for header_file in header_files:
         parser.read(header_file)
 
     return parser
 
 if __name__ == "__main__":
-    add_header_locations([SDK_DIR])
-
     ok_parser = load_cached_win_defs()
     print('parsing windows definitions (may take some while)')
     start_time = time.time()
