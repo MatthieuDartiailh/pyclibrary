@@ -167,8 +167,8 @@ class CParser(object):
         self.cur_pack_list = None
         self.cur_file_name = None
         
-    def read(self, hdr_file, replace_texts=None,
-              pack_list=None, preproc_out_file=None):
+    def read(self, hdr_file, replace_texts=None, virtual_filename=None,
+             pack_list=None, preproc_out_file=None):
         ###TODO: rework docstring
         """ Remove comments, preprocess, and parse declarations from all
         files.
@@ -196,15 +196,23 @@ class CParser(object):
         if pack_list is None:
             pack_list = []
 
-        self.cur_file_name, = self.find_headers([hdr_file])
+        if isinstance(hdr_file, basestring):
+            filename, = self.find_headers([hdr_file])
+            hdr_file = open(filename, 'rU')
+        else:
+            filename = getattr(hdr_file, 'name', None)
+        
         try:
-            srccode = self.load_file(self.cur_file_name, replace_texts)
+            self.cur_file_name = virtual_filename or filename
+            
+            srccode = hdr_file.read()
+            fixed_srccode = self.fix_bad_code(srccode, replace_texts)
             logger.debug(cleandoc('Parsing C header files (no valid cache '
                                   'found). This could take several minutes.'))
     
             logger.debug("Removing comments from file '{}'..."
                          .format(self.cur_file_name))
-            nocomments_srccode = self.remove_comments(srccode)
+            nocomments_srccode = self.remove_comments(fixed_srccode)
 
             logger.debug("Preprocessing file '{}'..."
                          .format(self.cur_file_name))
@@ -217,6 +225,7 @@ class CParser(object):
 
             self.parse(preproc_srccode, pack_list)
             self.file_order.append(self.cur_file_name)
+
         finally:
             self.cur_file_name = None
 
@@ -318,15 +327,14 @@ class CParser(object):
 
         return hs
 
-    def load_file(self, path, replace=None):
-        """Read a file, make replacements if requested.
-
-        Called by __init__, should not be called manually.
+    def fix_bad_code(self, srccode, replace=None):
+        """Replaces all occurences of patterns in source code, that are not
+        compatible with CParser.
 
         Parameters
         ----------
-        path : unicode
-            Path of the file to load.
+        srccode : str
+            Text of source code.
 
         replace : dict, optional
             Dictionary containing strings to replace by the associated value
@@ -334,14 +342,11 @@ class CParser(object):
 
         """
         # U causes all newline types to be converted to \n
-        with open(path, 'rU') as fd:
-            result = fd.read()
-
         if replace is not None:
             for s in replace:
-                result = re.sub(s, replace[s], result)
+                srccode = re.sub(s, replace[s], srccode)
 
-        return result
+        return srccode
 
     # =========================================================================
     # --- Processing functions
