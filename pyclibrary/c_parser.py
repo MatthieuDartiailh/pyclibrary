@@ -80,24 +80,19 @@ def win_defs_parser(version=1500, force_update=False, sdk_dir=None):
     dir = os.path.dirname(__file__)
     cache_file_name = os.path.join(dir, 'headers', 'WinDefs.cache')
 
-    # this fix header file order is very fragile, as there is no clean
-    # dependency tree between them. This is why the 'clib_intf' has to be
+    parser = MSVCParser(header_dirs=[sdk_dir],
+                        predef_macros={'_WIN32': '', 'NO_STRICT': ''},
+                        msc_ver=version, arch=32, )
+
+    # the fix header file order is very fragile, as there is no clean
+    # dependency tree between them. This is why the 'DECLARE_HANDLE' has to be
     # provided (DECLARE_HANDLE is defined in WinNt.h, but used in WinDef.h,
     # although WinNt.h uses a lot of defines from WinDef.h. By manually
     # defining DECLARE_HANDLE WinDef.h can be parsed before WinNt.h and
     # WinNt.h can then use all definitions from WinDef.h when being parsed)
-    header_files = ['specstrings.h', 'specstrings_strict.h', 'Rpcsal.h',
-                    'WinDef.h', 'BaseTsd.h', 'WTypes.h',
-                    'WinNt.h', 'WinBase.h', 'WinUser.h']
-    clib_intf = c_model.CLibInterface()
-    clib_intf.add_macro('_WIN32')
-    clib_intf.add_macro('_MSC_VER', str(version))
-    clib_intf.add_macro('_M_IX86')  # must be '_M_AMD64' in 64bit systems
-    clib_intf.add_macro('NO_STRICT')
-    clib_intf.add_macro('DECLARE_HANDLE',
-                        c_model.FnMacro('typedef HANDLE name', ['name']))
+    parser.clib_intf.add_macro(
+        'DECLARE_HANDLE', c_model.FnMacro('typedef HANDLE name', ['name']))
 
-    parser = MSVCParser(clib_intf, header_dirs=[sdk_dir])
     if not force_update:
         try:
             parser.load_cache(cache_file_name, check_validity=True)
@@ -108,6 +103,9 @@ def win_defs_parser(version=1500, force_update=False, sdk_dir=None):
             # Cached values loaded successfully, nothing left to do here
             return parser
 
+    header_files = ['specstrings.h', 'specstrings_strict.h', 'Rpcsal.h',
+                    'WinDef.h', 'BaseTsd.h', 'WTypes.h',
+                    'WinNt.h', 'WinBase.h', 'WinUser.h']
     for header_file in header_files:
         parser.read(header_file)
 
@@ -149,21 +147,27 @@ class CParser(object):
     #: old cache files.
     cache_version = 2
 
-    def __init__(self, clib_intf=None, header_dirs=None):
+    def __init__(self, header_dirs=None, predef_macros=None):
         self._build_parser()
 
-        # these objects are extended when parsing a file
-        if clib_intf is None:
-            self.clib_intf = c_model.CLibInterface()
-        else:
-            self.clib_intf = clib_intf
-        self.file_order = []
+        self.predef_macros = {
+            '__DATE__': 'Jan 01 1970',
+            '__FILE__': 'filename.h',
+            '__LINE__': '1',
+            '__STDC__': '1',
+            '__TIME__': '00:00:00',
+            '__TIMESTAMP__': 'Jan 01 1970 00:00:00'}
+        if predef_macros:
+            self.predef_macros.update(predef_macros)
+        self.reset_clib_intf()
+
         self.header_dirs = header_dirs or []
 
         # these attributes are needed only temporarly, while parsing a file
         self.cur_pack_list = None
         self.cur_file_name = None
-        
+
+
     def read(self, hdr_file, replace_texts=None, virtual_filename=None,
              pack_list=None, preproc_out_file=None):
         ###TODO: rework docstring
@@ -226,12 +230,12 @@ class CParser(object):
         finally:
             self.cur_file_name = None
 
-    def swap_clib_intf(self, clib_intf=None):
+    def reset_clib_intf(self):
         ###TODO: add docstring
-        if clib_intf is None:
-            self.clib_intf = c_model.CLibInterface()
-        else:
-            self.clib_intf = clib_intf
+        # create a model with dummy values for predefined macros
+        self.clib_intf = c_model.CLibInterface()
+        for name, content in self.predef_macros.items():
+            self.clib_intf.add_macro(name, content)
         self.file_order = []
 
     def load_cache(self, cache_file, check_validity=False):
@@ -277,13 +281,15 @@ class CParser(object):
         else:
             self.clib_intf = cache['clib_intf']
             self.file_order = cache['file_order']
-            version = cache['version']
 
         if check_validity:
-            ###TODO: add check for clib_intf settings before parsing files
+            if cache['predef_macros'] != self.predef_macros:
+                mess = "Different list of predefined macros"
+                logger.debug(mess)
+                raise InvalidCacheError('Predefined Macros does not match')
 
             # Make sure __init__ options match
-            if version < self.cache_version:
+            if cache['version'] < self.cache_version:
                 mess = "Cache file is not valid--cache format has changed."
                 logger.debug(mess)
                 raise InvalidCacheError('Cache Expired')
@@ -306,6 +312,7 @@ class CParser(object):
         cache['clib_intf'] = self.clib_intf
         cache['version'] = self.cache_version
         cache['file_order'] = self.file_order
+        cache['predef_macros'] = self.predef_macros
         pickle.dump(cache, open(cache_file, 'wb'), protocol=2)
 
     def find_header(self, hdr_filename):
@@ -1312,3 +1319,18 @@ class MSVCParser(CParser):
     supported_storage_classes = CParser.supported_storage_classes + [
         '__declspec(...)', '__forceinline', '__inline']
     supported_ident_non_alnums = '_$'
+
+    def __init__(self, header_dirs=None, predef_macros=None,
+                 msc_ver=1500, arch=32):
+        ms_predef_macros={}
+        ms_predef_macros['_MSC_VER'] = str(msc_ver)
+        if arch == 32:
+            ms_predef_macros['_M_IX86'] = ''
+        elif arch == 64:
+            ms_predef_macros['_M_AMD64'] = ''
+        else:
+            raise ValueError("'arch' has to be either 32 (=32 bit "
+                             "architecture) or 64 (=64 bit architecture)")
+        if predef_macros:
+            ms_predef_macros.update()
+        super(MSVCParser, self).__init__(header_dirs, ms_predef_macros)

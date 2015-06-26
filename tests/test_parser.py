@@ -13,13 +13,11 @@ from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 
 import os
-import sys
 import tempfile
 import shutil
 import io
 from pytest import raises
 from pyclibrary.c_parser import CParser, InvalidCacheError, MSVCParser
-import pyclibrary.utils
 from pyclibrary import errors as err, DefinitionError
 import pyclibrary.c_model as cm
 
@@ -97,8 +95,8 @@ class TestFileHandling(object):
             compare_lines(nocomment_srccode.split('\n'), f.readlines())
 
     def test_process_multiple_files(self):
-        clib_intf = cm.CLibInterface()
-        parser = CParser(clib_intf)
+        parser = CParser()
+        clib_intf = parser.clib_intf
         parser.read(self.hdr_file_path('multi_file1.h'))
         parser.read(self.hdr_file_path('multi_file2.h'))
         assert parser.file_order == [self.hdr_file_path('multi_file1.h'),
@@ -106,8 +104,7 @@ class TestFileHandling(object):
         assert clib_intf['MACRO_A'].content == 'replaced_val_a'
         assert clib_intf['MACRO_B'].content == 'base_val_b'
 
-        new_clib_intf = cm.CLibInterface()
-        parser.swap_clib_intf(new_clib_intf)
+        parser.reset_clib_intf()
         assert parser.file_order == []
         parser.read(self.hdr_file_path('multi_file3.h'))
         assert parser.clib_intf['MACRO_A'].content == 'other_val_a'
@@ -132,6 +129,11 @@ class TestFileHandling(object):
             assert parser2.clib_intf['TEST'].content == '1'
             assert (parser2.file_order ==
                     [test_filename, self.hdr_file_path('test2.h')])
+
+            # test wrong predefs
+            predef_parser = CParser(predef_macros={'A': ''})
+            with raises(InvalidCacheError):
+                predef_parser.load_cache(cache_file_name, check_validity=True)
 
             # test header file modification detection
             open(test_filename, "wt").write('\n//modification')
@@ -388,10 +390,10 @@ class TestParsing(object):
     """
 
     def setup(self):
-        self.clib_intf = cm.CLibInterface()
         this_dir = os.path.dirname(__file__)
         hdr_dir = os.path.join(this_dir, H_DIRECTORY)
-        self.parser = MSVCParser(self.clib_intf, header_dirs=[hdr_dir])
+        self.parser = MSVCParser(header_dirs=[hdr_dir])
+        self.clib_intf = self.parser.clib_intf
 
     def test_variables(self):
         self.parser.read('variables.h')
@@ -756,3 +758,13 @@ class TestMSVCParser(object):
         ms_parser = MSVCParser()
         ms_parser.read(io.StringIO(srccode))
         assert ms_parser.clib_intf['$y$'] == cm.BuiltinType('int')
+
+    def test_predefined_macros(self):
+        std_parser = CParser()
+        assert std_parser.clib_intf.macros['__STDC__'].content == '1'
+        assert '_MSC_VER' not in std_parser.clib_intf.macros
+
+        ms_parser = MSVCParser(msc_ver=1500, arch=64)
+        assert std_parser.clib_intf.macros['__STDC__'].content == '1'
+        assert ms_parser.clib_intf.macros['_MSC_VER'].content == '1500'
+        assert ms_parser.clib_intf.macros['_M_AMD64'].content == ''

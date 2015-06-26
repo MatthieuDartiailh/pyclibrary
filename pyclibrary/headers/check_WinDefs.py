@@ -21,23 +21,21 @@ SDK_DIR = r'c:\program files\microsoft sdks\windows\v6.0a\include'
 
 def load_cached_win_defs():
     this_dir = os.path.dirname(__file__)
-    parser = MSVCParser(header_dirs=[SDK_DIR])
+    parser = MSVCParser(msc_ver=1500, arch=32, header_dirs=[SDK_DIR])
     parser.load_cache(os.path.join(this_dir, 'WinDefs.cache'))
     return parser
 
-def generate_win_defs(version='1500'):
+def generate_win_defs():
+    parser = MSVCParser(msc_ver=1500, arch=32, header_dirs=[SDK_DIR])
+    parser.clib_intf.add_macro('_WIN32')
+    parser.clib_intf.add_macro('NO_STRICT')
+    parser.clib_intf.add_macro(
+        'DECLARE_HANDLE', FnMacro('typedef HANDLE name', ['name']))
+
     header_files = ['specstrings.h', 'specstrings_strict.h', 'Rpcsal.h',
                     'WinDef.h', 'BaseTsd.h', 'WTypes.h',
                     'WinNt.h', 'WinBase.h', 'WinUser.h']
-    clib_intf = CLibInterface()
-    clib_intf.add_macro('_WIN32')
-    clib_intf.add_macro('_MSC_VER', str(version))
-    clib_intf.add_macro('_M_IX86')  # must be '_M_AMD64' in 64bit systems
-    clib_intf.add_macro('NO_STRICT')
-    clib_intf.add_macro('DECLARE_HANDLE',
-                        FnMacro('typedef HANDLE name', ['name']))
 
-    parser = MSVCParser(clib_intf, header_dirs=[SDK_DIR])
     for header_file in header_files:
         parser.read(header_file)
 
