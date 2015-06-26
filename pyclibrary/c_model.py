@@ -939,6 +939,7 @@ class CLibInterface(collections.Mapping):
         obj_map[name] = obj
         self.file_map[name] = filename
         add_enum_vals(obj)
+        ###TODO: check, if customtypes are valid references
 
     def add_func(self, name, func, filename=None, storage_classes=None):
         """Official interface to add a function to CLibInterface.

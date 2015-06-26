@@ -35,7 +35,7 @@ from .thirdparty.pyparsing import \
      WordEnd, Keyword, Regex, Literal, SkipTo, ZeroOrMore, OneOrMore,
      Group, LineEnd, stringStart, quotedString, oneOf, nestedExpr,
      delimitedList, restOfLine, cStyleComment, alphas, alphanums, hexnums,
-     lineno, Suppress)
+     lineno, Suppress, NoMatch, ParseException)
 ParserElement.enablePackrat()
 
 logger = logging.getLogger(__name__)
@@ -87,7 +87,7 @@ def win_defs_parser(version=1500, force_update=False):
     clib_intf.add_macro('DECLARE_HANDLE',
                         c_model.FnMacro('typedef HANDLE name', ['name']))
 
-    parser = CParser(clib_intf)
+    parser = MSVCParser(clib_intf)
     if not force_update:
         try:
             parser.load_cache(cache_file_name, check_validity=True)
@@ -104,13 +104,6 @@ def win_defs_parser(version=1500, force_update=False):
     logger.debug("Writing cache file '{}'".format(cache_file_name))
     parser.write_cache(cache_file_name)
     return parser
-
-
-WIN_TYPES = {'__int64': None}
-WIN_TYPEQUALS = ['__based', '__cdecl', '__fastcall', '__stdcall', '__restrict', '__sptr', '__uptr', '__ptr64', '__w64',
-                 '__allowed', #(...)
-                 ]
-WIN_STORAGE_CLASSES = ['__declspec', '__forceinline', '__inline']
 
 
 class CParser(object):
@@ -146,14 +139,7 @@ class CParser(object):
     #: old cache files.
     cache_version = 2
 
-    def __init__(self, clib_intf=None,
-                 custom_type_quals=None,
-                 custom_storage_cls=None,
-                 custom_types=None):
-        # here the parser is defined
-        self.custom_type_quals = custom_type_quals or []
-        self.custom_storage_cls = custom_storage_cls or []
-        self.custom_types = custom_types or []
+    def __init__(self, clib_intf=None):
         self._build_parser()
 
         # these objects are extended when parsing a file
@@ -388,12 +374,14 @@ class CParser(object):
         joined_srccode = Literal('\\\n').suppress().transformString(srccode)
 
         # Define the structure of a macro definition
-        name = Word(alphas+'_$', alphanums+'_$')('name')
+        name = self.generic_ident()('name')
         deli_list = Optional(self.lparen + delimitedList(name) + self.rparen)
         self.pp_define = (name.setWhitespaceChars(' \t')("macro") +
                           deli_list.setWhitespaceChars(' \t')('args') +
                           SkipTo(LineEnd())('value'))
         self.pp_define.setParseAction(self.process_macro_defn)
+
+        macro_name_pattern = name + SkipTo(LineEnd())('rest')
 
         # Comb through lines, process all directives
         lines = joined_srccode.split('\n')
@@ -436,12 +424,14 @@ class CParser(object):
                             ).setParseAction(pa).transformString(rest)
 
                 elif d in ['define', 'undef']:
-                    match = re.match(r'\s*([a-zA-Z_$][a-zA-Z0-9_$]*)(.*)$',
-                                     rest)
-                    if match is None:
+                    try:
+                        match = macro_name_pattern.parseString(rest.lstrip())
+                    except ParseException:
                         raise DefinitionError('invalid macro definition: {!r}'
                                               .format(line))
-                    macro_name, rest = match.groups()
+                    else:
+                        macro_name = match.name
+                        rest = match.rest
 
                 # Expand macros if needed
                 if rest is not None and (all(if_true) or d in ['if', 'elif']):
@@ -612,7 +602,9 @@ class CParser(object):
         Faulty calls to macro function are left untouched.
 
         """
-        reg = re.compile(r'("(\\"|[^"])*")|(\b(\w+)\b)')
+        reg = re.compile(
+            r'("(\\"|[^"])*")|'
+            '(([a-zA-Z0-9' + self.supported_ident_non_alnums + ']+))')
         parts = []
         # The group number to check for macro names
         N = 3
@@ -724,29 +716,51 @@ class CParser(object):
     bi_operator = oneOf("+ - / * | & || && ! ~ ^ % == != > < >= <= -> . :: << >> = ? :")
     uni_right_operator = oneOf("++ --")
     uni_left_operator = oneOf("++ -- - + * sizeof new")
-    wordchars = alphanums+'_$'
-    name = (WordStart(wordchars) + Word(alphas+"_", alphanums+"_$") +
-            WordEnd(wordchars))
-    size_modifiers = ['short', 'long']
-    sign_modifiers = ['signed', 'unsigned']
 
-    # Syntax elements defined by _init_parser.
-    # expression = Forward()
-    # array_op = lbrack + expression + rbrack
-    # base_types = None
-    # ident = None
-    # type_qualifier = None
-    # storage_class_spec = None
-    # fund_type = None
+    supported_base_types = ['int', 'char', 'void', 'float', 'double', 'bool']
+    supported_sign_modifiers = ['unsigned', 'signed']
+    supported_size_modifiers = ['short', 'long']
+    supported_storage_classes = ['static', 'extern', 'inline']
+    supported_type_qualifiers = ['const', 'volatile', 'restrict',]
+    supported_ident_non_alnums = '_'
 
-    num_types = ['int', 'float', 'double']
-    nonnum_types = ['char', 'bool', 'void']
+    @property
+    def keyword(self):
+        """A ParserElement of all keywords"""
+        keywords = (['struct', 'enum', 'union'] +
+                    self.supported_type_qualifiers +
+                    self.supported_storage_classes +
+                    self.supported_base_types +
+                    self.supported_size_modifiers +
+                    self.supported_sign_modifiers)
 
+        return self._kwl(list(self.filter_no_par(keywords)) +
+                         list(self.filter_par(keywords)))
+
+    def generic_ident(self, exceptions=None):
+        """A generic ParserElement for identificators. In C this are all words
+        not beginning with numbers.
+        The ParserElement 'exception' allows to specify a list of not
+        accepted identificators.
+
+        Can be overwritten by descendant to allow only specific ID patterns.
+        """
+        result = WordStart(alphas + self.supported_ident_non_alnums)
+        if exceptions is not None:
+            result += ~exceptions
+        result += Word(alphas + self.supported_ident_non_alnums,
+                       alphanums + self.supported_ident_non_alnums)
+        result += WordEnd(alphanums + self.supported_ident_non_alnums)
+        return result.setParseAction(self._converter(str))
 
     @staticmethod
     def _kwl(strs):
         """Generate a match-first list of keywords given a list of strings."""
-        return Regex(r'\b({})\b'.format('|'.join(strs)))
+        regex = '|'.join(strs)
+        if len(regex) == 0:
+            return NoMatch()
+        else:
+            return Regex(r'\b({})\b'.format(regex))
     
     
     @staticmethod
@@ -769,7 +783,20 @@ class CParser(object):
 
         return recombine
 
-    
+    @staticmethod
+    def filter_par(kwds):
+        """returns all keywords, that end with '(...)', but without '(...)'"""
+        for kwd in kwds:
+            if kwd.endswith('(...)'):
+                yield kwd[:-len('(...)')]
+
+    @staticmethod
+    def filter_no_par(kwds):
+        """returns all keywords, that do not end with '(...)'"""
+        for kwd in kwds:
+            if not kwd.endswith('(...)'):
+                yield kwd
+
     @staticmethod
     def _print_parse_results(pr, depth=0, name=''):
         """For debugging; pretty-prints parse result objects.
@@ -788,47 +815,33 @@ class CParser(object):
         else:
             print(start + str(pr))
     
-    
     def _build_parser(self):
         """Builds the entire tree of parser elements for the C language (the
         bits we support, anyway).
 
         """
-        # Some basic definitions
-        extra_types = list(WIN_TYPES)
-        extra_quals = list(WIN_TYPEQUALS)
-        extra_storcls = list(WIN_STORAGE_CLASSES)
-
-        base_types = self.nonnum_types + self.num_types + extra_types
-        storage_classes = ['static', 'extern', 'inline'] + extra_storcls
-        qualifiers = ['const', 'volatile', 'restrict',]
-
-        keywords = (['struct', 'enum', 'union'] +
-                    qualifiers + base_types + self.size_modifiers +
-                    self.sign_modifiers + storage_classes)
-
-        keyword = self._kwl(keywords)
-        wordchars = alphanums+'_$'
-        self.ident = (WordStart(wordchars) + ~keyword +
-                      Word(alphas + "_$", wordchars) +
-                      WordEnd(wordchars)).setParseAction(self._converter(str))
-
         def mergeNested(t):
             return ''.join((part if isinstance(part, basestring)
                             else '(' + mergeNested(part) + ')')
                            for part in t)
+
+        ident = self.generic_ident(exceptions=self.keyword)
+
         self.type_qualifier = ZeroOrMore(
-            (self._kwl(extra_quals) + Optional(nestedExpr()))
-                .setParseAction(mergeNested) |
-            self._kwl(qualifiers))
+            (self._kwl(self.filter_par(self.supported_type_qualifiers)) +
+             Optional(nestedExpr())).setParseAction(mergeNested) |
+            self._kwl(self.filter_no_par(self.supported_type_qualifiers)))
 
         self.storage_class_spec = ZeroOrMore(
-            (self._kwl(storage_classes) + Optional(nestedExpr()))
-            .setParseAction(mergeNested))
+            (self._kwl(self.filter_par(self.supported_storage_classes)) +
+             Optional(nestedExpr())).setParseAction(mergeNested) |
+            self._kwl(self.filter_no_par(self.supported_storage_classes)))
 
         # Language elements
         self.fund_type = OneOrMore(
-            self._kwl(self.sign_modifiers + self.size_modifiers + base_types)
+            self._kwl(self.supported_sign_modifiers +
+                      self.supported_size_modifiers +
+                      self.supported_base_types)
         ).setParseAction(lambda t: ' '.join(t))
 
         self.expression = Forward()
@@ -836,11 +849,11 @@ class CParser(object):
         # Is there a better way to process expressions with cast operators??
         cast_atom = (
             ZeroOrMore(self.uni_left_operator) +
-            Optional('('+self.ident+')').suppress() +
-            ((self.ident + '(' + Optional(delimitedList(self.expression)) +
+            Optional('('+ident+')').suppress() +
+            ((ident + '(' + Optional(delimitedList(self.expression)) +
                 ')' |
-              self.ident + OneOrMore('[' + self.expression + ']') |
-              self.ident |
+              ident + OneOrMore('[' + self.expression + ']') |
+              ident |
               self.number |
               quotedString
               ) |
@@ -851,12 +864,12 @@ class CParser(object):
         # XXX Added name here to catch macro functions on types
         uncast_atom = (
             ZeroOrMore(self.uni_left_operator) +
-            ((self.ident + '(' + Optional(delimitedList(self.expression)) +
+            ((ident + '(' + Optional(delimitedList(self.expression)) +
                 ')' |
-              self.ident + OneOrMore('[' + self.expression + ']') |
-              self.ident |
+              ident + OneOrMore('[' + self.expression + ']') |
+              ident |
               self.number |
-              self.name |
+              self.generic_ident() |
               quotedString
               ) |
              ('(' + self.expression + ')')) +
@@ -873,7 +886,7 @@ class CParser(object):
 
         self.struct_type = Forward()
         self.enum_type = Forward()
-        custom_type = self.ident.copy()
+        custom_type = ident.copy()
         type_astdef = (
             self.fund_type.setParseAction(
                 self._converter(c_model.BuiltinType)) |
@@ -932,7 +945,7 @@ class CParser(object):
             Group(ZeroOrMore(Group(self.type_qualifier +
                                    Suppress('*'))))('ptrs') +
             self.type_qualifier('qual') +
-            (self.ident('name') |
+            (ident('name') |
              (self.lparen + self.declarator + self.rparen)('center')) +
             Optional(self.lparen +
                      Optional(delimitedList(
@@ -1003,26 +1016,26 @@ class CParser(object):
                           Group(OneOrMore(self.struct_member))('members') +
                           self.rbrace)
         self.struct_type << (struct_kw('struct_type') +
-                             ((Optional(self.ident('name')) +
-                               self.decl_list) | self.ident('name'))
+                             ((Optional(ident('name')) +
+                               self.decl_list) | ident('name'))
                              )
         self.struct_type.setParseAction(self.process_compound)
 
         self.struct_decl = self.struct_type + self.semi
 
         # Enum definition
-        enum_var_decl = Group(self.ident('name') +
+        enum_var_decl = Group(ident('name') +
                               Optional(Literal('=').suppress() +
                               (self.integer('value') |
-                               self.ident('valueName'))))
+                               ident('valueName'))))
 
         self.enum_type << (Keyword('enum') +
-                           ((Optional(self.ident('name')) +
+                           ((Optional(ident('name')) +
                              self.lbrace +
                              Group(delimitedList(enum_var_decl))('members') +
                              Optional(self.comma) +
                              self.rbrace) |
-                            self.ident('name'))
+                            ident('name'))
                            )
         self.enum_type.setParseAction(self.process_enum)
         self.enum_decl = self.enum_type + self.semi
@@ -1277,3 +1290,15 @@ class CParser(object):
         if expr == '':
             return None
         return eval(expr, *args)
+
+
+class MSVCParser(CParser):
+
+    supported_base_types = CParser.supported_base_types + [
+        '__int64']
+    supported_type_qualifiers = CParser.supported_type_qualifiers + [
+        '__based', '__cdecl', '__fastcall', '__stdcall', '__restrict',
+        '__sptr', '__uptr', '__ptr64', '__w64', '__allowed(...)']
+    supported_storage_classes = CParser.supported_storage_classes + [
+        '__declspec(...)', '__forceinline', '__inline']
+    supported_ident_non_alnums = '_$'

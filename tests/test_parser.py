@@ -18,9 +18,9 @@ import tempfile
 import shutil
 import io
 from pytest import raises
-from pyclibrary.c_parser import CParser, InvalidCacheError
+from pyclibrary.c_parser import CParser, InvalidCacheError, MSVCParser
 import pyclibrary.utils
-from pyclibrary import errors as err
+from pyclibrary import errors as err, DefinitionError
 import pyclibrary.c_model as cm
 
 
@@ -262,7 +262,6 @@ class TestPreprocessing(object):
 
         # Muliline macro
         assert 'MACRO_ML' in macros and values['MACRO_ML'] == 2
-        assert '$MACRO$' in macros
 
     def test_conditionals(self):
         path = self.hdr_file_path('macro_conditionals.h')
@@ -400,7 +399,7 @@ class TestParsing(object):
 
     def setup(self):
         self.clib_intf = cm.CLibInterface()
-        self.parser = CParser(self.clib_intf)
+        self.parser = MSVCParser(self.clib_intf)
 
     def test_variables(self):
         self.parser.read(self.hdr_file_path('variables.h'))
@@ -418,9 +417,6 @@ class TestParsing(object):
         assert vars['long_int'] == cm.BuiltinType('long int')
         assert vars['long_un'] == cm.BuiltinType('unsigned long')
         assert vars['long_int_un'] == cm.BuiltinType('unsigned long int')
-        if sys.platform == 'win32':   ###TODO: this has to be dependend on CParser objects, not on hosting opering system
-            assert vars['int64'] == cm.BuiltinType('__int64')
-            assert vars['int64_un'] == cm.BuiltinType('unsigned __int64')
         assert vars['long_long'] == cm.BuiltinType('long long')
         assert vars['long_long_int'] == cm.BuiltinType('long long int')
         assert vars['long_long_un'] == cm.BuiltinType('unsigned long long')
@@ -705,3 +701,66 @@ class TestParsing(object):
                 cm.FunctionType(cm.BuiltinType('void'), [
                     ('arr_params', cm.ArrayType(
                         cm.BuiltinType('int'), None))]))
+
+
+class TestMSVCParser(object):
+
+    def test_extended_types(self):
+        srccode = """
+            __int64 int64;
+            unsigned __int64 int64_un;
+        """
+        std_parser = CParser()
+        std_parser.read(io.StringIO(srccode))
+        assert not isinstance(std_parser.clib_intf['int64'], cm.BuiltinType)
+
+        ms_parser = MSVCParser()
+        ms_parser.read(io.StringIO(srccode))
+        assert ms_parser.clib_intf['int64'] == cm.BuiltinType('__int64')
+        assert (ms_parser.clib_intf['int64_un'] ==
+                cm.BuiltinType('unsigned __int64'))
+
+    def test_extended_typequals(self):
+        srccode = """
+            int __w64 w64;
+        """
+        std_parser = CParser()
+        std_parser.read(io.StringIO(srccode))
+        assert not isinstance(std_parser.clib_intf['w64'], cm.BuiltinType)
+
+        ms_parser = MSVCParser()
+        ms_parser.read(io.StringIO(srccode))
+        assert (ms_parser.clib_intf['w64'] ==
+                cm.BuiltinType('int', quals=['__w64']))
+
+    def test_extended_storage_classes(self):
+        srccode = """
+            int __declspec(dllexport) exp_int;
+            int __inline inline_func();
+        """
+        std_parser = CParser()
+        std_parser.read(io.StringIO(srccode))
+        assert (std_parser.clib_intf.storage_classes.get('exp_int') !=
+                ['__declspec(dllexport)'])
+        assert (std_parser.clib_intf.storage_classes.get('inline_func') !=
+                ['__inline'])
+
+        ms_parser = MSVCParser()
+        ms_parser.read(io.StringIO(srccode))
+        assert (ms_parser.clib_intf.storage_classes['exp_int'] ==
+                ['__declspec(dllexport)'])
+        assert (ms_parser.clib_intf.storage_classes['inline_func'] ==
+                ['__inline'])
+
+    def test_extended_idents(self):
+        srccode = """
+            #define $X$ $y$
+            int $X$;
+        """
+        std_parser = CParser()
+        with raises(DefinitionError):
+            std_parser.read(io.StringIO(srccode))
+
+        ms_parser = MSVCParser()
+        ms_parser.read(io.StringIO(srccode))
+        assert ms_parser.clib_intf['$y$'] == cm.BuiltinType('int')

@@ -12,7 +12,7 @@ windows header files return the same results.
 """
 from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
-from pyclibrary.c_parser import CParser
+from pyclibrary.c_parser import MSVCParser
 from pyclibrary.c_model import CLibInterface, FnMacro
 from pyclibrary.utils import add_header_locations
 import os
@@ -22,7 +22,7 @@ SDK_DIR = r'c:\program files\microsoft sdks\windows\v6.0a\include'
 
 def load_cached_win_defs():
     this_dir = os.path.dirname(__file__)
-    parser = CParser()
+    parser = MSVCParser()
     parser.load_cache(os.path.join(this_dir, 'WinDefs.cache'))
     return parser
 
@@ -38,7 +38,7 @@ def generate_win_defs(version='1500'):
     clib_intf.add_macro('DECLARE_HANDLE',
                         FnMacro('typedef HANDLE name', ['name']))
 
-    parser = CParser(clib_intf)
+    parser = MSVCParser(clib_intf)
     for header_file in header_files:
         parser.read(header_file)
 
