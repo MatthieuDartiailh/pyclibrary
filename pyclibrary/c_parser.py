@@ -52,13 +52,11 @@ else:
 
 
 def win_defs_parser(version=1500, force_update=False, sdk_dir=None):
-    ###TODO: update docstring
-    """Loads selection of windows headers included with PyCLibrary.
+    """Creates a parser, that is prepared with windows header files.
 
-    These definitions can either be accessed directly or included before
-    parsing another file like this:
-    >>> windefs = win_defs()
-    >>> p = CParser("headerFile.h", copy_from=windefs)
+    These definitions can be used before parsing another file like this:
+    >>> win_parser = win_defs_parser()
+    >>> win_parser.read("headerFile.h")
 
     Definitions are pulled from a selection of header files included in Visual
     Studio (possibly not legal to distribute? Who knows.), some of which have
@@ -69,9 +67,17 @@ def win_defs_parser(version=1500, force_update=False, sdk_dir=None):
     version : unicode
         Version of the MSVC to consider when parsing.
 
+    force_update : bool, optional
+        If True, the cached header files are reparsed, even if they are
+        up-to-date
+
+    sdk_dir : str
+        Has to refer to the visual studio header files directory, where
+        all windows header files are located in.
+
     Returns
     -------
-    parser : CParser
+    parser : MSVCParser
         CParser containing all the infos from te windows headers.
 
     """
@@ -115,42 +121,64 @@ def win_defs_parser(version=1500, force_update=False, sdk_dir=None):
 
 
 class CParser(object):
-    ###TODO: update docstring
-    """...
+    """A Parser object is used to analyse a C header file and store its
+      declarations in a corresponding CLibInterface. Every Parser generates
+      an assigned CLibInterface on creation. Then as many header files as
+      needed can be added to this CLibInterface by calling CParser.read() per
+      header file.
+
+      Alternatively the it is also possible to call the basic operations
+      .remove_comment(), .preprocess(), .parse() individially.
+
+      For getting better performance the result of a/multiple read() can be
+      stored with CParser.write_cache() once and then restored via
+      CParser.load_cache() for getting better performance.
+
+    Parameters
+    ----------
+    header_dirs : list[str], optional
+        A list of directory names, that shall be used to search relative
+        header file names in. If absolute header file names are provided to
+        .read() this is ignored
+
+    predef_macros : list[tuple[str, str]], optional
+        A optional list of predefined macros
+
+    Attributes
+    ----------
+    clib_intf : CLibInterface
+        All parse results are stored here. To detach this object from the
+        parser call .reset_clib_intf().
 
     Example
     -------
-    Create parser object, load two files
+    Create parser object:
 
-    >>> p = CParser(['header1.h', 'header2.h'])
+    >>> p = CParser()
 
     Remove comments, preprocess, and search for declarations
 
-    >>> p.process_ all()
+    >>> p.read('header_file1.h')
+    >>> p.read('header_file2.h')
 
     Just to see what was successfully parsed from the files
 
-    >>> p.print_all()
+    >>> p.clib_intf.print_all()
 
     Access parsed declarations
 
-    >>> p.clib_intf
-
-    To see what was not successfully parsed
-
-    >>> unp = p.process_all(return_unparsed=True)
-    >>> for s in unp:
-            print s
+    >>> p.clib_intf['var1']
 
     """
     #: Increment every time cache structure or parsing changes to invalidate
     #: old cache files.
-    cache_version = 2
+    cache_version = 3
 
     def __init__(self, header_dirs=None, predef_macros=None):
         self._build_parser()
 
         self.predef_macros = {
+            # dummy values for predefined macros
             '__DATE__': 'Jan 01 1970',
             '__FILE__': 'filename.h',
             '__LINE__': '1',
@@ -169,8 +197,7 @@ class CParser(object):
 
 
     def read(self, hdr_file, replace_texts=None, virtual_filename=None,
-             pack_list=None, preproc_out_file=None):
-        ###TODO: rework docstring
+             preproc_out_file=None):
         """ Remove comments, preprocess, and parse declarations from all
         files.
 
@@ -178,25 +205,25 @@ class CParser(object):
 
         Parameters
         ----------
-        cache : unicode, optional
-            File path where cached results are be stored or retrieved. The
-            cache is automatically invalidated if any of the arguments to
-            __init__ are changed, or if the C files are newer than the cache.
-        return_unparsed : bool, optional
-           Passed directly to parse.
+        hdr_file : str|file-like-obj
+            The fileobj (or filename) of the header source code.
 
-        print_after_preprocess : bool, optional
-            If true prints the result of preprocessing each file.
+        replace_texts : dict[str, str], optional
+            Mapping of regular expressions to replace texts. Is used if the
+            source code contains constructs, that cannot be processed by
+            pyclibrary.
 
-        Returns
-        -------
-        results : list
-            List of the results from parse.
+        virtual_filename : str, optional
+            if hdr_file is a file-like object this allows to provide a
+            filename. Alternatively the real filename provided in hdr_file can
+            be replaced by a 'virtual' filename
+
+        preproc_out_file : file-like-obj, optional
+            If a file is specified, the output of the preprocessor is written
+            to this file. For debugging purposes set:
+            preproc_out_file=sys.stdout
 
         """
-        if pack_list is None:
-            pack_list = []
-
         if isinstance(hdr_file, basestring):
             filename = self.find_header(hdr_file)
             hdr_file = open(filename, 'rU')
@@ -217,6 +244,7 @@ class CParser(object):
 
             logger.debug("Preprocessing file '{}'..."
                          .format(self.cur_file_name))
+            pack_list = []
             preproc_srccode = self.preprocess(nocomments_srccode, pack_list)
             if preproc_out_file is not None:
                 preproc_out_file.write(preproc_srccode)
@@ -231,8 +259,16 @@ class CParser(object):
             self.cur_file_name = None
 
     def reset_clib_intf(self):
-        ###TODO: add docstring
-        # create a model with dummy values for predefined macros
+        """Detaches the current .clib_intf object from the parser and creates
+        a new one.
+
+        Returns
+        -------
+        CLibInterface
+            the backend for further .read() operations. Will be filled with
+            predefined macros.
+
+        """
         self.clib_intf = c_model.CLibInterface()
         for name, content in self.predef_macros.items():
             self.clib_intf.add_macro(name, content)
@@ -1309,7 +1345,31 @@ class CParser(object):
 
 
 class MSVCParser(CParser):
-    ###TODO: update docstring
+    """A CParser that takes the MicroSoft Visual C extensions into account.
+    These are:
+
+    - the '__int64' type
+    - additional type qualifiers like __cdecl, __stdcall, __restrict, ...
+    - the __declspec(), __inline and __forceinline extensions
+    - allows usage of '$' in  identifier names
+    - additional predefines like '_MSC_VER'
+
+    Parameters
+    ----------
+    header_dirs : list[str], optional
+        same as CParser
+
+    predef_macros : dict[str, str], optional
+        same as CParser
+
+    msc_ver : int, optional
+        The C compiler version that shall be emulated (usually 1500 for
+        version 15.00)
+
+    arch : int, optional
+        The architecture of the backend. Can be 32 or 64 (bits).
+
+    """
 
     supported_base_types = CParser.supported_base_types + [
         '__int64']
