@@ -39,7 +39,7 @@ ParserElement.enablePackrat()
 
 logger = logging.getLogger(__name__)
 
-__all__ = ['win_defs', 'CParser', 'MSVCParser', 'SYS_HEADER_DIRS']
+__all__ = ['win_defs_parser', 'CParser', 'MSVCParser', 'SYS_HEADER_DIRS']
 
 if sys.platform == 'darwin':
     SYS_HEADER_DIRS = ('/usr/local/include', '/usr/include',
@@ -51,7 +51,7 @@ else:
     SYS_HEADER_DIRS = ()
 
 
-def win_defs_parser(version=1500, force_update=False, sdk_dir=None):
+def win_defs_parser(version=1500, arch=32, force_update=False, sdk_dir=None):
     """Creates a parser, that is prepared with windows header files.
 
     These definitions can be used before parsing another file like this:
@@ -66,6 +66,13 @@ def win_defs_parser(version=1500, force_update=False, sdk_dir=None):
     ----------
     version : unicode
         Version of the MSVC to consider when parsing.
+
+    arch : int, optional
+        The architecture (32=default or 64) of the header files.
+        Biggest part of API should be parsed correctly even if wrong arch is
+        specified, but some parts of windows.h are guarded by the architecture
+        defines _M_X86 or _M_AMD64. These parts could require the correct
+        'arch' value to work properly.
 
     force_update : bool, optional
         If True, the cached header files are reparsed, even if they are
@@ -88,7 +95,7 @@ def win_defs_parser(version=1500, force_update=False, sdk_dir=None):
 
     parser = MSVCParser(header_dirs=[sdk_dir],
                         predef_macros={'_WIN32': '', 'NO_STRICT': ''},
-                        msc_ver=version, arch=32, )
+                        msc_ver=version, arch=arch)
 
     # the fix header file order is very fragile, as there is no clean
     # dependency tree between them. This is why the 'DECLARE_HANDLE' has to be
@@ -262,12 +269,6 @@ class CParser(object):
         """Detaches the current .clib_intf object from the parser and creates
         a new one.
 
-        Returns
-        -------
-        CLibInterface
-            the backend for further .read() operations. Will be filled with
-            predefined macros.
-
         """
         self.clib_intf = c_model.CLibInterface()
         for name, content in self.predef_macros.items():
@@ -294,7 +295,7 @@ class CParser(object):
         Returns
         -------
         result : CLibInterface
-            cache lib interface read from interface.
+            cache lib interface read from 'cache_file'.
 
         """
         # Make sure cache file exists
@@ -539,11 +540,12 @@ class CParser(object):
                     if if_true[-1]:
                         try:
                             self.clib_intf.del_macro(macro_name.strip())
+                        except KeyError:
+                            pass
                         except Exception:
-                            if sys.exc_info()[0] is not KeyError:
-                                mess = "Error removing macro definition '{}'"
-                                logger.exception(
-                                    mess.format(macro_name.strip()))
+                            mess = "Error removing macro definition '{}'"
+                            logger.exception(
+                                mess.format(macro_name.strip()))
 
                 # Check for changes in structure packing
                 # Support only for #pragme pack (with all its variants
@@ -654,9 +656,11 @@ class CParser(object):
         Faulty calls to macro function are left untouched.
 
         """
+        # this reg will match either a string an identifier. This way
+        # we avoid, that accidentially identifiers WITHIN strings are matched
         reg = re.compile(
             r'("(\\"|[^"])*")|'
-            '(([a-zA-Z0-9' + self.supported_ident_non_alnums + ']+))')
+            r'(([a-zA-Z0-9' + self.supported_ident_non_alnums + ']+))')
         parts = []
         # The group number to check for macro names
         N = 3
@@ -796,6 +800,7 @@ class CParser(object):
         accepted identificators.
 
         Can be overwritten by descendant to allow only specific ID patterns.
+
         """
         result = WordStart(alphas + self.supported_ident_non_alnums)
         if exceptions is not None:
@@ -1366,8 +1371,9 @@ class MSVCParser(CParser):
         The C compiler version that shall be emulated (usually 1500 for
         version 15.00)
 
-    arch : int, optional
-        The architecture of the backend. Can be 32 or 64 (bits).
+    arch : {32, 64}, optional
+        The architecture of the backend.
+        Is specified in bits per machine word.
 
     """
 

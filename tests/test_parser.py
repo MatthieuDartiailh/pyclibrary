@@ -13,14 +13,12 @@ from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 
 import os
-import tempfile
-import shutil
 import io
 from pytest import raises
-from pyclibrary.c_parser import CParser, InvalidCacheError, MSVCParser
-from pyclibrary import errors as err, DefinitionError
+import py
+from pyclibrary.c_parser import CParser, MSVCParser
+from pyclibrary.errors import InvalidCacheError, DefinitionError
 import pyclibrary.c_model as cm
-
 
 H_DIRECTORY = 'headers'
 
@@ -111,41 +109,38 @@ class TestFileHandling(object):
         assert 'MACRO_B' not in parser.clib_intf
         assert clib_intf['MACRO_A'].content == 'replaced_val_a'
 
-    def test_caching(self):
-        temp_dir = tempfile.mkdtemp()
-        try:
-            cache_file_name = os.path.join(temp_dir, 'temp.cache')
-            test_filename = os.path.join(temp_dir, 'test.h')
-            shutil.copy(self.hdr_file_path('test.h'), test_filename)
+    def test_caching(self, tmpdir):
+        test_file = tmpdir.join('test.h')
+        test_filename = str(test_file)
+        cache_filename = str(tmpdir.join('temp.cache'))
+        py.path.local(self.hdr_file_path('test.h')).copy(test_file)
 
-            # create cache of clib_intf of multi_file2 & temporary multi_file1
-            self.parser.read(test_filename)
-            self.parser.read(self.hdr_file_path('test2.h'))
-            self.parser.write_cache(cache_file_name)
+        # create cache of clib_intf of multi_file2 & temporary multi_file1
+        self.parser.read(test_filename)
+        self.parser.read(self.hdr_file_path('test2.h'))
+        self.parser.write_cache(cache_filename)
 
-            # test caching ok
-            parser2 = CParser()
-            parser2.load_cache(cache_file_name)
-            assert parser2.clib_intf['TEST'].content == '1'
-            assert (parser2.file_order ==
-                    [test_filename, self.hdr_file_path('test2.h')])
+        # test caching ok
+        parser2 = CParser()
+        parser2.load_cache(cache_filename)
+        assert parser2.clib_intf['TEST'].content == '1'
+        assert (parser2.file_order ==
+                [test_filename, self.hdr_file_path('test2.h')])
 
-            # test wrong predefs
-            predef_parser = CParser(predef_macros={'A': ''})
-            with raises(InvalidCacheError):
-                predef_parser.load_cache(cache_file_name, check_validity=True)
+        # test wrong predefs
+        predef_parser = CParser(predef_macros={'A': ''})
+        with raises(InvalidCacheError):
+            predef_parser.load_cache(cache_filename, check_validity=True)
 
-            # test header file modification detection
-            open(test_filename, "wt").write('\n//modification')
-            with raises(InvalidCacheError):
-                parser2.load_cache(cache_file_name, check_validity=True)
+        # test header file modification detection
+        open(test_filename, "wt").write('\n//modification')
+        with raises(InvalidCacheError):
+            parser2.load_cache(cache_filename, check_validity=True)
 
-            # test ignoring outdated file
-            parser3 = CParser()
-            parser3.load_cache(cache_file_name)
-            assert parser3.clib_intf['TEST'].content == '1'
-        finally:
-            shutil.rmtree(temp_dir, ignore_errors=True)
+        # test ignoring outdated file
+        parser3 = CParser()
+        parser3.load_cache(cache_filename)
+        assert parser3.clib_intf['TEST'].content == '1'
 
         parser = CParser()
         with raises(InvalidCacheError):
@@ -191,7 +186,7 @@ class TestPreprocessing(object):
             os.path.join(this_dir, H_DIRECTORY, 'macros')])
 
     def test_invalid_define(self):
-        with raises(err.DefinitionError):
+        with raises(DefinitionError):
             self.parser.read('macro_invalid.h')
 
     def test_values(self):
