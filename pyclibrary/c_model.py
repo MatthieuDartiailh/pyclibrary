@@ -43,7 +43,7 @@ from __future__ import (division, unicode_literals, print_function,
 import collections
 import itertools
 import re
-from past.builtins import basestring
+from future.utils import istext, isbytes
 from .errors import UnknownCustomTypeError
 
 
@@ -1018,7 +1018,7 @@ class CLibInterface(collections.Mapping):
             Filename, where the macro is defined in (if known)
 
         """
-        if isinstance(macro, basestring):
+        if istext(macro) or isbytes(macro):
             macro = ValMacro(macro)
         self._add_obj(self.macros, name, macro, filename)
 

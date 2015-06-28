@@ -20,7 +20,6 @@ import os
 import logging
 from inspect import cleandoc
 from future.utils import istext, isbytes
-from past.builtins import basestring
 from ast import literal_eval
 from traceback import format_exc
 import pickle
@@ -231,7 +230,7 @@ class CParser(object):
             preproc_out_file=sys.stdout
 
         """
-        if isinstance(hdr_file, basestring):
+        if istext(hdr_file) or isbytes(hdr_file):
             filename = self.find_header(hdr_file)
             hdr_file = open(filename, 'rU')
         else:
@@ -299,7 +298,7 @@ class CParser(object):
 
         """
         # Make sure cache file exists
-        if not istext(cache_file):
+        if not istext(cache_file) and not isbytes(cache_file):
             raise ValueError("Cache file option must be a unicode.")
         if not os.path.isfile(cache_file):
             # If file doesn't exist, search for it in this module's path
@@ -878,7 +877,7 @@ class CParser(object):
 
         """
         def mergeNested(t):
-            return ''.join((part if isinstance(part, basestring)
+            return ''.join((part if istext(part) or isbytes(part)
                             else '(' + mergeNested(part) + ')')
                            for part in t)
 

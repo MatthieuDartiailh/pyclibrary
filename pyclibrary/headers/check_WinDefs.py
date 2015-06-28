@@ -13,7 +13,7 @@ windows header files return the same results.
 from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 from pyclibrary.c_parser import MSVCParser
-from pyclibrary.c_model import CLibInterface, FnMacro
+from pyclibrary.c_model import FnMacro
 import os
 import time
 
