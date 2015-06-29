@@ -22,13 +22,14 @@ SDK_DIR = r'c:\program files\microsoft sdks\windows\v6.0a\include'
 def load_cached_win_defs():
     this_dir = os.path.dirname(__file__)
     parser = MSVCParser(msc_ver=1500, arch=32, header_dirs=[SDK_DIR])
-    parser.load_cache(os.path.join(this_dir, 'WinDefs.cache'))
+    parser.load_cache(os.path.join(this_dir, 'WinDefs.cache'),
+                      check_validity=True)
     return parser
 
 def generate_win_defs():
-    parser = MSVCParser(msc_ver=1500, arch=32, header_dirs=[SDK_DIR])
-    parser.clib_intf.add_macro('_WIN32')
-    parser.clib_intf.add_macro('NO_STRICT')
+    parser = MSVCParser(header_dirs=[SDK_DIR],
+                        predef_macros={'_WIN32': '', 'NO_STRICT': ''},
+                        msc_ver=1500, arch=32)
     parser.clib_intf.add_macro(
         'DECLARE_HANDLE', FnMacro('typedef HANDLE name', ['name']))
 
