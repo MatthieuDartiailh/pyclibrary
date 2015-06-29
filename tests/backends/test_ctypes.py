@@ -18,7 +18,6 @@ import os
 import _ctypes_test
 from pytest import raises, mark
 
-from pyclibrary.utils import (add_header_locations, HEADER_DIRS)
 from pyclibrary.c_library import CLibrary
 
 

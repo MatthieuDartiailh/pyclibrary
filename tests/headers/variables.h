@@ -15,8 +15,6 @@ long long1 = 1;
 long int long_int = 1;
 unsigned long long_un = 1;
 unsigned long int long_int_un = 1;
-__int64 int64 = 1;
-unsigned __int64 int64_un = 1;
 long long long_long = 1;
 long long int long_long_int = 1;
 unsigned long long long_long_un = 1;
@@ -55,3 +53,5 @@ const int * volatile * typeQualedIntPtrPtr, volatile * typeQualedIntPtr;
 
 // Test type definition precedence
 int (*prec_ptr_of_arr)[1], *(prec_arr_of_ptr[1]), *prec_arr_of_ptr2[1];
+
+int __$decl $ms_type_qual_test;

@@ -19,8 +19,7 @@ import _ctypes_test
 import ctypes
 from pytest import yield_fixture, mark
 
-from pyclibrary.utils import (add_library_locations, add_header_locations,
-                              LIBRARY_DIRS, HEADER_DIRS)
+from pyclibrary.utils import (add_library_locations, LIBRARY_DIRS)
 from pyclibrary.c_library import CLibrary
 
 

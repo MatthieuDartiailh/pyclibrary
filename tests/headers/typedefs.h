@@ -9,7 +9,7 @@ typedef unsigned long ULONG;
 
 // Typedef using type anotations.
 typedef void const *voidpc;
-typedef char far charf;
+typedef char volatile charv;
 
 // test using newly defined type.
 typeTypeInt *ttip5[5];

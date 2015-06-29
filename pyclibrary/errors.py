@@ -31,3 +31,8 @@ class DefinitionError(PyCLibError):
 class UnknownCustomTypeError(PyCLibError):
     """Thrown when a CLibType could not be resolved"""
     pass
+
+
+class InvalidCacheError(PyCLibError):
+    """The Cache is not up to date any more"""
+    pass

@@ -13,14 +13,14 @@ from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 
 import os
-import sys
+import io
 from pytest import raises
-from pyclibrary.c_parser import CParser
-import pyclibrary.utils
+import py
+from pyclibrary.c_parser import CParser, MSVCParser
+from pyclibrary.errors import InvalidCacheError, DefinitionError
 import pyclibrary.c_model as cm
 
-
-H_DIRECTORY = os.path.join(os.path.dirname(__file__), 'headers')
+H_DIRECTORY = 'headers'
 
 
 def compare_lines(lines, lines2):
@@ -36,104 +36,164 @@ class TestFileHandling(object):
 
     """
 
-    h_dir = os.path.join(H_DIRECTORY, 'file_handling')
+    def hdr_file_path(self, name):
+        this_dir = os.path.dirname(__file__)
+        return os.path.join(this_dir, H_DIRECTORY, 'file_handling', name)
 
     def setup(self):
-
-        self.parser = CParser(process_all=False)
-
-    def test_init(self):
-        parser = CParser(os.path.join(self.h_dir, 'replace.h'))
-        assert parser.files is not None
+        self.parser = CParser()
 
     def test_find_file(self):
+        this_dir = os.path.dirname(__file__)
+        h_dir = os.path.join(this_dir, H_DIRECTORY, 'file_handling')
+        abs_hdr_path = self.hdr_file_path('test.h')
 
-        saved_headers = pyclibrary.utils.HEADER_DIRS
-        try:
-            pyclibrary.utils.add_header_locations([self.h_dir])
-            assert self.h_dir in pyclibrary.utils.HEADER_DIRS
-            assert self.parser.find_headers(['replace.h']) == \
-                   [os.path.join(self.h_dir, 'replace.h')]
-        finally:
-            pyclibrary.utils.HEADER_DIRS = saved_headers
+        parser_withdir = CParser(header_dirs=[h_dir])
+        assert (parser_withdir.find_header('test.h') ==
+                os.path.join(h_dir, 'test.h'))
+        assert parser_withdir.find_header(abs_hdr_path) == abs_hdr_path
 
-        abs_hdr_path = os.path.join(self.h_dir, 'replace.h')
-        assert self.parser.find_headers([abs_hdr_path]) == [abs_hdr_path]
-        abs_hdr_path2 = os.path.join(self.h_dir, 'c_comments.h')
-        assert len(self.parser.find_headers([abs_hdr_path, abs_hdr_path2])) == 2
+        with raises(IOError):
+            self.parser.find_header('test.h')
+        assert self.parser.find_header(abs_hdr_path) == abs_hdr_path
 
-
-    def test_load_file(self):
-
-        path = os.path.join(self.h_dir, 'replace.h')
-        assert self.parser.load_file(path)
-        assert self.parser.files[path] is not None
-        assert self.parser.file_order == [path]
-        assert self.parser.init_opts['replace']['replace.h'] is None
-        assert self.parser.init_opts['files'] == ['replace.h']
-
-    def test_load_file_and_replace(self):
-
-        path = os.path.join(self.h_dir, 'replace.h')
+    def test_fix_bad_code(self):
         rep = {'{placeholder}': '1', 'placeholder2': '2'}
-        assert self.parser.load_file(path, rep)
+        srccode = ('# define MACRO {placeholder}\n'
+                   '\n'
+                   '# ifdef MACRO\n'
+                   '    # define MACRO2 placeholder2\n'
+                   '# endif\n')
+        lines = self.parser.fix_bad_code(srccode, rep).split('\n')
 
-        lines = self.parser.files[path].split('\n')
-        assert lines[3] == '# define MACRO 1'
-        assert lines[6] == '    # define MACRO2 2'
+        assert lines[0] == '# define MACRO 1'
+        assert lines[3] == '    # define MACRO2 2'
 
-        lines[3] = '# define MACRO {placeholder}'
-        lines[6] = '    # define MACRO2 placeholder2'
-        with open(path) as f:
-            compare_lines(lines, f.readlines())
-
-        assert self.parser.file_order == [path]
-        assert self.parser.init_opts['replace']['replace.h'] == rep
-        assert self.parser.init_opts['files'] == ['replace.h']
+        lines[0] = '# define MACRO {placeholder}'
+        lines[3] = '    # define MACRO2 placeholder2'
+        compare_lines(lines, srccode.split('\n'))
 
     def test_load_non_existing_file(self):
-
-        path = os.path.join(self.h_dir, 'no.h')
-        assert not self.parser.load_file(path)
-        assert self.parser.files[path] is None
+        path = self.hdr_file_path('no.h')
+        with raises(IOError):
+            self.parser.read(path)
+        assert path not in self.parser.file_order
 
     def test_removing_c_comments(self):
+        srccode = open(self.hdr_file_path('c_comments.h')).read()
+        nocomment_srccode = self.parser.remove_comments(srccode)
 
-        path = os.path.join(self.h_dir, 'c_comments.h')
-        self.parser.load_file(path)
-        self.parser.remove_comments(path)
-        with open(os.path.join(self.h_dir, 'c_comments_removed.h'), 'rU') as f:
-            compare_lines(self.parser.files[path].split('\n'), f.readlines())
+        with open(self.hdr_file_path('c_comments_removed.h'), 'rU') as f:
+            compare_lines(nocomment_srccode.split('\n'), f.readlines())
 
     def test_removing_cpp_comments(self):
+        srccode = open(self.hdr_file_path('cpp_comments.h')).read()
+        nocomment_srccode = self.parser.remove_comments(srccode)
+        with open(self.hdr_file_path('cpp_comments_removed.h'), 'rU') as f:
+            compare_lines(nocomment_srccode.split('\n'), f.readlines())
 
-        path = os.path.join(self.h_dir, 'cpp_comments.h')
-        self.parser.load_file(path)
-        self.parser.remove_comments(path)
-        with open(os.path.join(self.h_dir,
-                               'cpp_comments_removed.h'), 'rU') as f:
-            compare_lines(self.parser.files[path].split('\n'), f.readlines())
+    def test_process_multiple_files(self):
+        parser = CParser()
+        clib_intf = parser.clib_intf
+        parser.read(self.hdr_file_path('multi_file1.h'))
+        parser.read(self.hdr_file_path('multi_file2.h'))
+        assert parser.file_order == [self.hdr_file_path('multi_file1.h'),
+                                     self.hdr_file_path('multi_file2.h')]
+        assert clib_intf['MACRO_A'].content == 'replaced_val_a'
+        assert clib_intf['MACRO_B'].content == 'base_val_b'
+
+        parser.reset_clib_intf()
+        assert parser.file_order == []
+        parser.read(self.hdr_file_path('multi_file3.h'))
+        assert parser.clib_intf['MACRO_A'].content == 'other_val_a'
+        assert 'MACRO_B' not in parser.clib_intf
+        assert clib_intf['MACRO_A'].content == 'replaced_val_a'
+
+    def test_caching(self, tmpdir):
+        test_file = tmpdir.join('test.h')
+        test_filename = str(test_file)
+        cache_filename = str(tmpdir.join('temp.cache'))
+        py.path.local(self.hdr_file_path('test.h')).copy(test_file)
+
+        # create cache of clib_intf of multi_file2 & temporary multi_file1
+        self.parser.read(test_filename)
+        self.parser.read(self.hdr_file_path('test2.h'))
+        self.parser.write_cache(cache_filename)
+
+        # test caching ok
+        parser2 = CParser()
+        parser2.load_cache(cache_filename)
+        assert parser2.clib_intf['TEST'].content == '1'
+        assert (parser2.file_order ==
+                [test_filename, self.hdr_file_path('test2.h')])
+
+        # test wrong predefs
+        predef_parser = CParser(predef_macros={'A': ''})
+        with raises(InvalidCacheError):
+            predef_parser.load_cache(cache_filename, check_validity=True)
+
+        # test header file modification detection
+        open(test_filename, "wt").write('\n//modification')
+        with raises(InvalidCacheError):
+            parser2.load_cache(cache_filename, check_validity=True)
+
+        # test ignoring outdated file
+        parser3 = CParser()
+        parser3.load_cache(cache_filename)
+        assert parser3.clib_intf['TEST'].content == '1'
+
+        parser = CParser()
+        with raises(InvalidCacheError):
+            parser.load_cache('invalid_file_name')
+
+    def test_read_fileobj(self):
+        self.parser.read(io.StringIO('#define TEST is_defined'))
+        assert 'TEST' in self.parser.clib_intf
+
+    def test_filemap(self):
+        test_filename = self.hdr_file_path('test.h')
+
+        parser = CParser()
+        parser.read(test_filename)
+        assert parser.clib_intf.file_map['TEST'] == test_filename
+
+        parser = CParser()
+        parser.read(test_filename, virtual_filename='/file/name')
+        assert parser.clib_intf.file_map['TEST'] == '/file/name'
+
+        parser = CParser()
+        parser.read(open(test_filename))
+        assert parser.clib_intf.file_map['TEST'] == test_filename
+
+        parser = CParser()
+        parser.read(io.StringIO('#define TEST 1'))
+        assert parser.clib_intf.file_map['TEST'] is None
+
+        parser = CParser()
+        parser.read(io.StringIO('#define TEST 1'),
+                    virtual_filename='/file/name')
+        assert parser.clib_intf.file_map['TEST'] == '/file/name'
 
 
 class TestPreprocessing(object):
     """Test preprocessing.
 
     """
-    h_dir = os.path.join(H_DIRECTORY, 'macros')
 
     def setup(self):
+        this_dir = os.path.dirname(__file__)
+        self.parser = CParser(header_dirs=[
+            os.path.join(this_dir, H_DIRECTORY, 'macros')])
 
-        self.parser = CParser(process_all=False)
+    def test_invalid_define(self):
+        with raises(DefinitionError):
+            self.parser.read('macro_invalid.h')
 
     def test_values(self):
-
-        path = os.path.join(self.h_dir, 'macro_values.h')
-        self.parser.load_file(path)
-        self.parser.remove_comments(path)
-        self.parser.preprocess(path)
+        self.parser.read('macro_values.h')
 
         macros = self.parser.clib_intf.macros
-        values = self.parser.macro_vals
+        values = self.parser.clib_intf.macro_vals
 
         assert macros['M'].content == ''
         assert macros['N'].content == 'n' and values['N'] is None
@@ -194,15 +254,12 @@ class TestPreprocessing(object):
         assert 'MACRO_ML' in macros and values['MACRO_ML'] == 2
 
     def test_conditionals(self):
-
-        path = os.path.join(self.h_dir, 'macro_conditionals.h')
-        self.parser.load_file(path)
-        self.parser.remove_comments(path)
-        self.parser.preprocess(path)
-        self.parser.parse_defs(path)
+        preproc_srccode_fileobj = io.StringIO()
+        self.parser.read('macro_conditionals.h',
+                         preproc_out_file=preproc_srccode_fileobj)
 
         macros = self.parser.clib_intf.macros
-        stream = self.parser.files[path]
+        stream = preproc_srccode_fileobj.getvalue()
 
         # Test if defined conditional
         assert 'DEFINE_IF' in macros
@@ -261,16 +318,13 @@ class TestPreprocessing(object):
         assert 'UNDEF' not in macros
 
     def test_macro_function(self):
+        preproc_srccode_fileobj = io.StringIO()
+        self.parser.read('macro_functions.h',
+                         preproc_out_file=preproc_srccode_fileobj)
 
-        path = os.path.join(self.h_dir, 'macro_functions.h')
-        self.parser.load_file(path)
-        self.parser.remove_comments(path)
-        self.parser.preprocess(path)
-        self.parser.parse_defs(path)
-
-        values = self.parser.macro_vals
+        values = self.parser.clib_intf.macro_vals
         macros = self.parser.clib_intf.macros
-        stream = self.parser.files[path]
+        stream = preproc_srccode_fileobj.getvalue()
 
         # Test macro declaration.
         assert macros['CARRE'] == cm.FnMacro('a*a', ['a'])
@@ -301,47 +355,44 @@ class TestPreprocessing(object):
         assert 'int z3 = ((((3) |= (0x01)), ((3) |= (0x01))));' in stream
 
     def test_pragmas(self):
+        this_dir = os.path.dirname(__file__)
+        path = os.path.join(this_dir, H_DIRECTORY, 'macros/pragmas.h')
+        pack_list = []
+        srccode = self.parser.remove_comments(open(path).read())
+        preproc_srccode = self.parser.preprocess(srccode, pack_list=pack_list)
 
-        path = os.path.join(self.h_dir, 'pragmas.h')
-        self.parser.load_file(path)
-        self.parser.remove_comments(path)
-        self.parser.preprocess(path)
-        self.parser.parse_defs(path)
-
-        stream = self.parser.files[path]
-        packings = self.parser.pack_list[path]
+        # Check if no line was removed/added to ensure that lineno references
+        # are correct
+        assert preproc_srccode.count('\n') == srccode.count('\n')
 
         # Check all pragmas instructions have been removed.
-        assert stream.strip() == ''
+        assert preproc_srccode.strip() == ''
 
-        assert packings[1][1] is None
-        assert packings[2][1] == 4
-        assert packings[3][1] == 16
-        assert packings[4][1] is None
-        assert packings[5][1] is None
-        assert packings[6][1] == 4
-        assert packings[7][1] == 16
-        assert packings[8][1] is None
-
+        assert pack_list == [
+            (0, None),
+            (17, None),
+            (20, 4),
+            (24, 16),
+            (27, None),
+            (30, None),
+            (31, 4),
+            (34, 16),
+            (35, None)]
 
 class TestParsing(object):
     """Test parsing.
 
     """
 
-    h_dir = H_DIRECTORY
-
     def setup(self):
-
-        self.parser = CParser(process_all=False)
+        this_dir = os.path.dirname(__file__)
+        hdr_dir = os.path.join(this_dir, H_DIRECTORY)
+        self.parser = MSVCParser(header_dirs=[hdr_dir])
+        self.clib_intf = self.parser.clib_intf
 
     def test_variables(self):
-
-        path = os.path.join(self.h_dir, 'variables.h')
-        self.parser.load_file(path)
-        self.parser.process_all()
-
-        vars = self.parser.clib_intf.vars
+        self.parser.read('variables.h')
+        vars = self.clib_intf.vars
 
         # Integers
         assert vars['short1'] == cm.BuiltinType('signed short')
@@ -355,9 +406,6 @@ class TestParsing(object):
         assert vars['long_int'] == cm.BuiltinType('long int')
         assert vars['long_un'] == cm.BuiltinType('unsigned long')
         assert vars['long_int_un'] == cm.BuiltinType('unsigned long int')
-        if sys.platform == 'win32':   ###TODO: this has to be dependend on CParser objects, not on hosting opering system
-            assert vars['int64'] == cm.BuiltinType('__int64')
-            assert vars['int64_un'] == cm.BuiltinType('unsigned __int64')
         assert vars['long_long'] == cm.BuiltinType('long long')
         assert vars['long_long_int'] == cm.BuiltinType('long long int')
         assert vars['long_long_un'] == cm.BuiltinType('unsigned long long')
@@ -420,22 +468,17 @@ class TestParsing(object):
                 cm.PointerType(cm.ArrayType(cm.BuiltinType('int'), 1)))
         assert (vars['prec_arr_of_ptr'] ==
                 cm.ArrayType(cm.PointerType(cm.BuiltinType('int')), 1))
-        assert (vars['prec_arr_of_ptr2'] == \
+        assert (vars['prec_arr_of_ptr2'] ==
                 cm.ArrayType(cm.PointerType(cm.BuiltinType('int')), 1))
 
-        # test filemap
-        assert (os.path.basename(self.parser.clib_intf.file_map['short1']) ==
-                'variables.h')
+        assert '$ms_type_qual_test' in vars
 
     # No structure, no unions, no enum
     def test_typedef(self):
+        self.parser.read('typedefs.h')
 
-        path = os.path.join(self.h_dir, 'typedefs.h')
-        self.parser.load_file(path)
-        self.parser.process_all()
-
-        tdefs = self.parser.clib_intf.typedefs
-        vars = self.parser.clib_intf.vars
+        tdefs = self.clib_intf.typedefs
+        vars = self.clib_intf.vars
 
         # Test defining types from base types.
         assert (tdefs['typeChar'] ==
@@ -452,7 +495,8 @@ class TestParsing(object):
         # Test annotated types
         assert (tdefs['voidpc'] ==
                 cm.PointerType(cm.BuiltinType('void', quals=['const'])))
-        assert (tdefs['charf'] == cm.BuiltinType('char', quals=['far']))
+        assert (tdefs['charv'] ==
+                cm.BuiltinType('char', quals=['volatile']))
 
         # Test using custom type.
         assert (vars['ttip5'] ==
@@ -474,19 +518,12 @@ class TestParsing(object):
         with raises(cm.UnknownCustomTypeError):
             tdefs['recType3'].resolve(tdefs)
 
-        # test filemap
-        assert (os.path.basename(self.parser.clib_intf.file_map['ULONG']) ==
-                'typedefs.h')
-
     def test_enums(self):
+        self.parser.read('enums.h')
 
-        path = os.path.join(self.h_dir, 'enums.h')
-        self.parser.load_file(path)
-        self.parser.process_all()
-
-        tdefs = self.parser.clib_intf.typedefs
-        vars = self.parser.clib_intf.vars
-        enums = self.parser.clib_intf.enums
+        tdefs = self.clib_intf.typedefs
+        vars = self.clib_intf.vars
+        enums = self.clib_intf.enums
 
         # test all properties of enum
         enum_name_type = cm.EnumType([('enum1', 9), ('enum2', 6),
@@ -508,13 +545,10 @@ class TestParsing(object):
         assert os.path.basename(enum_name_path) == 'enums.h'
 
     def test_struct(self):
+        self.parser.read('structs.h')
 
-        path = os.path.join(self.h_dir, 'structs.h')
-        self.parser.load_file(path)
-        self.parser.process_all()
-
-        tdefs = self.parser.clib_intf.typedefs
-        vars = self.parser.clib_intf.vars
+        tdefs = self.clib_intf.typedefs
+        vars = self.clib_intf.vars
 
         # Test creating a structure using only base types.
         assert (tdefs['struct struct_name'] ==
@@ -542,7 +576,7 @@ class TestParsing(object):
         # Test declaring near and far pointers.
         assert (tdefs['NPWNDCLASSEXA'] ==
                 cm.PointerType(cm.CustomType('struct tagWNDCLASSEXA',
-                                             quals=['near'])))
+                                             quals=['__allowed("N")'])))
 
         # Test altering the packing of a structure.
         assert (tdefs['struct struct_name_p'] ==
@@ -573,13 +607,10 @@ class TestParsing(object):
         assert os.path.basename(strct_name_path) == 'structs.h'
 
     def test_unions(self):
+        self.parser.read('unions.h')
 
-        path = os.path.join(self.h_dir, 'unions.h')
-        self.parser.load_file(path)
-        self.parser.process_all()
-
-        tdefs = self.parser.clib_intf.typedefs
-        vars = self.parser.clib_intf.vars
+        tdefs = self.clib_intf.typedefs
+        vars = self.clib_intf.vars
 
         # Test declaring an union.
         assert (tdefs['union union_name'] ==
@@ -611,19 +642,12 @@ class TestParsing(object):
         assert (tdefs['LPRID_DEVICE_INFO'] ==
                 cm.PointerType(cm.CustomType('struct tagRID_DEVICE_INFO')))
 
-        # test filemap
-        union_name_path = self.parser.clib_intf.file_map['union union_name']
-        assert os.path.basename(union_name_path) == 'unions.h'
-
     def test_functions(self):
+        self.parser.read('functions.h')
 
-        path = os.path.join(self.h_dir, 'functions.h')
-        self.parser.load_file(path)
-        self.parser.process_all()
-
-        funcs = self.parser.clib_intf.funcs
-        vars = self.parser.clib_intf.vars
-        storage_classes = self.parser.clib_intf.storage_classes
+        funcs = self.clib_intf.funcs
+        vars = self.clib_intf.vars
+        storage_classes = self.clib_intf.storage_classes
 
         assert (funcs['f'] ==
                 cm.FunctionType(
@@ -647,6 +671,8 @@ class TestParsing(object):
                 cm.FunctionType(cm.BuiltinType('int'), [], ['__stdcall']))
         assert (storage_classes['function1'] ==
                 ['extern', '__declspec(dllexport)'])
+        assert (storage_classes['pre_declspec_func'] ==
+                ['__declspec(noreturn)'])
         assert (funcs['function2'] ==
                 cm.FunctionType(cm.BuiltinType('int'), []))
 
@@ -660,13 +686,80 @@ class TestParsing(object):
         assert (funcs['typeQualedFunc'] ==
                 cm.FunctionType(cm.BuiltinType('int'), [(None, ptyp)]))
 
-        # test filemap
-        f_name_path = self.parser.clib_intf.file_map['f']
-        assert os.path.basename(f_name_path) == 'functions.h'
-        g_name_path = self.parser.clib_intf.file_map['g']
-        assert os.path.basename(g_name_path) == 'functions.h'
-
         assert (funcs['array_param_func'] ==
                 cm.FunctionType(cm.BuiltinType('void'), [
                     ('arr_params', cm.ArrayType(
                         cm.BuiltinType('int'), None))]))
+
+
+class TestMSVCParser(object):
+
+    def test_extended_types(self):
+        srccode = """
+            __int64 int64;
+            unsigned __int64 int64_un;
+        """
+        std_parser = CParser()
+        std_parser.read(io.StringIO(srccode))
+        assert not isinstance(std_parser.clib_intf['int64'], cm.BuiltinType)
+
+        ms_parser = MSVCParser()
+        ms_parser.read(io.StringIO(srccode))
+        assert ms_parser.clib_intf['int64'] == cm.BuiltinType('__int64')
+        assert (ms_parser.clib_intf['int64_un'] ==
+                cm.BuiltinType('unsigned __int64'))
+
+    def test_extended_typequals(self):
+        srccode = """
+            int __w64 w64;
+        """
+        std_parser = CParser()
+        std_parser.read(io.StringIO(srccode))
+        assert not isinstance(std_parser.clib_intf['w64'], cm.BuiltinType)
+
+        ms_parser = MSVCParser()
+        ms_parser.read(io.StringIO(srccode))
+        assert (ms_parser.clib_intf['w64'] ==
+                cm.BuiltinType('int', quals=['__w64']))
+
+    def test_extended_storage_classes(self):
+        srccode = """
+            int __declspec(dllexport) exp_int;
+            int __inline inline_func();
+        """
+        std_parser = CParser()
+        std_parser.read(io.StringIO(srccode))
+        assert (std_parser.clib_intf.storage_classes.get('exp_int') !=
+                ['__declspec(dllexport)'])
+        assert (std_parser.clib_intf.storage_classes.get('inline_func') !=
+                ['__inline'])
+
+        ms_parser = MSVCParser()
+        ms_parser.read(io.StringIO(srccode))
+        assert (ms_parser.clib_intf.storage_classes['exp_int'] ==
+                ['__declspec(dllexport)'])
+        assert (ms_parser.clib_intf.storage_classes['inline_func'] ==
+                ['__inline'])
+
+    def test_extended_idents(self):
+        srccode = """
+            #define $X$ $y$
+            int $X$;
+        """
+        std_parser = CParser()
+        with raises(DefinitionError):
+            std_parser.read(io.StringIO(srccode))
+
+        ms_parser = MSVCParser()
+        ms_parser.read(io.StringIO(srccode))
+        assert ms_parser.clib_intf['$y$'] == cm.BuiltinType('int')
+
+    def test_predefined_macros(self):
+        std_parser = CParser()
+        assert std_parser.clib_intf.macros['__STDC__'].content == '1'
+        assert '_MSC_VER' not in std_parser.clib_intf.macros
+
+        ms_parser = MSVCParser(msc_ver=1500, arch=64)
+        assert std_parser.clib_intf.macros['__STDC__'].content == '1'
+        assert ms_parser.clib_intf.macros['_MSC_VER'].content == '1500'
+        assert ms_parser.clib_intf.macros['_M_AMD64'].content == ''

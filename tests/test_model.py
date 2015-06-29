@@ -303,7 +303,9 @@ class TestFunctionType(object):
         ret_type = cm.BuiltinType('char')
         arg1_type = cm.BuiltinType('int')
         arg2_type = cm.BuiltinType('long')
-        assert (list(cm.FunctionType(ret_type, [arg1_type, arg2_type])) ==
+        assert (list(cm.FunctionType(ret_type,
+                                     [('arg1_name', arg1_type),
+                                      ('arg2_name', arg2_type)])) ==
                 [ret_type, arg1_type, arg2_type])
 
 
@@ -401,6 +403,13 @@ class TestCLibInterface(object):
         self.assert_add_obj(clib, clib.macros, clib.add_macro,
                             cm.ValMacro('content'),
                             cm.ValMacro('othercontent'))
+
+        clib.add_macro('MACRO_NAME', 'MACRO CONTENT')
+        assert clib.macros['MACRO_NAME'] == cm.ValMacro('MACRO CONTENT')
+
+        clib.add_macro('MACRO_EXISTS')
+        assert clib.macros['MACRO_EXISTS'] == cm.ValMacro('')
+
 
     def test_include(self):
         clib = cm.CLibInterface()

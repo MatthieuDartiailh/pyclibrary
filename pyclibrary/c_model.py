@@ -43,6 +43,7 @@ from __future__ import (division, unicode_literals, print_function,
 import collections
 import itertools
 import re
+from future.utils import istext, isbytes
 from .errors import UnknownCustomTypeError
 
 
@@ -693,8 +694,8 @@ class FunctionType(ComposedType):
 
     def __iter__(self):
         yield self.base_type
-        for param in self.params:
-            yield param
+        for pname, ptype in self.params:
+            yield ptype
 
 
 class Macro(CLibBase):
@@ -877,6 +878,10 @@ class CLibInterface(collections.Mapping):
         self.file_map = dict()
         self.storage_classes = dict()
 
+        # Attention: macro_vals has to be updated manually when
+        # adding/removing macros
+        self.macro_vals = {}
+
     def include(self, from_clib_intf):
         """Merges another clib_intf values into this one (overwriting values,
         that are already defined in self
@@ -934,6 +939,7 @@ class CLibInterface(collections.Mapping):
         obj_map[name] = obj
         self.file_map[name] = filename
         add_enum_vals(obj)
+        ###TODO: check, if customtypes are valid references
 
     def add_func(self, name, func, filename=None, storage_classes=None):
         """Official interface to add a function to CLibInterface.
@@ -964,7 +970,7 @@ class CLibInterface(collections.Mapping):
         name : str
             Name of variable.
 
-        func : CLibType
+        var : CLibType
             Type of variable.
 
         filename : str, optional
@@ -986,7 +992,7 @@ class CLibInterface(collections.Mapping):
         name : str
             Name of typedef.
 
-        func : CLibType
+        typedef : CLibType
             Type of typedef.
 
         filename : str, optional
@@ -995,7 +1001,7 @@ class CLibInterface(collections.Mapping):
         """
         self._add_obj(self.typedefs, name, typedef, filename)
 
-    def add_macro(self, name, macro, filename=None):
+    def add_macro(self, name, macro='', filename=None):
         """Official interface to add a macro defintion to CLibInterface.
 
         Parameters
@@ -1003,13 +1009,17 @@ class CLibInterface(collections.Mapping):
         name : str
             Name of macro.
 
-        func : CLibType
-            Macro object to assign to 'name'.
+        macro : Macro|str
+            Macro object to assign to 'name'. Has to be either subclass of
+            Macro (FnMacro or ValMacro) or a str, that is converted to a
+            ValMacro automaticially.
 
         filename : str, optional
             Filename, where the macro is defined in (if known)
 
         """
+        if istext(macro) or isbytes(macro):
+            macro = ValMacro(macro)
         self._add_obj(self.macros, name, macro, filename)
 
     def del_macro(self, name):

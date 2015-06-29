@@ -20,12 +20,11 @@ import os
 import logging
 from inspect import cleandoc
 from future.utils import istext, isbytes
-from past.builtins import basestring
 from ast import literal_eval
 from traceback import format_exc
+import pickle
 
-from .errors import DefinitionError
-from .utils import find_header
+from .errors import DefinitionError, InvalidCacheError
 from pyclibrary import c_model
 
 # Import parsing elements
@@ -34,22 +33,29 @@ from .thirdparty.pyparsing import \
      WordEnd, Keyword, Regex, Literal, SkipTo, ZeroOrMore, OneOrMore,
      Group, LineEnd, stringStart, quotedString, oneOf, nestedExpr,
      delimitedList, restOfLine, cStyleComment, alphas, alphanums, hexnums,
-     lineno, Suppress)
+     lineno, Suppress, NoMatch, ParseException)
 ParserElement.enablePackrat()
 
 logger = logging.getLogger(__name__)
 
+__all__ = ['win_defs_parser', 'CParser', 'MSVCParser', 'SYS_HEADER_DIRS']
 
-__all__ = ['win_defs', 'CParser']
+if sys.platform == 'darwin':
+    SYS_HEADER_DIRS = ('/usr/local/include', '/usr/include',
+                       '/System/Library/Frameworks', '/Library/Frameworks')
+elif sys.platform == 'linux2':
+    SYS_HEADER_DIRS = ('/usr/local/include', '/usr/target/include',
+                       '/usr/include')
+else:
+    SYS_HEADER_DIRS = ()
 
 
-def win_defs(version='1500'):
-    """Loads selection of windows headers included with PyCLibrary.
+def win_defs_parser(version=1500, arch=32, force_update=False, sdk_dir=None):
+    """Creates a parser, that is prepared with windows header files.
 
-    These definitions can either be accessed directly or included before
-    parsing another file like this:
-    >>> windefs = win_defs()
-    >>> p = CParser("headerFile.h", copy_from=windefs)
+    These definitions can be used before parsing another file like this:
+    >>> win_parser = win_defs_parser()
+    >>> win_parser.read("headerFile.h")
 
     Definitions are pulled from a selection of header files included in Visual
     Studio (possibly not legal to distribute? Who knows.), some of which have
@@ -60,193 +66,213 @@ def win_defs(version='1500'):
     version : unicode
         Version of the MSVC to consider when parsing.
 
+    arch : int, optional
+        The architecture (32=default or 64) of the header files.
+        Biggest part of API should be parsed correctly even if wrong arch is
+        specified, but some parts of windows.h are guarded by the architecture
+        defines _M_X86 or _M_AMD64. These parts could require the correct
+        'arch' value to work properly.
+
+    force_update : bool, optional
+        If True, the cached header files are reparsed, even if they are
+        up-to-date
+
+    sdk_dir : str
+        Has to refer to the visual studio header files directory, where
+        all windows header files are located in.
+
     Returns
     -------
-    parser : CParser
+    parser : MSVCParser
         CParser containing all the infos from te windows headers.
 
     """
-    header_files = ['WinNt.h', 'WinDef.h', 'WinBase.h', 'BaseTsd.h',
-                    'WTypes.h', 'WinUser.h']
-    if not CParser._init:
-        logger.warning('Automatic initialisation : OS is assumed to be win32')
-        from .init import auto_init
-        auto_init()
-    d = os.path.dirname(__file__)
-    p = CParser(
-        header_files,
-        macros={'_WIN32': '', '_MSC_VER': version, 'CONST': 'const',
-                'NO_STRICT': None, 'MS_WIN32': ''},
-        process_all=False
-        )
+    if sdk_dir is None:
+        sdk_dir = []
+    dir = os.path.dirname(__file__)
+    cache_file_name = os.path.join(dir, 'headers', 'WinDefs.cache')
 
-    p.process_all(cache=os.path.join(d, 'headers', 'WinDefs.cache'))
+    parser = MSVCParser(header_dirs=[sdk_dir],
+                        predef_macros={'_WIN32': '', 'NO_STRICT': ''},
+                        msc_ver=version, arch=arch)
 
-    return p
+    # the fix header file order is very fragile, as there is no clean
+    # dependency tree between them. This is why the 'DECLARE_HANDLE' has to be
+    # provided (DECLARE_HANDLE is defined in WinNt.h, but used in WinDef.h,
+    # although WinNt.h uses a lot of defines from WinDef.h. By manually
+    # defining DECLARE_HANDLE WinDef.h can be parsed before WinNt.h and
+    # WinNt.h can then use all definitions from WinDef.h when being parsed)
+    parser.clib_intf.add_macro(
+        'DECLARE_HANDLE', c_model.FnMacro('typedef HANDLE name', ['name']))
+
+    if not force_update:
+        try:
+            parser.load_cache(cache_file_name, check_validity=True)
+        except InvalidCacheError:
+            pass
+        else:
+            logger.debug("Loaded cached definitions; will skip parsing.")
+            # Cached values loaded successfully, nothing left to do here
+            return parser
+
+    header_files = ['specstrings.h', 'specstrings_strict.h', 'Rpcsal.h',
+                    'WinDef.h', 'BaseTsd.h', 'WTypes.h',
+                    'WinNt.h', 'WinBase.h', 'WinUser.h']
+    for header_file in header_files:
+        parser.read(header_file)
+
+    logger.debug("Writing cache file '{}'".format(cache_file_name))
+    parser.write_cache(cache_file_name)
+    return parser
 
 
 class CParser(object):
-    """Class for parsing C code to extract variable, struct, enum, and function
-    declarations as well as preprocessor macros.
+    """A Parser object is used to analyse a C header file and store its
+      declarations in a corresponding CLibInterface. Every Parser generates
+      an assigned CLibInterface on creation. Then as many header files as
+      needed can be added to this CLibInterface by calling CParser.read() per
+      header file.
 
-    This is not a complete C parser; instead, it is meant to simplify the
-    process of extracting definitions from header files in the absence of a
-    complete build system. Many files will require some amount of manual
-    intervention to parse properly (see 'replace' and extra arguments)
+      Alternatively the it is also possible to call the basic operations
+      .remove_comment(), .preprocess(), .parse() individially.
+
+      For getting better performance the result of a/multiple read() can be
+      stored with CParser.write_cache() once and then restored via
+      CParser.load_cache() for getting better performance.
 
     Parameters
     ----------
-    files : str or iterable, optional
-        File or files which should be parsed.
+    header_dirs : list[str], optional
+        A list of directory names, that shall be used to search relative
+        header file names in. If absolute header file names are provided to
+        .read() this is ignored
 
-    copy_from : CLibInterface, that shall be used as template for this parsers
-        .clib_intf
+    predef_macros : list[tuple[str, str]], optional
+        A optional list of predefined macros
 
-    replace : dict, optional
-        Specify som string replacements to perform before parsing. Format is
-        {'searchStr': 'replaceStr', ...}
-
-    process_all : bool, optional
-        Flag indicating whether files should be parsed immediatly. True by
-        default.
-
-    cache : unicode, optional
-        Path of the cache file from which to load definitions/to which save
-        definitions as parsing is an expensive operation.
-
-    kwargs :
-        Extra macros may be used to specify the starting state of the
-        parser: WINAPI='', TESTMACRO='3'
+    Attributes
+    ----------
+    clib_intf : CLibInterface
+        All parse results are stored here. To detach this object from the
+        parser call .reset_clib_intf().
 
     Example
     -------
-    Create parser object, load two files
+    Create parser object:
 
-    >>> p = CParser(['header1.h', 'header2.h'])
+    >>> p = CParser()
 
     Remove comments, preprocess, and search for declarations
 
-    >>> p.process_ all()
+    >>> p.read('header_file1.h')
+    >>> p.read('header_file2.h')
 
     Just to see what was successfully parsed from the files
 
-    >>> p.print_all()
+    >>> p.clib_intf.print_all()
 
     Access parsed declarations
 
-    >>> p.clib_intf
-
-    To see what was not successfully parsed
-
-    >>> unp = p.process_all(return_unparsed=True)
-    >>> for s in unp:
-            print s
+    >>> p.clib_intf['var1']
 
     """
     #: Increment every time cache structure or parsing changes to invalidate
     #: old cache files.
-    cache_version = 2
+    cache_version = 3
 
-    #: Private flag allowing to know if the parser has been initiliased.
-    _init = False
+    def __init__(self, header_dirs=None, predef_macros=None):
+        self._build_parser()
 
-    def __init__(self, files=None, copy_from=None, replace=None,
-                 process_all=True, cache=None, **kwargs):
+        self.predef_macros = {
+            # dummy values for predefined macros
+            '__DATE__': 'Jan 01 1970',
+            '__FILE__': 'filename.h',
+            '__LINE__': '1',
+            '__STDC__': '1',
+            '__TIME__': '00:00:00',
+            '__TIMESTAMP__': 'Jan 01 1970 00:00:00'}
+        if predef_macros:
+            self.predef_macros.update(predef_macros)
+        self.reset_clib_intf()
 
-        self.clib_intf = c_model.CLibInterface()
-        if copy_from is not None:
-            self.clib_intf.include(copy_from)
-        self.macro_vals = {}
+        self.header_dirs = header_dirs or []
 
-        if not self._init:
-            logger.warning('Automatic initialisation based on OS detection')
-            from .init import auto_init
-            auto_init()
+        # these attributes are needed only temporarly, while parsing a file
+        self.cur_pack_list = None
+        self.cur_file_name = None
 
-        # Description of the struct packing rules as defined by #pragma pack
-        self.pack_list = {}
 
-        self.init_opts = kwargs.copy()
-        self.init_opts['files'] = []
-        self.init_opts['replace'] = {}
-
-        self.file_order = []
-        self.files = {}
-
-        if files is not None:
-            if istext(files) or isbytes(files):
-                files = [files]
-            for f in self.find_headers(files):
-                self.load_file(f, replace)
-
-        self.current_file = None
-
-        # Import extra macros if specified
-        for name, value in kwargs:
-            self.clib_intf.add_macro(name, c_model.ValMacro(value))
-
-        if process_all:
-            self.process_all(cache=cache)
-
-    def process_all(self, cache=None, return_unparsed=False,
-                    print_after_preprocess=False):
-        """ Remove comments, preprocess, and parse declarations from all files.
+    def read(self, hdr_file, replace_texts=None, virtual_filename=None,
+             preproc_out_file=None):
+        """ Remove comments, preprocess, and parse declarations from all
+        files.
 
         This operates in memory, and thus does not alter the original files.
 
         Parameters
         ----------
-        cache : unicode, optional
-            File path where cached results are be stored or retrieved. The
-            cache is automatically invalidated if any of the arguments to
-            __init__ are changed, or if the C files are newer than the cache.
-        return_unparsed : bool, optional
-           Passed directly to parse_defs.
+        hdr_file : str|file-like-obj
+            The fileobj (or filename) of the header source code.
 
-        print_after_preprocess : bool, optional
-            If true prints the result of preprocessing each file.
+        replace_texts : dict[str, str], optional
+            Mapping of regular expressions to replace texts. Is used if the
+            source code contains constructs, that cannot be processed by
+            pyclibrary.
 
-        Returns
-        -------
-        results : list
-            List of the results from parse_defs.
+        virtual_filename : str, optional
+            if hdr_file is a file-like object this allows to provide a
+            filename. Alternatively the real filename provided in hdr_file can
+            be replaced by a 'virtual' filename
+
+        preproc_out_file : file-like-obj, optional
+            If a file is specified, the output of the preprocessor is written
+            to this file. For debugging purposes set:
+            preproc_out_file=sys.stdout
 
         """
-        if cache is not None and self.load_cache(cache, check_validity=True):
-            logger.debug("Loaded cached definitions; will skip parsing.")
-            # Cached values loaded successfully, nothing left to do here
-            return
+        if istext(hdr_file) or isbytes(hdr_file):
+            filename = self.find_header(hdr_file)
+            hdr_file = open(filename, 'rU')
+        else:
+            filename = getattr(hdr_file, 'name', None)
+        
+        try:
+            self.cur_file_name = virtual_filename or filename
+            
+            srccode = hdr_file.read()
+            fixed_srccode = self.fix_bad_code(srccode, replace_texts)
+            logger.debug(cleandoc('Parsing C header files (no valid cache '
+                                  'found). This could take several minutes.'))
+    
+            logger.debug("Removing comments from file '{}'..."
+                         .format(self.cur_file_name))
+            nocomments_srccode = self.remove_comments(fixed_srccode)
 
-        results = []
-        logger.debug(cleandoc('''Parsing C header files (no valid cache found).
-                              This could take several minutes...'''))
-        for f in self.file_order:
+            logger.debug("Preprocessing file '{}'..."
+                         .format(self.cur_file_name))
+            pack_list = []
+            preproc_srccode = self.preprocess(nocomments_srccode, pack_list)
+            if preproc_out_file is not None:
+                preproc_out_file.write(preproc_srccode)
 
-            if self.files[f] is None:
-                # This means the file could not be loaded and there was no
-                # cache.
-                mess = 'Could not find header file "{}" or a cache file.'
-                raise IOError(mess.format(f))
+            logger.debug("Parsing definitions in file '{}'..."
+                         .format(self.cur_file_name))
 
-            logger.debug("Removing comments from file '{}'...".format(f))
-            self.remove_comments(f)
+            self.parse(preproc_srccode, pack_list)
+            self.file_order.append(self.cur_file_name)
 
-            logger.debug("Preprocessing file '{}'...".format(f))
-            self.preprocess(f)
+        finally:
+            self.cur_file_name = None
 
-            if print_after_preprocess:
-                print("===== PREPROCSSED {} =======".format(f))
-                print(self.files[f])
+    def reset_clib_intf(self):
+        """Detaches the current .clib_intf object from the parser and creates
+        a new one.
 
-            logger.debug("Parsing definitions in file '{}'...".format(f))
-
-            results.append(self.parse_defs(f, return_unparsed))
-
-        if cache is not None:
-            logger.debug("Writing cache file '{}'".format(cache))
-            self.write_cache(cache)
-
-        return results
+        """
+        self.clib_intf = c_model.CLibInterface()
+        for name, content in self.predef_macros.items():
+            self.clib_intf.add_macro(name, content)
+        self.file_order = []
 
     def load_cache(self, cache_file, check_validity=False):
         """Load a cache file.
@@ -267,13 +293,12 @@ class CParser(object):
 
         Returns
         -------
-        result : bool
-            Did the loading succeeded.
+        result : CLibInterface
+            cache lib interface read from 'cache_file'.
 
         """
-
         # Make sure cache file exists
-        if not istext(cache_file):
+        if not istext(cache_file) and not isbytes(cache_file):
             raise ValueError("Cache file option must be a unicode.")
         if not os.path.isfile(cache_file):
             # If file doesn't exist, search for it in this module's path
@@ -281,136 +306,103 @@ class CParser(object):
             cache_file = os.path.join(d, "headers", cache_file)
             if not os.path.isfile(cache_file):
                 logger.debug("Can't find requested cache file.")
-                return False
+                raise InvalidCacheError("Can't find requested cache file.")
 
-        # Make sure cache is newer than all input files
+        try:
+            # Read cache file
+            cache = pickle.load(open(cache_file, 'rb'))
+        except Exception:
+            logger.exception("Warning--cache read failed:")
+            raise InvalidCacheError('failed to read cache file')
+        else:
+            self.clib_intf = cache['clib_intf']
+            self.file_order = cache['file_order']
+
         if check_validity:
+            if cache['predef_macros'] != self.predef_macros:
+                mess = "Different list of predefined macros"
+                logger.debug(mess)
+                raise InvalidCacheError('Predefined Macros does not match')
+
+            # Make sure __init__ options match
+            if cache['version'] < self.cache_version:
+                mess = "Cache file is not valid--cache format has changed."
+                logger.debug(mess)
+                raise InvalidCacheError('Cache Expired')
+
+            # Make sure cache is newer than all input files
             mtime = os.stat(cache_file).st_mtime
             for f in self.file_order:
                 # If file does not exist, then it does not count against the
                 # validity of the cache.
                 if os.path.isfile(f) and os.stat(f).st_mtime > mtime:
                     logger.debug("Cache file is out of date.")
-                    return False
+                    raise InvalidCacheError('Cache file is out of date.')
 
-        try:
-            # Read cache file
-            import pickle
-            cache = pickle.load(open(cache_file, 'rb'))
-
-            # Make sure __init__ options match
-            if check_validity:
-                if cache['opts'] != self.init_opts:
-                    db = logger.debug
-                    db("Cache file is not valid")
-                    db("It was created using different initialization options")
-                    db('{}'.format(cache['opts']))
-                    db('{}'.format(self.init_opts))
-                    return False
-
-                else:
-                    logger.debug("Cache init opts are OK:")
-                    logger.debug('{}'.format(cache['opts']))
-
-                if cache['version'] < self.cache_version:
-                    mess = "Cache file is not valid--cache format has changed."
-                    logger.debug(mess)
-                    return False
-
-            # Import all parse results
-            self.clib_intf.include(cache['clib_intf'])
-            return True
-
-        except Exception:
-            logger.exception("Warning--cache read failed:")
-            return False
 
     def write_cache(self, cache_file):
         """Store all parsed declarations to cache. Used internally.
 
         """
         cache = {}
-        cache['opts'] = self.init_opts
         cache['clib_intf'] = self.clib_intf
         cache['version'] = self.cache_version
-        import pickle
-        pickle.dump(cache, open(cache_file, 'wb'))
+        cache['file_order'] = self.file_order
+        cache['predef_macros'] = self.predef_macros
+        pickle.dump(cache, open(cache_file, 'wb'), protocol=2)
 
-    def find_headers(self, headers):
+    def find_header(self, hdr_filename):
         """Try to find the specified headers.
 
         """
-        hs = []
-        for header in headers:
-            if os.path.isfile(header):
-                hs.append(header)
-            else:
-                h = find_header(header)
-                if not h:
-                    raise OSError('Cannot find header: {}'.format(header))
-                hs.append(h)
+        if os.path.isabs(hdr_filename):
+            return hdr_filename
 
-        return hs
+        for dir in self.header_dirs:
+            path = os.path.join(dir, hdr_filename)
+            if os.path.isfile(path):
+                return path
+        else:
+            raise IOError('cannot find header file {!r}'.format(hdr_filename))
 
-    def load_file(self, path, replace=None):
-        """Read a file, make replacements if requested.
-
-        Called by __init__, should not be called manually.
+    def fix_bad_code(self, srccode, replace=None):
+        """Replaces all occurences of patterns in source code, that are not
+        compatible with CParser.
 
         Parameters
         ----------
-        path : unicode
-            Path of the file to load.
+        srccode : str
+            Text of source code.
 
         replace : dict, optional
             Dictionary containing strings to replace by the associated value
             when loading the file.
 
         """
-        if not os.path.isfile(path):
-            # Not a fatal error since we might be able to function properly if
-            # there is a cache file.
-            mess = "Warning: C header '{}' is missing, this may cause trouble."
-            logger.warning(mess.format(path))
-            self.files[path] = None
-            return False
-
         # U causes all newline types to be converted to \n
-        with open(path, 'rU') as fd:
-            self.files[path] = fd.read()
-
         if replace is not None:
             for s in replace:
-                self.files[path] = re.sub(s, replace[s], self.files[path])
+                srccode = re.sub(s, replace[s], srccode)
 
-        self.file_order.append(path)
-        bn = os.path.basename(path)
-        self.init_opts['replace'][bn] = replace
-        # Only interested in the file names, the directory may change between
-        # systems.
-        self.init_opts['files'].append(bn)
-        return True
+        return srccode
 
     # =========================================================================
     # --- Processing functions
     # =========================================================================
 
-    def remove_comments(self, path):
+    def remove_comments(self, srccode):
         """Remove all comments from file.
 
         Operates in memory, does not alter the original files.
 
         """
-        text = self.files[path]
         cplusplus_line_comment = Literal("//") + restOfLine
         # match quoted strings first to prevent matching comments inside quotes
         comment_remover = (quotedString | cStyleComment.suppress() |
                            cplusplus_line_comment.suppress())
-        self.files[path] = comment_remover.transformString(text)
+        return comment_remover.transformString(srccode)
 
-    # --- Pre processing
-
-    def preprocess(self, path):
+    def preprocess(self, srccode, pack_list):
         """Scan named file for preprocessor directives, removing them while
         expanding macros.
 
@@ -423,30 +415,28 @@ class CParser(object):
         - pragmas : pragma
 
         """
-        # We need this so that eval_expr works properly
-        self.build_parser()
-        self.current_file = path
-
         # Stack for #pragma pack push/pop
+        assert len(pack_list) == 0
+        pack_list.append((0, None))
+
         pack_stack = [(None, None)]
-        self.pack_list[path] = [(0, None)]
         packing = None  # Current packing value
 
-        text = self.files[path]
-
         # First join together lines split by \\n
-        text = Literal('\\\n').suppress().transformString(text)
+        joined_srccode = Literal('\\\n').suppress().transformString(srccode)
 
         # Define the structure of a macro definition
-        name = Word(alphas+'_', alphanums+'_')('name')
-        deli_list = Optional(lparen + delimitedList(name) + rparen)
+        name = self.generic_ident()('name')
+        deli_list = Optional(self.lparen + delimitedList(name) + self.rparen)
         self.pp_define = (name.setWhitespaceChars(' \t')("macro") +
                           deli_list.setWhitespaceChars(' \t')('args') +
                           SkipTo(LineEnd())('value'))
         self.pp_define.setParseAction(self.process_macro_defn)
 
+        macro_name_pattern = name + SkipTo(LineEnd())('rest')
+
         # Comb through lines, process all directives
-        lines = text.split('\n')
+        lines = joined_srccode.split('\n')
 
         result = []
 
@@ -482,12 +472,18 @@ class CParser(object):
                         return ['0', '1'][t['name'] in self.clib_intf.macros]
 
                     rest = (Keyword('defined') +
-                            (name | lparen + name + rparen)
+                            (name | self.lparen + name + self.rparen)
                             ).setParseAction(pa).transformString(rest)
 
                 elif d in ['define', 'undef']:
-                    match = re.match(r'\s*([a-zA-Z_][a-zA-Z0-9_]*)(.*)$', rest)
-                    macroName, rest = match.groups()
+                    try:
+                        match = macro_name_pattern.parseString(rest.lstrip())
+                    except ParseException:
+                        raise DefinitionError('invalid macro definition: {!r}'
+                                              .format(line))
+                    else:
+                        macro_name = match.name
+                        rest = match.rest
 
                 # Expand macros if needed
                 if rest is not None and (all(if_true) or d in ['if', 'elif']):
@@ -527,26 +523,28 @@ class CParser(object):
                     if_hit.append(ev)
 
                 elif d == 'define':
-                    if not if_true[-1]:
-                        continue
-                    logger.debug("  "*(len(if_true)-1) + "define: " +
-                                 '{}, {}'.format(macroName, rest))
-                    try:
-                        # Macro is registered here
-                        self.pp_define.parseString(macroName + ' ' + rest)
-                    except Exception:
-                        logger.exception("Error processing macro definition:" +
-                                         '{}, {}'.format(macroName, rest))
+                    if if_true[-1]:
+                        logger.debug("  "*(len(if_true)-1) + "define: " +
+                                     '{}, {}'.format(macro_name, rest))
+                        try:
+                            # Macro is registered here
+                            self.pp_define.parseString(
+                                macro_name + ' ' + rest)
+                        except Exception:
+                            logger.exception(
+                                'Error processing macro definition:{}, {}'
+                                .format(macro_name, rest))
 
                 elif d == 'undef':
-                    if not if_true[-1]:
-                        continue
-                    try:
-                        self.clib_intf.del_macro(macroName.strip())
-                    except Exception:
-                        if sys.exc_info()[0] is not KeyError:
+                    if if_true[-1]:
+                        try:
+                            self.clib_intf.del_macro(macro_name.strip())
+                        except KeyError:
+                            pass
+                        except Exception:
                             mess = "Error removing macro definition '{}'"
-                            logger.exception(mess.format(macroName.strip()))
+                            logger.exception(
+                                mess.format(macro_name.strip()))
 
                 # Check for changes in structure packing
                 # Support only for #pragme pack (with all its variants
@@ -557,51 +555,50 @@ class CParser(object):
                 # http://msdn.microsoft.com/fr-fr/library/2e70t5y1.aspx
                 # The current implementation follows the MSVC doc.
                 elif d == 'pragma':
-                    if not if_true[-1]:
-                        continue
                     m = re.match(r'\s+pack\s*\(([^\)]*)\)', rest)
-                    if not m:
-                        continue
-                    if m.groups():
-                        opts = [s.strip() for s in m.groups()[0].split(',')]
+                    if if_true[-1] and m:
+                        if m.groups():
+                            opts = [s.strip() for s in m.groups()[0].split(',')]
 
-                    pushpop = id = val = None
-                    for o in opts:
-                        if o in ['push', 'pop']:
-                            pushpop = o
-                        elif o.isdigit():
-                            val = int(o)
-                        else:
-                            id = o
+                        pushpop = id = val = None
+                        for o in opts:
+                            if o in ['push', 'pop']:
+                                pushpop = o
+                            elif o.isdigit():
+                                val = int(o)
+                            else:
+                                id = o
 
-                    packing = val
+                        packing = val
 
-                    if pushpop == 'push':
-                        pack_stack.append((packing, id))
-                    elif opts[0] == 'pop':
-                        if id is None:
-                            pack_stack.pop()
-                        else:
-                            ind = None
-                            for j, s in enumerate(pack_stack):
-                                if s[1] == id:
-                                    ind = j
-                                    break
-                            if ind is not None:
-                                pack_stack = pack_stack[:ind]
-                        if val is None:
-                            packing = pack_stack[-1][0]
+                        if pushpop == 'push':
+                            pack_stack.append((packing, id))
+                        elif opts[0] == 'pop':
+                            if id is None:
+                                pack_stack.pop()
+                            else:
+                                ind = None
+                                for j, s in enumerate(pack_stack):
+                                    if s[1] == id:
+                                        ind = j
+                                        break
+                                if ind is not None:
+                                    pack_stack = pack_stack[:ind]
+                            if val is None:
+                                packing = pack_stack[-1][0]
 
-                    mess = ">> Packing changed to {} at line {}"
-                    logger.debug(mess.format(str(packing), i))
-                    self.pack_list[path].append((i, packing))
+                        mess = ">> Packing changed to {} at line {}"
+                        logger.debug(mess.format(str(packing), i))
+                        pack_list.append((i, packing))
+
                 else:
                     # Ignore any other directives
                     mess = 'Ignored directive {} at line {}'
                     logger.debug(mess.format(d, i))
 
             result.append(new_line)
-        self.files[path] = '\n'.join(result)
+
+        return '\n'.join(result)
 
     def eval_preprocessor_expr(self, expr):
         # Make a few alterations so the expression can be eval'd
@@ -632,24 +629,24 @@ class CParser(object):
             # #define FNMACRO1(x) x+1
             # #define FNMACRO2 FNMACRO1     //FNMACRO2 is a function macro!!!
             macro = self.clib_intf.macros[macro_val]
-            self.clib_intf.add_macro(t.macro, macro, self.current_file)
+            self.clib_intf.add_macro(t.macro, macro, self.cur_file_name)
             logger.debug("  Copy fnmacro {} => {}".format(macro_val, t.macro))
 
         else:
             if t.args == '':
                 macro = c_model.ValMacro(macro_val)
                 val = self.eval_expr(macro_val)
-                self.macro_vals[t.macro] = val
+                self.clib_intf.macro_vals[t.macro] = val
                 mess = "  Add macro: {} ({}); {}"
                 logger.debug(mess.format(t.macro, val, macro))
 
             else:
                 fnmacro = c_model.FnMacro(macro_val, list(t.args))
-                self.clib_intf.add_macro(t.macro, fnmacro, self.current_file)
+                self.clib_intf.add_macro(t.macro, fnmacro, self.cur_file_name)
                 mess = "  Add fn macro: {} ({}); {}"
                 logger.debug(mess.format(t.macro, t.args, fnmacro))
 
-        self.clib_intf.add_macro(t.macro, macro, self.current_file)
+        self.clib_intf.add_macro(t.macro, macro, self.cur_file_name)
         return macro.c_repr(t.macro)
 
     def expand_macros(self, line):
@@ -658,7 +655,11 @@ class CParser(object):
         Faulty calls to macro function are left untouched.
 
         """
-        reg = re.compile(r'("(\\"|[^"])*")|(\b(\w+)\b)')
+        # this reg will match either a string an identifier. This way
+        # we avoid, that accidentially identifiers WITHIN strings are matched
+        reg = re.compile(
+            r'("(\\"|[^"])*")|'
+            r'(([a-zA-Z0-9' + self.supported_ident_non_alnums + ']+))')
         parts = []
         # The group number to check for macro names
         N = 3
@@ -701,8 +702,10 @@ class CParser(object):
         """Replace a function macro.
 
         """
-        arg_list = (stringStart + lparen +
-                    Group(delimitedList(expression))('args') + rparen)
+        arg_list = (stringStart +
+                    self.lparen +
+                    Group(delimitedList(self.expression))('args') +
+                    self.rparen)
         res = [x for x in arg_list.scanString(text, 1)]
         if len(res) == 0:
             mess = "Function macro '{}' not followed by (...)"
@@ -716,18 +719,20 @@ class CParser(object):
 
     # --- Compilation functions
 
-    def parse_defs(self, path, return_unparsed=False):
+    def parse(self, srccode, pack_list):
         """Scan through the named file for variable, struct, enum, and function
         declarations.
 
         Parameters
         ----------
-        path : unicode
-            Path of the file to parse for definitions.
+        srccode : str
+            Preprocessed Sourcecode, that will be analysed and added to
+            self.clib_intf
 
-        return_unparsed : bool, optional
-            If true, return a string of all lines that failed to match (for
-            debugging purposes).
+        pack_list : list[tuple[int, int]]
+            a list of line ranges with the according struct packings
+            (#pragma pack). All structs defined within a specific range
+            use the according packing.
 
         Returns
         -------
@@ -735,20 +740,203 @@ class CParser(object):
             Entire tree of successfully parsed tokens.
 
         """
-        self.current_file = path
+        self.cur_pack_list = pack_list
+        try:
+            return [x[0] for x in self.parser.scanString(srccode)]
+        finally:
+            self.cur_pack_list = None
 
-        parser = self.build_parser()
-        if return_unparsed:
-            text = parser.suppress().transformString(self.files[path])
-            return re.sub(r'\n\s*\n', '\n', text)
+    # Syntatic delimiters
+    comma = Literal(",").ignore(quotedString).suppress()
+    colon = Literal(":").ignore(quotedString).suppress()
+    semi = Literal(";").ignore(quotedString).suppress()
+    lbrace = Literal("{").ignore(quotedString).suppress()
+    rbrace = Literal("}").ignore(quotedString).suppress()
+    lbrack = Literal("[").ignore(quotedString).suppress()
+    rbrack = Literal("]").ignore(quotedString).suppress()
+    lparen = Literal("(").ignore(quotedString).suppress()
+    rparen = Literal(")").ignore(quotedString).suppress()
+
+    # Numbers
+    int_strip = lambda t: t[0].rstrip('UL')
+    hexint = Regex('[+-]?\s*0[xX][{}]+[UL]*'.format(hexnums)).setParseAction(int_strip)
+    decint = Regex('[+-]?\s*[0-9]+[UL]*').setParseAction(int_strip)
+    integer = (hexint | decint)
+    # The floating regex is ugly but it is because we do not want to match
+    # integer to it.
+    floating = Regex(r'[+-]?\s*((((\d(\.\d*)?)|(\.\d+))[eE][+-]?\d+)|((\d\.\d*)|(\.\d+)))')
+    number = (floating | integer)
+
+    # Miscelaneous
+    bi_operator = oneOf("+ - / * | & || && ! ~ ^ % == != > < >= <= -> . :: << >> = ? :")
+    uni_right_operator = oneOf("++ --")
+    uni_left_operator = oneOf("++ -- - + * sizeof new")
+
+    supported_base_types = ['int', 'char', 'void', 'float', 'double', 'bool']
+    supported_sign_modifiers = ['unsigned', 'signed']
+    supported_size_modifiers = ['short', 'long']
+    supported_storage_classes = ['static', 'extern', 'inline']
+    supported_type_qualifiers = ['const', 'volatile', 'restrict',]
+    supported_ident_non_alnums = '_'
+
+    @property
+    def keyword(self):
+        """A ParserElement of all keywords"""
+        keywords = (['struct', 'enum', 'union'] +
+                    self.supported_type_qualifiers +
+                    self.supported_storage_classes +
+                    self.supported_base_types +
+                    self.supported_size_modifiers +
+                    self.supported_sign_modifiers)
+
+        return self._kwl(list(self.filter_no_par(keywords)) +
+                         list(self.filter_par(keywords)))
+
+    def generic_ident(self, exceptions=None):
+        """A generic ParserElement for identificators. In C this are all words
+        not beginning with numbers.
+        The ParserElement 'exception' allows to specify a list of not
+        accepted identificators.
+
+        Can be overwritten by descendant to allow only specific ID patterns.
+
+        """
+        result = WordStart(alphas + self.supported_ident_non_alnums)
+        if exceptions is not None:
+            result += ~exceptions
+        result += Word(alphas + self.supported_ident_non_alnums,
+                       alphanums + self.supported_ident_non_alnums)
+        result += WordEnd(alphanums + self.supported_ident_non_alnums)
+        return result.setParseAction(self._converter(str))
+
+    @staticmethod
+    def _kwl(strs):
+        """Generate a match-first list of keywords given a list of strings."""
+        regex = '|'.join(strs)
+        if len(regex) == 0:
+            return NoMatch()
         else:
-            return [x[0] for x in parser.scanString(self.files[path])]
+            return Regex(r'\b({})\b'.format(regex))
+    
+    
+    @staticmethod
+    def _converter(converterFunc):
+        """Flattens a tree of tokens and joins into one big string and
+        converts the str by 'converterFunc'.
 
-    def build_parser(self):
+        """
+        def flatten(lst):
+            res = []
+            for i in lst:
+                if isinstance(i, (list, tuple)):
+                    res.extend(flatten(i))
+                else:
+                    res.append(str(i))
+            return res
+
+        def recombine(tok):
+            return converterFunc(' '.join(flatten(tok.asList())))
+
+        return recombine
+
+    @staticmethod
+    def filter_par(kwds):
+        """returns all keywords, that end with '(...)', but without '(...)'"""
+        for kwd in kwds:
+            if kwd.endswith('(...)'):
+                yield kwd[:-len('(...)')]
+
+    @staticmethod
+    def filter_no_par(kwds):
+        """returns all keywords, that do not end with '(...)'"""
+        for kwd in kwds:
+            if not kwd.endswith('(...)'):
+                yield kwd
+
+    @staticmethod
+    def _print_parse_results(pr, depth=0, name=''):
+        """For debugging; pretty-prints parse result objects.
+    
+        """
+        start = name + " " * (20 - len(name)) + ':' + '..' * depth
+        if isinstance(pr, ParseResults):
+            print(start)
+            for i in pr:
+                name = ''
+                for k in pr.keys():
+                    if pr[k] is i:
+                        name = k
+                        break
+                CParser._print_parse_results(i, depth+1, name)
+        else:
+            print(start + str(pr))
+    
+    def _build_parser(self):
         """Builds the entire tree of parser elements for the C language (the
         bits we support, anyway).
 
         """
+        def mergeNested(t):
+            return ''.join((part if istext(part) or isbytes(part)
+                            else '(' + mergeNested(part) + ')')
+                           for part in t)
+
+        ident = self.generic_ident(exceptions=self.keyword)
+
+        self.type_qualifier = ZeroOrMore(
+            (self._kwl(self.filter_par(self.supported_type_qualifiers)) +
+             Optional(nestedExpr())).setParseAction(mergeNested) |
+            self._kwl(self.filter_no_par(self.supported_type_qualifiers)))
+
+        self.storage_class_spec = ZeroOrMore(
+            (self._kwl(self.filter_par(self.supported_storage_classes)) +
+             Optional(nestedExpr())).setParseAction(mergeNested) |
+            self._kwl(self.filter_no_par(self.supported_storage_classes)))
+
+        # Language elements
+        self.fund_type = OneOrMore(
+            self._kwl(self.supported_sign_modifiers +
+                      self.supported_size_modifiers +
+                      self.supported_base_types)
+        ).setParseAction(lambda t: ' '.join(t))
+
+        self.expression = Forward()
+
+        # Is there a better way to process expressions with cast operators??
+        cast_atom = (
+            ZeroOrMore(self.uni_left_operator) +
+            Optional('('+ident+')').suppress() +
+            ((ident + '(' + Optional(delimitedList(self.expression)) +
+                ')' |
+              ident + OneOrMore('[' + self.expression + ']') |
+              ident |
+              self.number |
+              quotedString
+              ) |
+             ('(' + self.expression + ')')) +
+            ZeroOrMore(self.uni_right_operator)
+            )
+
+        # XXX Added name here to catch macro functions on types
+        uncast_atom = (
+            ZeroOrMore(self.uni_left_operator) +
+            ((ident + '(' + Optional(delimitedList(self.expression)) +
+                ')' |
+              ident + OneOrMore('[' + self.expression + ']') |
+              ident |
+              self.number |
+              self.generic_ident() |
+              quotedString
+              ) |
+             ('(' + self.expression + ')')) +
+            ZeroOrMore(self.uni_right_operator)
+            )
+
+        atom = cast_atom | uncast_atom
+
+        self.expression << Group(atom + ZeroOrMore(self.bi_operator + atom))
+        self.expression.setParseAction(self._converter(str))
+
         if hasattr(self, 'parser'):
             return self.parser
 
@@ -756,11 +944,12 @@ class CParser(object):
         self.enum_type = Forward()
         custom_type = ident.copy()
         type_astdef = (
-            fund_type.setParseAction(converter(c_model.BuiltinType)) |
-            custom_type.setParseAction(converter(c_model.CustomType)) |
+            self.fund_type.setParseAction(
+                self._converter(c_model.BuiltinType)) |
+            custom_type.setParseAction(self._converter(c_model.CustomType)) |
             self.struct_type |
             self.enum_type)
-        self.type_spec = type_qualifier('pre_qual') + type_astdef('type')
+        self.type_spec = self.type_qualifier('pre_qual') + type_astdef('type')
 
         # --- Abstract declarators for use in function pointer arguments
         #   Thus begins the extremely hairy business of parsing C declarators.
@@ -781,19 +970,24 @@ class CParser(object):
         #     *( )(int, int)[10]
         #     ...etc...
         self.abstract_declarator << Group(
-            Group(ZeroOrMore(Group(type_qualifier + Suppress('*'))))('ptrs') +
-            type_qualifier('qual') +
-            Optional((lparen + self.abstract_declarator + rparen)('center')) +
-            Optional(lparen +
+            Group(ZeroOrMore(
+                Group(self.type_qualifier + Suppress('*'))))('ptrs') +
+            self.type_qualifier('qual') +
+            Optional((self.lparen +
+                      self.abstract_declarator +
+                      self.rparen)('center')) +
+            Optional(self.lparen +
                      Optional(delimitedList(Group(
                               self.type_spec +
                               self.abstract_declarator('decl') +
-                              Optional(Literal('=').suppress() + expression,
+                              Optional(Literal('=').suppress() +
+                                       self.expression,
                                        default=None)('val')
                               )), default=None) +
-                     rparen)('args') +
-            Group(ZeroOrMore(lbrack + Optional(expression, default='') +
-                  rbrack))('arrays')
+                     self.rparen)('args') +
+            Group(ZeroOrMore(self.lbrack +
+                             Optional(self.expression, default='') +
+                  self.rbrack))('arrays')
         )
 
         # Declarators look like:
@@ -804,54 +998,58 @@ class CParser(object):
         #     * fnName(int arg1=0)[10]
         #     ...etc...
         self.declarator << Group(
-            Group(ZeroOrMore(Group(type_qualifier + Suppress('*'))))('ptrs') +
-            type_qualifier('qual') +
-            (ident('name') | (lparen + self.declarator + rparen)('center')) +
-            Optional(lparen +
+            Group(ZeroOrMore(Group(self.type_qualifier +
+                                   Suppress('*'))))('ptrs') +
+            self.type_qualifier('qual') +
+            (ident('name') |
+             (self.lparen + self.declarator + self.rparen)('center')) +
+            Optional(self.lparen +
                      Optional(delimitedList(
                          Group(self.type_spec +
                                (self.declarator |
                                 self.abstract_declarator)('decl') +
                                Optional(Literal('=').suppress() +
-                                        expression, default=None)('val')
+                                        self.expression, default=None)('val')
                                )),
                               default=None) +
-                     rparen)('args') +
-            Group(ZeroOrMore(lbrack + Optional(expression, default='') +
-                             rbrack))('arrays')
+                     self.rparen)('args') +
+            Group(ZeroOrMore(self.lbrack +
+                             Optional(self.expression, default='') +
+                             self.rbrack))('arrays')
         )
         self.declarator_list = Group(delimitedList(self.declarator))
 
         # Typedef
         self.type_decl = (Keyword('typedef') + self.type_spec +
-                          self.declarator_list('decl_list') + semi)
+                          self.declarator_list('decl_list') + self.semi)
         self.type_decl.setParseAction(self.process_typedef)
 
         # Variable declaration
         self.variable_decl = (
-            Group(type_qualifier('pre_qual') +
-                  storage_class_spec('pre_stor_cls') +
+            Group(self.type_qualifier('pre_qual') +
+                  self.storage_class_spec('pre_stor_cls') +
                   type_astdef('type') +
-                  storage_class_spec('post_stor_cls') +
+                  self.storage_class_spec('post_stor_cls') +
                   Optional(self.declarator_list('decl_list')) +
                   Optional(Literal('=').suppress() +
-                           (expression('value') |
-                            (lbrace +
-                             Group(delimitedList(expression))('array_values') +
-                             rbrace
+                           (self.expression('value') |
+                            (self.lbrace +
+                             Group(delimitedList(self.expression)
+                                   )('array_values') +
+                             self.rbrace
                              )
                             )
                            )
                   ) +
-            semi)
+            self.semi)
         self.variable_decl.setParseAction(self.process_variable)
 
         # Function definition
         self.function_decl = (
-            type_qualifier('pre_qual') +
-            storage_class_spec('pre_stor_cls') +
+            self.type_qualifier('pre_qual') +
+            self.storage_class_spec('pre_stor_cls') +
             type_astdef('type') +
-            storage_class_spec('post_stor_cls') +
+            self.storage_class_spec('post_stor_cls') +
             self.declarator('decl') +
             nestedExpr('{', '}').suppress())
         self.function_decl.setParseAction(self.process_function)
@@ -864,36 +1062,39 @@ class CParser(object):
             # Hack to handle bit width specification.
             Group(Group(self.type_spec +
                         Optional(self.declarator_list('decl_list')) +
-                        colon + integer('bit') + semi)) |
+                        self.colon + self.integer('bit') + self.semi)) |
             (self.type_spec + self.declarator +
              nestedExpr('{', '}')).suppress() |
             (self.declarator + nestedExpr('{', '}')).suppress()
             )
 
-        self.decl_list = (lbrace +
+        self.decl_list = (self.lbrace +
                           Group(OneOrMore(self.struct_member))('members') +
-                          rbrace)
+                          self.rbrace)
         self.struct_type << (struct_kw('struct_type') +
                              ((Optional(ident('name')) +
                                self.decl_list) | ident('name'))
                              )
         self.struct_type.setParseAction(self.process_compound)
 
-        self.struct_decl = self.struct_type + semi
+        self.struct_decl = self.struct_type + self.semi
 
         # Enum definition
         enum_var_decl = Group(ident('name') +
                               Optional(Literal('=').suppress() +
-                              (integer('value') | ident('valueName'))))
+                              (self.integer('value') |
+                               ident('valueName'))))
 
         self.enum_type << (Keyword('enum') +
-                           (Optional(ident('name')) +
-                            lbrace +
-                            Group(delimitedList(enum_var_decl))('members') +
-                            Optional(comma) + rbrace | ident('name'))
+                           ((Optional(ident('name')) +
+                             self.lbrace +
+                             Group(delimitedList(enum_var_decl))('members') +
+                             Optional(self.comma) +
+                             self.rbrace) |
+                            ident('name'))
                            )
         self.enum_type.setParseAction(self.process_enum)
-        self.enum_decl = self.enum_type + semi
+        self.enum_decl = self.enum_type + self.semi
 
         self.parser = (self.type_decl | self.variable_decl |
                        self.function_decl)
@@ -976,7 +1177,7 @@ class CParser(object):
                 if not ename:
                     return etyp
                 else:
-                    self.clib_intf.add_typedef(ename, etyp, self.current_file)
+                    self.clib_intf.add_typedef(ename, etyp, self.cur_file_name)
 
             return c_model.CustomType(ename)
         except:
@@ -997,7 +1198,7 @@ class CParser(object):
                 mess = "Incorrect declarator type for function definition."
                 raise DefinitionError(mess)
             logger.debug("  sig/name: {}".format(func_sig.c_repr(name)))
-            self.clib_intf.add_func(name, func_sig, self.current_file,
+            self.clib_intf.add_func(name, func_sig, self.cur_file_name,
                                     storage_classes)
 
         except Exception:
@@ -1008,7 +1209,7 @@ class CParser(object):
 
         """
         packing = None
-        for p in self.pack_list[self.current_file]:
+        for p in self.cur_pack_list:
             if p[0] <= line:
                 packing = p[1]
             else:
@@ -1068,7 +1269,7 @@ class CParser(object):
                     return type_
                 else:
                     self.clib_intf.add_typedef(sname, type_,
-                                               self.current_file)
+                                               self.cur_file_name)
 
             return c_model.CustomType(sname)
 
@@ -1089,13 +1290,13 @@ class CParser(object):
                 if isinstance(type_, c_model.FunctionType):
                     logger.debug("  Add function prototype: {}".format(
                                  type_.c_repr(name)))
-                    self.clib_intf.add_func(name, type_, self.current_file,
+                    self.clib_intf.add_func(name, type_, self.cur_file_name,
                                             storage_classes)
                 # This is a variable
                 else:
                     logger.debug("  Add variable: {} {} {}".format(name,
                                  type_, val))
-                    self.clib_intf.add_var(name, type_, self.current_file,
+                    self.clib_intf.add_var(name, type_, self.cur_file_name,
                                            storage_classes)
 
         except Exception:
@@ -1108,7 +1309,7 @@ class CParser(object):
         for d in t.decl_list:
             (name, type_) = self.process_type(t, d)
             logger.debug("  {}: {}".format(name, type_))
-            self.clib_intf.add_typedef(name, type_, self.current_file)
+            self.clib_intf.add_typedef(name, type_, self.cur_file_name)
 
     # --- Utility methods
 
@@ -1122,12 +1323,12 @@ class CParser(object):
         logger.debug("Eval: {}".format(toks))
         try:
             if istext(toks) or isbytes(toks):
-                val = self.eval(toks, None, self.macro_vals)
+                val = self.eval(toks, None, self.clib_intf.macro_vals)
             elif toks.array_values != '':
-                val = [self.eval(x, None, self.macro_vals)
+                val = [self.eval(x, None, self.clib_intf.macro_vals)
                        for x in toks.array_values]
             elif toks.value != '':
-                val = self.eval(toks.value, None, self.macro_vals)
+                val = self.eval(toks.value, None, self.clib_intf.macro_vals)
             else:
                 val = None
             return val
@@ -1139,226 +1340,62 @@ class CParser(object):
     def eval(self, expr, *args):
         """Just eval with a little extra robustness."""
         expr = expr.strip()
-        cast = (lparen + self.type_spec + self.abstract_declarator +
-                rparen).suppress()
-        expr = (quotedString | number | cast).transformString(expr)
+        cast = (self.lparen + self.type_spec + self.abstract_declarator +
+                self.rparen).suppress()
+        expr = (quotedString | self.number | cast).transformString(expr)
         if expr == '':
             return None
         return eval(expr, *args)
 
-    def find_text(self, text):
-        """Search all file strings for text, return matching lines.
 
-        """
-        res = []
-        for f in self.files:
-            l = self.files[f].split('\n')
-            for i in range(len(l)):
-                if text in l[i]:
-                    res.append((f, i, l[i]))
-        return res
+class MSVCParser(CParser):
+    """A CParser that takes the MicroSoft Visual C extensions into account.
+    These are:
 
+    - the '__int64' type
+    - additional type qualifiers like __cdecl, __stdcall, __restrict, ...
+    - the __declspec(), __inline and __forceinline extensions
+    - allows usage of '$' in  identifier names
+    - additional predefines like '_MSC_VER'
 
-# --- Basic parsing elements.
+    Parameters
+    ----------
+    header_dirs : list[str], optional
+        same as CParser
 
-def kwl(strs):
-    """Generate a match-first list of keywords given a list of strings."""
-    return Regex(r'\b({})\b'.format('|'.join(strs)))
+    predef_macros : dict[str, str], optional
+        same as CParser
 
+    msc_ver : int, optional
+        The C compiler version that shall be emulated (usually 1500 for
+        version 15.00)
 
-def flatten(lst):
-        res = []
-        for i in lst:
-            if isinstance(i, (list, tuple)):
-                res.extend(flatten(i))
-            else:
-                res.append(str(i))
-        return res
-
-
-def converter(converter):
-    """Flattens a tree of tokens and joins into one big string and converts
-    the str by 'converter'.
-    """
-    def recombine(tok):
-        return converter(' '.join(flatten(tok.asList())))
-    return recombine
-
-
-def print_parse_results(pr, depth=0, name=''):
-    """For debugging; pretty-prints parse result objects.
+    arch : {32, 64}, optional
+        The architecture of the backend.
+        Is specified in bits per machine word.
 
     """
-    start = name + " " * (20 - len(name)) + ':' + '..' * depth
-    if isinstance(pr, ParseResults):
-        print(start)
-        for i in pr:
-            name = ''
-            for k in pr.keys():
-                if pr[k] is i:
-                    name = k
-                    break
-            print_parse_results(i, depth+1, name)
-    else:
-        print(start + str(pr))
 
+    supported_base_types = CParser.supported_base_types + [
+        '__int64']
+    supported_type_qualifiers = CParser.supported_type_qualifiers + [
+        '__based', '__cdecl', '__fastcall', '__stdcall', '__restrict',
+        '__sptr', '__uptr', '__ptr64', '__w64', '__allowed(...)']
+    supported_storage_classes = CParser.supported_storage_classes + [
+        '__declspec(...)', '__forceinline', '__inline']
+    supported_ident_non_alnums = '_$'
 
-# Syntatic delimiters
-comma = Literal(",").ignore(quotedString).suppress()
-colon = Literal(":").ignore(quotedString).suppress()
-semi = Literal(";").ignore(quotedString).suppress()
-lbrace = Literal("{").ignore(quotedString).suppress()
-rbrace = Literal("}").ignore(quotedString).suppress()
-lbrack = Literal("[").ignore(quotedString).suppress()
-rbrack = Literal("]").ignore(quotedString).suppress()
-lparen = Literal("(").ignore(quotedString).suppress()
-rparen = Literal(")").ignore(quotedString).suppress()
-
-# Numbers
-int_strip = lambda t: t[0].rstrip('UL')
-hexint = Regex('[+-]?\s*0[xX][{}]+[UL]*'.format(hexnums)).setParseAction(int_strip)
-decint = Regex('[+-]?\s*[0-9]+[UL]*').setParseAction(int_strip)
-integer = (hexint | decint)
-# The floating regex is ugly but it is because we do not want to match
-# integer to it.
-floating = Regex(r'[+-]?\s*((((\d(\.\d*)?)|(\.\d+))[eE][+-]?\d+)|((\d\.\d*)|(\.\d+)))')
-number = (floating | integer)
-
-# Miscelaneous
-bi_operator = oneOf("+ - / * | & || && ! ~ ^ % == != > < >= <= -> . :: << >> = ? :")
-uni_right_operator = oneOf("++ --")
-uni_left_operator = oneOf("++ -- - + * sizeof new")
-wordchars = alphanums+'_$'
-name = (WordStart(wordchars) + Word(alphas+"_", alphanums+"_$") +
-        WordEnd(wordchars))
-size_modifiers = ['short', 'long']
-sign_modifiers = ['signed', 'unsigned']
-
-# Syntax elements defined by _init_parser.
-expression = Forward()
-array_op = lbrack + expression + rbrack
-base_types = None
-ident = None
-type_qualifier = None
-storage_class_spec = None
-fund_type = None
-extra_type_list = []
-
-num_types = ['int', 'float', 'double']
-nonnum_types = ['char', 'bool', 'void']
-
-
-# Macro some common language elements when initialising.
-def _init_cparser(extra_types=None, extra_modifiers=()):
-    global expression
-    global ident
-    global base_types
-    global type_qualifier, storage_class_spec
-    global fund_type
-    global extra_type_list
-
-    # Some basic definitions
-    extra_type_list = [] if extra_types is None else list(extra_types)
-    base_types = nonnum_types + num_types + extra_type_list
-    storage_classes = ['inline', 'static', 'extern', '__declspec']
-    ###TODO: extend storage classes by stanard and custom ones (i.e. 'auto', 'register', '__declspec()')
-    qualifiers = ['const', 'volatile', 'restrict', 'near', 'far', '__cdecl',
-                  '__stdcall', 'call_conv']
-
-    keywords = (['struct', 'enum', 'union', '__stdcall', '__cdecl'] +
-                qualifiers + base_types + size_modifiers + sign_modifiers +
-                storage_classes)
-
-    keyword = kwl(keywords)
-    wordchars = alphanums+'_$'
-    ident = (WordStart(wordchars) + ~keyword +
-             Word(alphas + "_", alphanums + "_$") +
-             WordEnd(wordchars)).setParseAction(lambda t: t[0])
-
-    # Removes '__name' from all type specs. may cause trouble.
-    underscore_2_ident = (WordStart(wordchars) + ~keyword + '__' +
-                          Word(alphanums, alphanums+"_$") +
-                          WordEnd(wordchars)
-                          )
-
-    special_quals = underscore_2_ident   ###TODO: remove / has to be done via extra_modifiers in future
-    if extra_modifiers:
-        special_quals |= kwl(extra_modifiers)
-
-    def mergeNested(t):
-        return ''.join((part if isinstance(part, basestring)
-                        else '(' + mergeNested(part) + ')')
-                       for part in t)
-    type_qualifier = ZeroOrMore(
-        (special_quals + Optional(nestedExpr())).setParseAction(mergeNested) |
-        kwl(qualifiers))
-
-    storage_class_spec = ZeroOrMore(
-        (kwl(storage_classes) + Optional(nestedExpr()))
-        .setParseAction(mergeNested))
-
-    # Language elements
-    fund_type = OneOrMore(kwl(sign_modifiers + size_modifiers +
-                          base_types)).setParseAction(lambda t: ' '.join(t))
-
-    # Is there a better way to process expressions with cast operators??
-    cast_atom = (
-        ZeroOrMore(uni_left_operator) + Optional('('+ident+')').suppress() +
-        ((ident + '(' + Optional(delimitedList(expression)) + ')' |
-          ident + OneOrMore('[' + expression + ']') |
-          ident | number | quotedString
-          ) |
-         ('(' + expression + ')')) +
-        ZeroOrMore(uni_right_operator)
-        )
-
-    # XXX Added name here to catch macro functions on types
-    uncast_atom = (
-        ZeroOrMore(uni_left_operator) +
-        ((ident + '(' + Optional(delimitedList(expression)) + ')' |
-          ident + OneOrMore('[' + expression + ']') |
-          ident | number | name | quotedString
-          ) |
-         ('(' + expression + ')')) +
-        ZeroOrMore(uni_right_operator)
-        )
-
-    atom = cast_atom | uncast_atom
-
-    expression << Group(atom + ZeroOrMore(bi_operator + atom))
-    expression.setParseAction(converter(str))
-
-
-###TODO: remove this and adapt interface of CParser
-class NewCParser(object):
-    """
-    This object shall replace CParser in future.
-    """
-
-    def __init__(self, cust_type_quals=None, stdlib_hdrs=None):
-        """
-        creates a parser object, that is customized for a specific
-        compiler (i.e. the microsoft compiler will support different
-        type_quals than GCC
-        """
-        pass
-
-    def derive(self, stdlib_hdrs):
-        """
-        create a cloned parser with different stdlib
-
-        :param stdlib_hdrs:
-        :return:
-        """
-        pass
-
-    def parse(self, hdr_files):
-        clibIntf = c_model.CLibInterface()
-
-        for hdr_file in hdr_files:
-            if isinstance(hdr_file, basestring):
-                hdr_file = open(hdr_file, "rt")
-
-            # parse types, macrodefs and global objects of hdr_file into clib_intf
-
-        return clibIntf
+    def __init__(self, header_dirs=None, predef_macros=None,
+                 msc_ver=1500, arch=32):
+        ms_predef_macros={}
+        ms_predef_macros['_MSC_VER'] = str(msc_ver)
+        if arch == 32:
+            ms_predef_macros['_M_IX86'] = ''
+        elif arch == 64:
+            ms_predef_macros['_M_AMD64'] = ''
+        else:
+            raise ValueError("'arch' has to be either 32 (=32 bit "
+                             "architecture) or 64 (=64 bit architecture)")
+        if predef_macros:
+            ms_predef_macros.update()
+        super(MSVCParser, self).__init__(header_dirs, ms_predef_macros)

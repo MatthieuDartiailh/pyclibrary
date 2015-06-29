@@ -19,15 +19,13 @@ It has to be run on one of the following conditions:
 """
 from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
-from pyclibrary.c_parser import win_defs
-from pyclibrary.utils import add_header_locations
+from pyclibrary.c_parser import win_defs_parser
 
 SDK_DIR = r'c:\program files\microsoft sdks\windows\v6.0a\include'
 
 if __name__ == '__main__':
     print('parsing windows definitions (may take some while)')
-    add_header_locations([SDK_DIR])
-    parser = win_defs()
+    parser = win_defs_parser(force_update=True, sdk_dir=SDK_DIR)
     print('parsed:')
-    for objcls in ['variables', 'functions', 'types', 'macros', 'fnmacros']:
-        print('   ', len(parser.defs[objcls]), objcls)
+    for objtypename, objmap in sorted(parser.clib_intf.obj_maps.items()):
+        print('   ', len(objmap), objtypename)
