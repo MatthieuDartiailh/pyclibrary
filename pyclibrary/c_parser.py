@@ -20,7 +20,6 @@ import os
 import logging
 from inspect import cleandoc
 from future.utils import istext, isbytes
-from ast import literal_eval
 from traceback import format_exc
 
 from .errors import DefinitionError
@@ -1209,7 +1208,7 @@ class CParser(object):
         # Enum definition
         enum_var_decl = Group(ident('name') +
                               Optional(Literal('=').suppress() +
-                              (integer('value') | ident('valueName'))))
+                              expression('value')))
 
         self.enum_type << (Keyword('enum') +
                            (Optional(ident)('name') +
@@ -1329,9 +1328,10 @@ class CParser(object):
                 enum = {}
                 for v in t.members:
                     if v.value != '':
-                        i = literal_eval(v.value)
-                    if v.valueName != '':
-                        i = enum[v.valueName]
+                        try:
+                            i = self.eval_expr(v.value)
+                        except Exception:
+                            pass
                     enum[v.name] = i
                     self.add_def('values', v.name, i)
                     i += 1

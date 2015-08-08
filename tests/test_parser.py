@@ -641,14 +641,17 @@ class TestParsing(object):
         enums = self.parser.defs['enums']
         types = self.parser.defs['types']
         variables = self.parser.defs['variables']
+        print(self.parser.defs['values'])
         assert ('enum_name' in enums and 'enum enum_name' in types)
-        assert enums['enum_name'] == {'enum1': 2, 'enum2': 6, 'enum3': 7,
+        assert enums['enum_name'] == {'enum1': 129, 'enum2': 6, 'enum3': 7,
                                       'enum4': 8}
         assert types['enum enum_name'] == Type('enum', 'enum_name',)
         assert ('enum_inst' in variables and
                 variables['enum_inst'] == (None, Type('enum enum_name',)))
 
         assert 'anon_enum0' in enums
+        assert 'anon_enum1' in enums
+        assert 'no_name_enum_typeddef' in types
 
     def test_struct(self):
 
