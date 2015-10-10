@@ -19,6 +19,7 @@ find_library : Find the path to a shared library from its name.
 """
 from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
+import inspect
 
 import os
 import sys
@@ -26,6 +27,8 @@ import logging
 import io
 import struct
 import subprocess
+import copy
+from future.utils import with_metaclass
 
 from .thirdparty.find_library import find_library as find_lib
 
@@ -242,3 +245,68 @@ def check_output(*popenargs, **kwargs):
         error.output = output
         raise error
     return output
+
+
+class DataObjectMeta(type):
+
+    def __new__(metacls, name, parents, attrs):
+
+        def __init__(self, *args, **argv):
+            for req_argv in slots[len(args):]:
+                if req_argv not in argv:
+                    raise TypeError('missing parameter {!r}'
+                                    .format(req_argv))
+                args += (argv.pop(req_argv),)
+            for parname, parval in zip(slots, args):
+                setattr(self, parname, parval)
+            super(cls, self).__init__(*args[len(slots):], **argv)
+
+        def __repr__(self):
+            superRepr = super(cls, self).__repr__()
+            _, rest = superRepr.split('(', 1)
+            paramStrs = [repr(getattr(self, an)) for an in slots]
+            if len(rest) > 1:
+                # add parameters from parent class (without trailing ')')
+                paramStrs.append(rest[:-1])
+            return cls.__name__ + '(' + ', '.join(paramStrs) + ')'
+
+        def __eq__(self, other):
+            return (all(getattr(self, an) == getattr(other, an)
+                        for an in slots) and
+                   super(cls, self).__eq__(other))
+
+        attrs.setdefault('__init__', __init__)
+        attrs.setdefault('__repr__', __repr__)
+        attrs.setdefault('__eq__', __eq__)
+        slots = attrs.setdefault('__slots__', ())
+        cls = type.__new__(metacls, name, parents, attrs)
+        return cls
+
+
+class DataObject(with_metaclass(DataObjectMeta, object)):
+    """Provides automatic support for __init__/__repr__/__eq__/copy by
+    analysing the __slots__ parameter.
+
+    Sample definition:
+    class Demo(DataObject):
+        __slots__ = ('field1', 'field2')
+    """
+
+    __slots__ = ()
+
+    def __init__(self):
+        pass
+
+    def __repr__(self):
+        return "DataObject()"
+
+    def __eq__(self, other):
+        return type(self) == type(other)
+
+    def __ne__(self, other):
+        return not self == other
+
+    def copy(self):
+        """Creastes a shallow copy of the object
+        """
+        return copy.copy(self)

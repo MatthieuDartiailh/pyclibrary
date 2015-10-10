@@ -14,52 +14,6 @@ import pytest
 from pyclibrary import c_model as cm
 
 
-class TestCLibBase(object):
-
-    class DummyType(cm.CLibBase):
-
-        __slots__ = ['p1', 'p2', 'p3', 'p4']
-
-        def __init__(self, p1, p2, p3=None, p4=None):
-            super(TestCLibBase.DummyType, self).__init__()
-            self.p1 = p1
-            self.p2 = p2
-            self.p3 = p3
-            self.p4 = p4
-
-    def test_repr(self):
-        def assert_repr_valid(expr_str):
-            assert (repr(eval(expr_str, {'DummyType': self.DummyType})) ==
-                    expr_str)
-        assert_repr_valid("DummyType(3, [{!r}, {!r}])".format('tst', 'tst2'))
-        assert_repr_valid("DummyType(0, [], p3={!r})".format('Test'))
-        assert_repr_valid("DummyType(0, [], p4=[2, 3])")
-        assert_repr_valid("DummyType(0, [], p3={!r}, p4=[2, 3])"
-                          .format('Test'))
-
-    def test_eq(self):
-        assert self.DummyType(0, []) == self.DummyType(0, [])
-        assert (self.DummyType(3, ['test', 'test2'], 'test3', [9]) ==
-                self.DummyType(3, ['test', 'test2'], 'test3', [9]))
-
-        assert self.DummyType(0, []) != self.DummyType(1, [])
-        assert self.DummyType(0, []) != self.DummyType(0, ['test'])
-        assert self.DummyType(0, []) != self.DummyType(0, [], p3='test')
-        assert self.DummyType(0, []) != self.DummyType(0, [], p4=[])
-
-        class OtherDummyType(cm.CLibType):
-            def c_repr(self, inner=None):
-                return ''
-        assert self.DummyType(0, []) != OtherDummyType()
-
-    def test_copy(self):
-        orig_obj = self.DummyType(3, ['test'], 'test2', [9])
-        copied_obj = orig_obj.copy()
-        assert orig_obj == copied_obj
-        assert orig_obj is not copied_obj
-        assert orig_obj.p1 is copied_obj.p1
-
-
 class TestCLibType(object):
 
     class DummyType(cm.CLibType):

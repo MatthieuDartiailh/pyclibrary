@@ -41,10 +41,10 @@ The class hierarchy is:
 from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 import collections
-import itertools
 import re
 from future.utils import istext, isbytes
 from .errors import UnknownCustomTypeError
+from .utils import DataObject
 
 
 def _lpadded_str(text):
@@ -55,79 +55,10 @@ def _lpadded_str(text):
         return ' ' + text
 
 
-class CLibBase(object):
+class CLibBase(DataObject):
     """Base class for all objects managed by CLibInterface.
-    It primarly provides basic python funtionality like comparing, copying
-    and displaying for all derived classes.
-
-    To make this generic approach working all derived classes have to follow
-    the following conventions:
-    * __slots__ has to be defined, where all attributes added by a derived
-      class are inserted into. This is for optimization purposes and allows
-      CLibBase to find out the attributes used by the class which is important
-      for compare/copy/repr. If more/less attributes should be involved
-      in CLibBase operations _getattrnames() has to be overwritten
-    * The derived classes __init__ has to provide **all** attributes of
-      the class (including attributes from the parent class) as parameters
-      with the same name as the attributes.
 
     """
-
-    __slots__ = ()
-
-    def _getattrnames(self):
-        """Internal method that lists all fields
-
-        Returns
-        -------
-        list[str]
-            A list of attribute names
-
-        """
-        for cls in type(self).__mro__:
-            if hasattr(cls, '__slots__'):
-                for name in cls.__slots__:
-                    yield name
-
-    def copy(self):
-        """Creates a shallow copy of this type.
-
-        Returns
-        -------
-        CLibBase
-            A copy of self
-
-        """
-        attrs = {anm: getattr(self, anm) for anm in self._getattrnames()}
-        return type(self)(**attrs)
-
-    def __eq__(self, other):
-        if type(self) != type(other):
-            return False
-        return all(getattr(self, anm) == getattr(other, anm)
-                   for anm in self._getattrnames())
-
-    def __ne__(self, other):
-        return not self == other
-
-    def __repr__(self):
-        code_obj = self.__init__.__code__
-        init_params = code_obj.co_varnames[1:code_obj.co_argcount]
-        default_vals = dict(zip(reversed(init_params),
-                                reversed(self.__init__.__defaults__ or [])))
-
-        def par_repr(param_name):
-            val = getattr(self, param_name)
-            if param_name not in default_vals:
-                yield repr(val)
-            else:
-                default_val = ([] if param_name == "quals"
-                               else default_vals[param_name])
-                if val != default_val:
-                    yield param_name + '=' + repr(val)
-
-        return (type(self).__name__ + '(' +
-                ', '.join(itertools.chain(*map(par_repr, init_params))) + ')')
 
 
 class CLibType(CLibBase):
@@ -779,13 +710,6 @@ class FnMacro(Macro):
 
     __slots__ = ('compiled_content', 'params')
 
-    def _getattrnames(self):
-        """Hide 'compiled_content' since it is a computed value, that can
-        be derived from 'content' and 'params' (see ._compile_content())
-
-        """
-        return ('content', 'params')
-
     def __init__(self, content, params):
         super(FnMacro, self).__init__()
         self.params = params
@@ -824,6 +748,10 @@ class FnMacro(Macro):
     def c_repr(self, name):
         return '#define {}({}) {}'.format(name, ', '.join(self.params),
                                           self.content)
+
+    def __repr__(self):
+        return "FnMacro({!r}, {!r})".format(
+            self.parametrized_content(*self.params), self.params)
 
 
 class CLibInterface(collections.Mapping):
