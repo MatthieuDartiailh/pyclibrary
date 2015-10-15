@@ -14,11 +14,13 @@ from __future__ import (division, unicode_literals, print_function,
 
 import os
 import io
+
 from pytest import raises
 import py
+
 from pyclibrary.c_parser import CParser, MSVCParser
 from pyclibrary.errors import InvalidCacheError, DefinitionError
-import pyclibrary.c_model as cm
+import pyclibrary.asts.c as cm
 
 H_DIRECTORY = 'headers'
 

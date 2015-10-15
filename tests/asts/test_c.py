@@ -10,8 +10,10 @@
 """
 from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
+
 import pytest
-from pyclibrary import c_model as cm
+
+from pyclibrary.asts import c as cm
 
 
 class TestCLibType(object):

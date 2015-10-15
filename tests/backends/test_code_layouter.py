@@ -9,7 +9,7 @@
 from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 import pytest
-from pyclibrary import c_model as cm, code_layouter
+from pyclibrary.backends import code_layouter
 from io import StringIO
 
 
@@ -40,7 +40,13 @@ class TestCode(object):
         default_cl.close()
         return default_cl.out_file.getvalue()
 
-    def test_allMethods_returnSelf(self, default_cl):
+    def test_CodeLayouter_supportsContexts(self):
+        out_file = StringIO()
+        with code_layouter.CodeLayouter(out_file) as cl:
+            cl.tokens('test')
+        assert out_file.getvalue() == 'test'
+
+    def test_allInsertMethods_returnSelf(self, default_cl):
         assert default_cl.tokens() == default_cl
         assert default_cl.nl() == default_cl
         assert default_cl.space() == default_cl
@@ -72,10 +78,15 @@ class TestCode(object):
         default_cl.tokens('b')
         assert self.output_of(default_cl) == 'aa\nb'
 
-    def test_minVDist_onNoMoreTokens_insertsASingleNlOnly(self, default_cl):
+    def test_minVDist_beforeFirstToken_doesNothing(self, default_cl):
+        default_cl.min_vdist(5)
+        default_cl.tokens('test')
+        assert self.output_of(default_cl) == 'test'
+
+    def test_minVDist_afterLastToken_insertsASingleNlOnly(self, default_cl):
         default_cl.tokens('test')
         default_cl.min_vdist(5)
-        assert self.output_of(default_cl) == 'test'
+        assert self.output_of(default_cl) == 'test\n'
 
     def test_minVDist_calledBetweenToklens_insertsSpecifiedAmountOfNls(self, default_cl):
         default_cl.tokens('xxxx')

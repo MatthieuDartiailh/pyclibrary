@@ -43,8 +43,8 @@ from __future__ import (division, unicode_literals, print_function,
 import collections
 import re
 from future.utils import istext, isbytes
-from .errors import UnknownCustomTypeError
-from .utils import DataObject
+from ..errors import UnknownCustomTypeError
+from .astcore import AstNode
 
 
 def _lpadded_str(text):
@@ -55,13 +55,13 @@ def _lpadded_str(text):
         return ' ' + text
 
 
-class CLibBase(DataObject):
+class CAstNode(AstNode):
     """Base class for all objects managed by CLibInterface.
 
     """
 
 
-class CLibType(CLibBase):
+class CLibType(CAstNode):
     """This is the abstract base class for all objects that are modeling a
     "C" type.
 
@@ -629,7 +629,7 @@ class FunctionType(ComposedType):
             yield ptype
 
 
-class Macro(CLibBase):
+class Macro(CAstNode):
     """Model of C Preprocessor define."""
 
     __slots__ = ()

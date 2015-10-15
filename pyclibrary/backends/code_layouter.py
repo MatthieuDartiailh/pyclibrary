@@ -46,6 +46,7 @@ class CodeLayouter(object):
         self.nl_count = 0
         self.min_space_count = 0
         self.space_count = 0
+        self.start_of_file = True
 
     @contextlib.contextmanager
     def layout(self, rel_indent=0, indent=None, max_col=0,
@@ -115,6 +116,8 @@ class CodeLayouter(object):
         """
         if not self.closed:
             self.__flush()
+            if self.min_nl_count > self.nl_count and not self.start_of_file:
+                self.nl()
             self.closed = True
 
     def __del__(self):
@@ -135,7 +138,7 @@ class CodeLayouter(object):
         assert not self.closed
 
         if tokens:
-            if self.min_nl_count > self.nl_count:
+            if self.min_nl_count > self.nl_count and not self.start_of_file:
                 self.nl(self.min_nl_count - self.nl_count)
             self.min_nl_count = 0
             self.nl_count = 0
@@ -144,6 +147,8 @@ class CodeLayouter(object):
                 self.space(self.min_space_count - self.space_count)
             self.min_space_count = 0
             self.space_count = 0
+
+            self.start_of_file = False
 
         for token in tokens:
             if len(token) > 0:
@@ -199,7 +204,7 @@ class CodeLayouter(object):
         return self
 
     def min_vdist(self, nl_count):
-        """Specifies the minimum amount of empty lines between this token
+        """Specifies the minimum amount of empty lines between the last token
         and the next one. If called multiple times
         (i.E. cl.min_vdist(2).min_vdist(3)) only the biggest value
         will be used for generating newlines.
@@ -209,6 +214,8 @@ class CodeLayouter(object):
         were already added by nl():
 
             cl.nl().min_vdist(5).nl()
+
+        min_vdist() at the end and the beginning of the file are ignored.
 
         Parameters
         ----------
@@ -266,3 +273,9 @@ class CodeLayouter(object):
 
         """
         return sum(map(len, self.cur_line))
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()

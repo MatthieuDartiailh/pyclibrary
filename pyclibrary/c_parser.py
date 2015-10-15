@@ -19,13 +19,15 @@ import re
 import os
 import logging
 from inspect import cleandoc
-from future.utils import istext, isbytes
 from ast import literal_eval
 from traceback import format_exc
 import pickle
 
+from future.utils import istext, isbytes
+
 from .errors import DefinitionError, InvalidCacheError
-from pyclibrary import c_model
+from pyclibrary.asts import c
+
 
 # Import parsing elements
 from .thirdparty.pyparsing import \
@@ -103,7 +105,7 @@ def win_defs_parser(version=1500, arch=32, force_update=False, sdk_dir=None):
     # defining DECLARE_HANDLE WinDef.h can be parsed before WinNt.h and
     # WinNt.h can then use all definitions from WinDef.h when being parsed)
     parser.clib_intf.add_macro(
-        'DECLARE_HANDLE', c_model.FnMacro('typedef HANDLE name', ['name']))
+        'DECLARE_HANDLE', c.FnMacro('typedef HANDLE name', ['name']))
 
     if not force_update:
         try:
@@ -269,7 +271,7 @@ class CParser(object):
         a new one.
 
         """
-        self.clib_intf = c_model.CLibInterface()
+        self.clib_intf = c.CLibInterface()
         for name, content in self.predef_macros.items():
             self.clib_intf.add_macro(name, content)
         self.file_order = []
@@ -634,14 +636,14 @@ class CParser(object):
 
         else:
             if t.args == '':
-                macro = c_model.ValMacro(macro_val)
+                macro = c.ValMacro(macro_val)
                 val = self.eval_expr(macro_val)
                 self.clib_intf.macro_vals[t.macro] = val
                 mess = "  Add macro: {} ({}); {}"
                 logger.debug(mess.format(t.macro, val, macro))
 
             else:
-                fnmacro = c_model.FnMacro(macro_val, list(t.args))
+                fnmacro = c.FnMacro(macro_val, list(t.args))
                 self.clib_intf.add_macro(t.macro, fnmacro, self.cur_file_name)
                 mess = "  Add fn macro: {} ({}); {}"
                 logger.debug(mess.format(t.macro, t.args, fnmacro))
@@ -670,12 +672,12 @@ class CParser(object):
             name = m.groups()[N]
             if name in self.clib_intf.macros:
                 macro = self.clib_intf.macros[name]
-                if isinstance(macro, c_model.ValMacro):
+                if isinstance(macro, c.ValMacro):
                     parts.append(line[:m.start(N)])
                     line = line[m.end(N):]
                     parts.append(macro.content)
 
-                elif isinstance(macro, c_model.FnMacro):
+                elif isinstance(macro, c.FnMacro):
                     # If function macro expansion fails, just ignore it.
                     try:
                         exp, end = self.expand_fn_macro(name, line[m.end(N):])
@@ -945,8 +947,8 @@ class CParser(object):
         custom_type = ident.copy()
         type_astdef = (
             self.fund_type.setParseAction(
-                self._converter(c_model.BuiltinType)) |
-            custom_type.setParseAction(self._converter(c_model.CustomType)) |
+                self._converter(c.BuiltinType)) |
+            custom_type.setParseAction(self._converter(c.CustomType)) |
             self.struct_type |
             self.enum_type)
         self.type_spec = self.type_qualifier('pre_qual') + type_astdef('type')
@@ -1113,7 +1115,7 @@ class CParser(object):
 
         if 'ptrs' in decl and len(decl['ptrs']) > 0:
             for ptr_level in decl['ptrs']:
-                base_type = c_model.PointerType(
+                base_type = c.PointerType(
                     base_type.with_quals(list(ptr_level)))
 
         if 'args' not in decl or len(decl['args']) == 0:
@@ -1124,13 +1126,13 @@ class CParser(object):
             else:
                 params = [self.process_type(a, a['decl'])
                           for a in decl['args']]
-            base_type = c_model.FunctionType(base_type, params, quals)
+            base_type = c.FunctionType(base_type, params, quals)
 
         if 'arrays' in decl and len(decl['arrays']) > 0:
             for ast_arrsize in reversed(decl['arrays']):
                 arrsize = (self.eval_expr(ast_arrsize) if ast_arrsize != ''
                            else None)
-                base_type = c_model.ArrayType(base_type, arrsize)
+                base_type = c.ArrayType(base_type, arrsize)
 
         if 'center' in decl:
             (n, base_type) = self.process_declarator(
@@ -1173,13 +1175,13 @@ class CParser(object):
                     cur_enum_val += 1
                 logger.debug("  members: {}".format(enum_vals))
 
-                etyp = c_model.EnumType(enum_vals)
+                etyp = c.EnumType(enum_vals)
                 if not ename:
                     return etyp
                 else:
                     self.clib_intf.add_typedef(ename, etyp, self.cur_file_name)
 
-            return c_model.CustomType(ename)
+            return c.CustomType(ename)
         except:
             logger.exception("Error processing enum: {}".format(t))
 
@@ -1193,7 +1195,7 @@ class CParser(object):
             (name, func_sig) = self.process_type(t, t.decl[0])
             storage_classes = (list(t.pre_stor_cls or []) +
                                list(t.post_stor_cls or []))
-            if not isinstance(func_sig, c_model.FunctionType):
+            if not isinstance(func_sig, c.FunctionType):
                 logger.error('{}'.format(t))
                 mess = "Incorrect declarator type for function definition."
                 raise DefinitionError(mess)
@@ -1260,9 +1262,9 @@ class CParser(object):
                             field, val, bitsize))
 
                 if str_typ == 'struct':
-                    type_ = c_model.StructType(fields, packing)
+                    type_ = c.StructType(fields, packing)
                 else:
-                    type_ = c_model.UnionType(fields)
+                    type_ = c.UnionType(fields)
 
                 if sname is None:
                     # anonymous struct/union => return directly
@@ -1271,7 +1273,7 @@ class CParser(object):
                     self.clib_intf.add_typedef(sname, type_,
                                                self.cur_file_name)
 
-            return c_model.CustomType(sname)
+            return c.CustomType(sname)
 
         except Exception:
             logger.exception('Error processing struct: {}'.format(t))
@@ -1287,7 +1289,7 @@ class CParser(object):
                 # This is a function prototype
                 storage_classes = (list(t[0].pre_stor_cls or []) +
                                    list(t[0].post_stor_cls or []))
-                if isinstance(type_, c_model.FunctionType):
+                if isinstance(type_, c.FunctionType):
                     logger.debug("  Add function prototype: {}".format(
                                  type_.c_repr(name)))
                     self.clib_intf.add_func(name, type_, self.cur_file_name,
