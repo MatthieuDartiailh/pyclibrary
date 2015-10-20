@@ -159,7 +159,7 @@ class Transformer(with_metaclass(TransformerMeta, object)):
                 return fmtFunc(self, ast, *ctx)
         else:
             raise self.UnsupportedClassError(
-                '{!r} has no transormation rule for class {!r}'
+                '{!r} has no transformation rule for class {!r}'
                 .format(type(self).__name__, type(ast).__name__))
 
     def __call__(self, ast, *ctx):

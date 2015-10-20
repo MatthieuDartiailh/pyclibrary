@@ -305,7 +305,7 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
         return CParser(headers, **kwargs)
 
     def _link_library(self, lib_path, convention):
-        """Find and link the external librairy if only a path was provided.
+        """Find and link the external library if only a path was provided.
 
         Parameters
         ----------

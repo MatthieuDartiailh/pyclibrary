@@ -203,7 +203,6 @@ class CParser(object):
         self.cur_pack_list = None
         self.cur_file_name = None
 
-
     def read(self, hdr_file, replace_texts=None, virtual_filename=None,
              preproc_out_file=None):
         """ Remove comments, preprocess, and parse declarations from all
@@ -237,15 +236,15 @@ class CParser(object):
             hdr_file = open(filename, 'rU')
         else:
             filename = getattr(hdr_file, 'name', None)
-        
+
         try:
             self.cur_file_name = virtual_filename or filename
-            
+
             srccode = hdr_file.read()
             fixed_srccode = self.fix_bad_code(srccode, replace_texts)
             logger.debug(cleandoc('Parsing C header files (no valid cache '
                                   'found). This could take several minutes.'))
-    
+
             logger.debug("Removing comments from file '{}'..."
                          .format(self.cur_file_name))
             nocomments_srccode = self.remove_comments(fixed_srccode)
@@ -340,7 +339,6 @@ class CParser(object):
                 if os.path.isfile(f) and os.stat(f).st_mtime > mtime:
                     logger.debug("Cache file is out of date.")
                     raise InvalidCacheError('Cache file is out of date.')
-
 
     def write_cache(self, cache_file):
         """Store all parsed declarations to cache. Used internally.
@@ -560,7 +558,8 @@ class CParser(object):
                     m = re.match(r'\s+pack\s*\(([^\)]*)\)', rest)
                     if if_true[-1] and m:
                         if m.groups():
-                            opts = [s.strip() for s in m.groups()[0].split(',')]
+                            opts = [s.strip()
+                                    for s in m.groups()[0].split(',')]
 
                         pushpop = id = val = None
                         for o in opts:
@@ -819,8 +818,7 @@ class CParser(object):
             return NoMatch()
         else:
             return Regex(r'\b({})\b'.format(regex))
-    
-    
+
     @staticmethod
     def _converter(converterFunc):
         """Flattens a tree of tokens and joins into one big string and
@@ -858,7 +856,7 @@ class CParser(object):
     @staticmethod
     def _print_parse_results(pr, depth=0, name=''):
         """For debugging; pretty-prints parse result objects.
-    
+
         """
         start = name + " " * (20 - len(name)) + ':' + '..' * depth
         if isinstance(pr, ParseResults):
@@ -872,7 +870,7 @@ class CParser(object):
                 CParser._print_parse_results(i, depth+1, name)
         else:
             print(start + str(pr))
-    
+
     def _build_parser(self):
         """Builds the entire tree of parser elements for the C language (the
         bits we support, anyway).
@@ -1148,6 +1146,7 @@ class CParser(object):
 
     def process_type(self, type_ast, decl):
         """Take a declarator + base type and return a CLibType object.
+
         """
         pre_quals = list(type_ast.get('pre_qual', []))
         base_type = type_ast.get('type').with_quals(pre_quals)

@@ -737,7 +737,8 @@ class FnMacro(Macro):
         return self.compiled_content.format(**self_mapped_args)
 
     def parametrized_content(self, *args, **argv):
-        """Returns the content of this function macro with replaced arguments
+        """Returns the content of this function macro with replaced arguments.
+
         """
         arg_dict = dict(zip(self.params, args))
         if set(arg_dict) & set(argv):
@@ -783,6 +784,7 @@ class CLibInterface(collections.Mapping):
     file_map : dict[str, str|None]
         A mapping of all names to file, where they are defined.
         If the file for a object is unknown it is None.
+
     storage_classes : dict[str, list[str]]
         A list of storage classes assigned to each function / global var.
 
