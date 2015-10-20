@@ -20,7 +20,7 @@ from ..asts import python as py
 
 class CTypesBindingsCreator(Transformer):
 
-    BUILDINTYPE_MAP = {
+    BUILTINTYPE_MAP = {
         'bool': 'c_bool',
         'char': 'c_char',
         'wchar': 'c_wchar',
@@ -54,11 +54,25 @@ class CTypesBindingsCreator(Transformer):
         'int64_t': 'c_int64'
     }
 
+    BUILTINPOINTERTYPE_MAP = {
+        'char': 'c_char_p',
+        'wchar': 'c_wchar_p',
+        'wchar_t': 'c_wchar_p',
+        'void': 'c_void_p'
+    }
+
     def __init__(self, dllobj_name='_dll'):
         super(CTypesBindingsCreator, self).__init__()
         self.dllobj_name = dllobj_name
+        self._clib = None
 
     def transform_clib_interface(self, clib):
+        """Turn a CLib AST object into one or several python modules.
+
+        """
+        self._clib = clib
+        # By adding Module to the python ast we could easily generate
+        # Multiple files for different kind of values.
         for name, c_ast in clib.vars.items():
             yield py.Assign(
                 py.Id(name),
@@ -67,21 +81,37 @@ class CTypesBindingsCreator(Transformer):
                     [self.dllobj_name, py.Str(name)]))
 
     @Transformer.register(c.ValMacro)
-    def transformValMacro(self, ast, name):
-        try:
-            contentVal = eval(ast.content)
-        except Exception:
-            pass
-        else:
-            if isinstance(contentVal, type('')):
-                contentAstType = py.BASETYPE_MAP[type(contentVal)]
-                yield py.Assign(py.Id(name), contentAstType(contentVal))
+    def transform_val_macro(self, ast, name):
+        """Create an assignement binding the macro name to its value.
+
+        """
+        content_val = ast.value if ast.value is not None else ast.content
+        contentAstType = py.BASETYPE_MAP[type(content_val)]
+        yield py.Assign(py.Id(name), contentAstType(content_val))
 
     @Transformer.register(c.BuiltinType)
-    def transformBuildinType(self, ast):
-        ctypes_type = self.BUILDINTYPE_MAP[ast.type_name]
+    def transform_buildin_type(self, ast):
+        """Turn a buildin type into its associated ctype type.
+
+        """
+        ctypes_type = self.BUILTINTYPE_MAP[ast.type_name]
         yield py.Id(ctypes_type)
 
+    @Transformer.register(c.CustomType)
+    def transform_custom_type(self, ast):
+        """Turn a custom type into a custom ctype declaration.
+
+        """
+        typ = ast.resolve(self._clib.typedefs)
+        yield self(typ)
+
     @Transformer.register(c.PointerType)
-    def transformPointerType(self, ast):
-        yield py.Call(py.Id('POINTER'), [self(ast.base_type)])
+    def transform_pointer_type(self, ast):
+        """Turn a pointer type into the equivalent ctype construct.
+
+        """
+        if (isinstance(ast.base_type, c.BuiltinType) and
+                ast.base_type.type_name in self.BUILTINPOINTERTYPE_MAP):
+            yield py.Id(self.BUILTINPOINTERTYPE_MAP[ast.base_type.type_name])
+        else:
+            yield py.Call(py.Id('POINTER'), [self(ast.base_type)])
