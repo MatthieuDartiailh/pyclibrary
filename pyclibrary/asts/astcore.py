@@ -10,9 +10,13 @@
 transorming from one model to another.
 
 """
+from __future__ import (division, unicode_literals, print_function,
+                        absolute_import)
+
 import copy
-from future.utils import with_metaclass
 import collections
+
+from future.utils import with_metaclass
 
 
 def flatten(iter):
@@ -49,39 +53,37 @@ def flatten(iter):
                 yield item
 
 
-
 class AstNodeMeta(type):
+    """Metaclass for ast nodes.
+
+    """
 
     def __new__(metacls, name, parents, attrs):
 
-        def __init__(self, *args, **argv):
-            for req_argv in slots[len(args):]:
-                if req_argv not in argv:
-                    raise TypeError('missing parameter {!r}'
-                                    .format(req_argv))
-                args += (argv.pop(req_argv),)
-            for parname, parval in zip(slots, args):
-                setattr(self, parname, parval)
-            super(cls, self).__init__(*args[len(slots):], **argv)
+        slots = attrs.setdefault('__slots__', ())
+
+        defaults = {}
+        for p in parents:
+            defaults.update(getattr(p, '__defaults__', {}))
+        defaults.update(attrs.get('__defaults__', {}))
+        attrs['__defaults__'] = defaults
 
         def __repr__(self):
-            superRepr = super(cls, self).__repr__()
-            _, rest = superRepr.split('(', 1)
-            paramStrs = [repr(getattr(self, an)) for an in slots]
+            super_repr = super(cls, self).__repr__()
+            _, rest = super_repr.split('(', 1)
+            param_strs = [an + '=' + repr(getattr(self, an)) for an in slots]
             if len(rest) > 1:
                 # add parameters from parent class (without trailing ')')
-                paramStrs.append(rest[:-1])
-            return cls.__name__ + '(' + ', '.join(paramStrs) + ')'
+                param_strs.append(rest[:-1])
+            return cls.__name__ + '(' + ', '.join(param_strs) + ')'
 
         def __eq__(self, other):
-            return (super(cls, self).__eq__(other)  and
+            return (super(cls, self).__eq__(other) and
                     all(getattr(self, an) == getattr(other, an)
                         for an in slots))
 
-        attrs.setdefault('__init__', __init__)
         attrs.setdefault('__repr__', __repr__)
         attrs.setdefault('__eq__', __eq__)
-        slots = attrs.setdefault('__slots__', ())
         cls = type.__new__(metacls, name, parents, attrs)
         return cls
 
@@ -90,27 +92,35 @@ class AstNode(with_metaclass(AstNodeMeta, object)):
     """Provides automatic support for __init__/__repr__/__eq__/copy by
     analysing the __slots__ parameter.
 
+    All subsclasses are automatically slotted.
+
+    Default values for attributes can be specified as callable in a dictionary
+    stored under __defaults__
+
     Sample definition:
     class Demo(DataObject):
         __slots__ = ('field1', 'field2')
+
     """
-
     __slots__ = ()
+    __default__ = {}
 
-    def __init__(self):
-        pass
-
-    def __repr__(self):
-        return "DataObject()"
-
-    def __eq__(self, other):
-        return type(self) == type(other)
+    def __init__(self, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+        for k, v in self.__defaults__.items():
+            if k in kwargs:
+                v = kwargs[k]
+            else:
+                v = v()
+            setattr(self, k, v)
 
     def __ne__(self, other):
         return not self == other
 
     def copy(self):
-        """Creastes a shallow copy of the object
+        """Creates a shallow copy of the object.
+
         """
         return copy.copy(self)
 
@@ -164,7 +174,7 @@ class Transformer(with_metaclass(TransformerMeta, object)):
 
     def __call__(self, ast, *ctx):
         """This is a shortcut for .transform(), that enforces that exactly one
-        object is yielded. Instead of returnung an iterator, this method
+        object is yielded. Instead of returning an iterator, this method
         returns this single object.
 
         """
