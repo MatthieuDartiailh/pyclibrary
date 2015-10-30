@@ -95,7 +95,7 @@ class AstNode(with_metaclass(AstNodeMeta, object)):
     All subsclasses are automatically slotted.
 
     Default values for attributes can be specified as callable in a dictionary
-    stored under __defaults__
+    stored under __defaults__.
 
     Sample definition:
     class Demo(DataObject):
@@ -105,15 +105,18 @@ class AstNode(with_metaclass(AstNodeMeta, object)):
     __slots__ = ()
     __default__ = {}
 
-    def __init__(self, **kwargs):
-        for k, v in kwargs.items():
+    def __init__(self, *args, **kwargs):
+        seen = set()
+        for k, v in zip(self.__slots__, args):
             setattr(self, k, v)
+            seen.add(k)
         for k, v in self.__defaults__.items():
-            if k in kwargs:
-                v = kwargs[k]
-            else:
-                v = v()
-            setattr(self, k, v)
+            if k not in seen:
+                if k in kwargs:
+                    v = kwargs[k]
+                else:
+                    v = v()
+                setattr(self, k, v)
 
     def __ne__(self, other):
         return not self == other
