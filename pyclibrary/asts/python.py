@@ -131,6 +131,18 @@ class Ellipsis(LiteralNode):
 # --- Variables ---------------------------------------------------------------
 # =============================================================================
 
+class Context(PyAstNode):
+    """Context helping determining the operation performed on a variable.
+
+    """
+    pass
+
+
+class Load(Context): pass
+class Store(Context): pass
+class Del(Context): pass
+
+
 class Name(ExpressionNode):
     """A variable name.
 
@@ -145,18 +157,7 @@ class Name(ExpressionNode):
 
     """
     __slots__ = ('id', 'ctx')
-
-
-class Context(PyAstNode):
-    """Context helping determining the operation performed on a variable.
-
-    """
-    pass
-
-
-class Load(Context): pass
-class Store(Context): pass
-class Del(Context): pass
+    __defaults__ = {'ctx': Load}
 
 
 class Starred(ExpressionNode):
