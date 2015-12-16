@@ -644,7 +644,7 @@ def cast_to(lib, obj, typ):
         the array elements.
 
     """
-    lib._cast_to(obj, typ)
+    return lib._cast_to(obj, typ)
 
 
 def build_array(lib, typ, size, vals=None):
