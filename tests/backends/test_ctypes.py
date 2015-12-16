@@ -45,7 +45,6 @@ class TestCTypesCLibrary(object):
     """
     def setup(self):
         self.library = CLibrary(_ctypes_test.__file__, ['ctypes_test.h'])
-        print(sorted(self.library._defs_['functions']))
 
     def test_call(self):
         point_cls = self.library('structs', 'tagpoint')
@@ -94,7 +93,7 @@ class TestCTypesCLibrary(object):
         Will fail if restype is not properly set.
 
         """
-        test_str = 'Test'
+        test_str = 'Test'.encode('utf-8')
         copy = self.library.my_strdup(test_str)()
         assert copy == test_str
         assert copy is not test_str
