@@ -409,6 +409,7 @@ class TestPreprocessing(object):
 
         assert 'int __declspec(dllexport) function2()' in stream
         assert '__declspec(dllexport) int function3()' in stream
+        assert '__declspec(dllexport) int * function4()' in stream
 
         # Test defining a macro function as an alias for another one.
         assert 'MAKEINTRESOURCEA' in fnmacros

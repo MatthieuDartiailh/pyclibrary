@@ -29,7 +29,7 @@ from .utils import find_header
 from .thirdparty.pyparsing import \
     (ParserElement, ParseResults, Forward, Optional, Word, WordStart,
      WordEnd, Keyword, Regex, Literal, SkipTo, ZeroOrMore, OneOrMore,
-     Group, LineEnd, stringStart, quotedString, oneOf, nestedExpr,
+     Group, LineEnd, quotedString, oneOf, nestedExpr,
      delimitedList, restOfLine, cStyleComment, alphas, alphanums, hexnums,
      lineno, Suppress)
 ParserElement.enablePackrat()
@@ -1000,13 +1000,13 @@ class CParser(object):
                     exp, end = self.expand_fn_macro(name, line[m.end(N):])
                 except Exception:
                     exp = name
-                    end = 0
-                    mess = "Function macro expansion failed: {}, {}"
-                    logger.error(mess.format(name, line[m.end(N):]))
+                    end = line[m.end(N):]
+                    mess = "Function macro expansion failed: {}, {}\n {}"
+                    logger.error(mess.format(name, line[m.end(N):],
+                                             format_exc()))
 
                 parts.append(line[:m.start(N)])
-                start = end + m.end(N)
-                line = line[start:]
+                line = end
                 parts.append(exp)
 
             else:
@@ -1024,15 +1024,15 @@ class CParser(object):
         # defn looks like ('%s + %s / %s', (0, 0, 1))
         defn = self.defs['fnmacros'][name]
 
-        arg_list = (stringStart + lparen +
-                    Group(delimitedList(expression))('args') + rparen)
-        res = [x for x in arg_list.scanString(text, 1)]
-        if len(res) == 0:
-            mess = "Function macro '{}' not followed by (...)"
-            raise DefinitionError(0,  mess.format(name))
+        try:
+            args, end = text.split(')', 1)
+            _, args = args.split('(', 1)
+            args = [a.strip() for a in args.split(',')]
+        except Exception:
+            mess = "Function macro {} argument analysis failed :\n{}"
+            raise DefinitionError(0,  mess.format(name, format_exc()))
 
-        args, start, end = res[0]
-        args = [self.expand_macros(arg) for arg in args[0]]
+        args = [self.expand_macros(arg) for arg in args]
         new_str = defn[0].format(*[args[i] for i in defn[1]])
 
         return (new_str, end)
@@ -1728,12 +1728,11 @@ def _init_cparser(extra_types=None, extra_modifiers=None):
         ZeroOrMore(uni_right_operator)
         )
 
-    # XXX Added name here to catch macro functions on types
     uncast_atom = (
         ZeroOrMore(uni_left_operator) +
         ((ident + '(' + Optional(delimitedList(expression)) + ')' |
           ident + OneOrMore('[' + expression + ']') |
-          ident | number | name | quotedString
+          ident | number | quotedString
           ) |
          ('(' + expression + ')')) +
         ZeroOrMore(uni_right_operator)

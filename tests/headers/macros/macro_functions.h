@@ -10,6 +10,9 @@ EXPORT(int) function2();
 #define EXPORT(x) __declspec(dllexport) x
 EXPORT(int) function3();
 
+#define EXPORT(x) __declspec(dllexport) x
+EXPORT(int *) function4();
+
 // Test defining a macro function as an alias for another one.
 #define MAKEINTRESOURCEA(i) ((LPSTR)((ULONG_PTR)((WORD)(i))))
 #define MAKEINTRESOURCEW(i) ((LPWSTR)((ULONG_PTR)((WORD)(i))))
