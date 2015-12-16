@@ -81,3 +81,13 @@ class TestCLibrary(object):
 
     def test_accessing_prefixed_value(self):
         pass
+
+
+def test_function_pretty_signature():
+    """Test building the pretty signature of a function.
+
+    """
+    library = CLibrary(os.path.basename(_ctypes_test.__file__),
+                       ['ctypes_test.h'])
+    library.my_strdup.pretty_signature()
+

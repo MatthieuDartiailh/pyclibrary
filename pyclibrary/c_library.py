@@ -522,7 +522,7 @@ class CFunction(object):
 
     def pretty_signature(self):
         args = (''.join(self.sig[0]), self.name,
-                ', '.join(["{} {}".format("".join(map(s[1], s[0])))
+                ', '.join(["{} {}".format(s[1], s[0])
                           for s in self.sig[1]])
                 )
         return "{} {}({})".format(*args)
