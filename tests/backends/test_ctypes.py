@@ -15,11 +15,12 @@ from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 
 import os
+import ctypes
 import _ctypes_test
 from pytest import raises
 
 from pyclibrary.utils import (add_header_locations, HEADER_DIRS)
-from pyclibrary.c_library import CLibrary
+from pyclibrary.c_library import CLibrary, cast_to, build_array
 
 
 BACKUPS = ()
@@ -44,6 +45,7 @@ class TestCTypesCLibrary(object):
     """
     def setup(self):
         self.library = CLibrary(_ctypes_test.__file__, ['ctypes_test.h'])
+        print(sorted(self.library._defs_['functions']))
 
     def test_call(self):
         point_cls = self.library('structs', 'tagpoint')
@@ -85,3 +87,31 @@ class TestCTypesCLibrary(object):
         assert res == 3
         assert test_point.x == arg.x
         assert test_point.y == arg.y
+
+    def test_function_call4(self):
+        """Test calling a funcùtion returning a string
+
+        Will fail if restype is not properly set.
+
+        """
+        test_str = 'Test'
+        copy = self.library.my_strdup(test_str)()
+        assert copy == test_str
+        assert copy is not test_str
+
+    def test_cast_to(self):
+        """Test casting.
+
+        """
+        a = 10
+        assert (cast_to(self.library, a, ctypes.c_void_p).value ==
+                ctypes.cast(a, ctypes.c_void_p).value)
+
+    def test_build_array(self):
+        """Test array building.
+
+        """
+        pyc_array = build_array(self.library, ctypes.c_void_p, 2, [1, 2])
+        c_array = (ctypes.c_void_p*2)(1, 2)
+        assert type(pyc_array) == type(c_array)
+        assert pyc_array[0] == c_array[0]

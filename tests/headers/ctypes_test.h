@@ -18,6 +18,9 @@ EXPORT(int) get_an_integer(void)
     return an_integer;
 }
 
+// Test function calls returning type that needs to be correctly interpreted
+// to make sense (if restype is wrong won't work.
+EXPORT(char *) my_strdup(char *src);
 
 // Bunch of structure to test structure creation and access to global variables
 // made of complex structures.

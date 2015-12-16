@@ -339,8 +339,8 @@ class CTypesCLibrary(CLibrary):
         """Overrided here to declare the arguments types and return type.
 
         """
-        function.func.arg_types = function.arg_types
-        function.func.res_type = function.res_type
+        function.func.argtypes = function.arg_types
+        function.func.restype = function.res_type
 
 
 if sys.platform == 'win32':
