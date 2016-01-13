@@ -1,10 +1,20 @@
 PyCLibrary Changelog
 ====================
 
+0.1.3
+-----
+
+- Add possibilty to evaluate enums
+- Fix handling of macros applied to types
+- Fix cast_to function (was returning None)
+- Properly set the restype and argtypes attributes of ctypes functions
+- Fix function pretty printing
+
+
 0.1.2
 -----
 
-- Update windows headers cache and fix minor issues related to win_defs. 
+- Update windows headers cache and fix minor issues related to win_defs.
   (Robert Hoelzl)
 
 
