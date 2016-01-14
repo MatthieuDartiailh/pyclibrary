@@ -364,6 +364,10 @@ class CParser(object):
         Path of the cache file from which to load definitions/to which save
         definitions as parsing is an expensive operation.
 
+    check_cache_validity : bool, optional
+        Flag indicating whether to perform validity checking when using a cache file. This is useful
+        in a scenario where the python wrapper needs to be used without access to the headers
+
     kwargs :
         Extra parameters may be used to specify the starting state of the
         parser. For example, one could provide a set of missing type
@@ -404,7 +408,7 @@ class CParser(object):
     _init = False
 
     def __init__(self, files=None, copy_from=None, replace=None,
-                 process_all=True, cache=None, **kwargs):
+                 process_all=True, cache=None, check_cache_validity=True, **kwargs):
 
         if not self._init:
             logger.warning('Automatic initialisation based on OS detection')
@@ -456,10 +460,10 @@ class CParser(object):
                 self.import_dict(p.file_defs)
 
         if process_all:
-            self.process_all(cache=cache)
+            self.process_all(cache=cache, check_cache_validity=check_cache_validity)
 
     def process_all(self, cache=None, return_unparsed=False,
-                    print_after_preprocess=False):
+                    print_after_preprocess=False, check_cache_validity=True):
         """ Remove comments, preprocess, and parse declarations from all files.
 
         This operates in memory, and thus does not alter the original files.
@@ -482,7 +486,7 @@ class CParser(object):
             List of the results from parse_defs.
 
         """
-        if cache is not None and self.load_cache(cache, check_validity=True):
+        if cache is not None and self.load_cache(cache, check_validity=check_cache_validity):
             logger.debug("Loaded cached definitions; will skip parsing.")
             # Cached values loaded successfully, nothing left to do here
             return
