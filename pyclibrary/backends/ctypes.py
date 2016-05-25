@@ -295,6 +295,7 @@ class CTypesCLibrary(CLibrary):
         """Build an uninitialised pointer for the given type.
 
         """
+        # Must be 2-part type, second part must be '*' or '**'
         assert 2 <= len(arg_type) <= 3 and set(arg_type[1:]) == {'*'}
         arg_type_list = list(arg_type)
         cls = self._get_type(sig, pointers=False)
