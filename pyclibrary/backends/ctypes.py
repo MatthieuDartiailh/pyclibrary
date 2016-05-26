@@ -299,8 +299,11 @@ class CTypesCLibrary(CLibrary):
         assert 2 <= len(arg_type) <= 3 and set(arg_type[1:]) == {'*'}
         arg_type_list = list(arg_type)
         cls = self._get_type(sig, pointers=False)
-        if cls is None:
-            cls = c_void_p
+        special_pointer_types = {None:    c_void_p,
+                                 c_char:  c_char_p,
+                                 c_wchar: c_wchar_p}
+        if cls in special_pointer_types:
+            cls = special_pointer_types[cls]
             del arg_type_list[1]
         for pointer_decl in arg_type_list[1:-1]:
             cls = POINTER(cls)
