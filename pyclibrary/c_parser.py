@@ -1255,9 +1255,10 @@ class CParser(object):
             if decl['args'][0] is None:
                 toks.append(())
             else:
+                ex = lambda x: (x[0],) if len(x)!=0 else (None,)
                 toks.append(tuple([self.process_type(a['type'],
                                                      a['decl']) +
-                                   (a['val'][0],) for a in decl['args']]
+                                   ex(a['val']) for a in decl['args']]
                                   )
                             )
             quals.append(())
