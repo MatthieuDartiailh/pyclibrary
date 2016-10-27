@@ -223,6 +223,9 @@ class Type(tuple):
         return (type(self).__name__ + '(' +
                 ', '.join(map(repr, self)) + type_qual_str + ')')
 
+    def __getnewargs__(self):
+        return (self.type_spec,) + self.declarators
+
 
 class Compound(dict):
     """Base class for representing object using a dict-like interface.
@@ -621,7 +624,8 @@ class CParser(object):
         cache['file_defs'] = self.file_defs
         cache['version'] = self.cache_version
         import pickle
-        pickle.dump(cache, open(cache_file, 'wb'))
+        with open(cache_file, 'wb') as f:
+            pickle.dump(cache, f)
 
     def find_headers(self, headers):
         """Try to find the specified headers.
@@ -1354,7 +1358,7 @@ class CParser(object):
         logger.debug("FUNCTION {} : {}".format(t, t.keys()))
 
         try:
-            (name, decl) = self.process_type(t.type, t.decl[0])
+            name, decl = self.process_type(t.type, t.decl[0])
             if len(decl) == 0 or type(decl[-1]) != tuple:
                 logger.error('{}'.format(t))
                 mess = "Incorrect declarator type for function definition."

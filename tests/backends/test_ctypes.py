@@ -21,6 +21,7 @@ from pytest import raises
 
 from pyclibrary.utils import (add_header_locations, HEADER_DIRS)
 from pyclibrary.c_library import CLibrary, cast_to, build_array
+from pyclibrary.c_parser import CParser
 
 
 BACKUPS = ()
@@ -114,3 +115,18 @@ class TestCTypesCLibrary(object):
         c_array = (ctypes.c_void_p*2)(1, 2)
         assert type(pyc_array) == type(c_array)
         assert pyc_array[0] == c_array[0]
+
+
+class TestCachedCTypesLibrary(TestCTypesCLibrary):
+    """Run test on cached headers.
+
+    """
+    def setup(self):
+        path = os.path.join(os.path.dirname(__file__), 'test.pyclibcache')
+        parser = CParser(['ctypes_test.h'])
+        parser.write_cache(path)
+        self.library = CLibrary(_ctypes_test.__file__, ['ctypes_test.h'],
+                                cache=path)
+
+    def teardown(self):
+        type(self.library).libs.clear()

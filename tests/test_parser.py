@@ -14,6 +14,7 @@ from __future__ import (division, unicode_literals, print_function,
 
 import os
 import sys
+from pickle import dumps, loads
 from pytest import raises
 from pyclibrary.c_parser import CParser, Type, Struct, Union, Enum
 import pyclibrary.utils
@@ -107,6 +108,10 @@ class TestType(object):
         assert repr(Type('int', '*', type_quals=(('volatile',), ()))) == \
                ('Type({!r}, {!r}, type_quals=(({!r},), ()))'
                 .format('int', '*', 'volatile'))
+
+    def test_persistence(self):
+        t = Type('tq_parent_type', [1], type_quals=(('__tq3',), ('__tq4',)))
+        assert repr(t) == repr(loads(dumps(t)))
 
 
 class TestStructUnion(object):
