@@ -517,6 +517,13 @@ class TestParsing(object):
                 variables['long_long_int_un'] == (1, Type('unsigned long '
                                                           'long int')))
 
+        # C99 integers
+        for i in (8, 16, 32, 64):
+            assert ('i%d' % i in variables and
+                    variables['i%d' % i] == (1, Type('int%d_t' % i)))
+            assert ('u%d' % i in variables and
+                    variables['u%d' % i] == (1, Type('uint%d_t' % i)))
+
         # Floating point number
         assert ('fl' in variables and variables['fl'] ==
                 (1., Type('float')))

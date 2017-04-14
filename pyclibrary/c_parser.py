@@ -405,7 +405,8 @@ class CParser(object):
     """
     #: Increment every time cache structure or parsing changes to invalidate
     #: old cache files.
-    cache_version = 1
+    # 2 : add C99 integers
+    cache_version = 2
 
     #: Private flag allowing to know if the parser has been initiliased.
     _init = False
@@ -1675,7 +1676,9 @@ extra_modifier = None
 fund_type = None
 extra_type_list = []
 
-num_types = ['int', 'float', 'double']
+c99_int_types = ['int8_t', 'uint8_t', 'int16_t', 'uint16_t',
+                 'int32_t', 'uint32_t', 'int64_t', 'uint64_t']
+num_types = ['int', 'float', 'double'] + c99_int_types
 nonnum_types = ['char', 'bool', 'void']
 
 

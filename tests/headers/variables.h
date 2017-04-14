@@ -22,6 +22,16 @@ long long int long_long_int = 1;
 unsigned long long long_long_un = 1;
 unsigned long long int long_long_int_un = 1;
 
+// C99 integers
+int8_t i8 = 1;
+int16_t i16 = 1;
+int32_t i32 = 1;
+int64_t i64 = 1;
+uint8_t u8 = 1;
+uint16_t u16 = 1;
+uint32_t u32 = 1;
+uint64_t u64 = 1;
+
 // Floating points numbers
 float fl = + 1.0;
 double db = 1e-1;
