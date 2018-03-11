@@ -43,10 +43,10 @@ def teardown_module():
 
 @yield_fixture
 def library_location_fixture():
+    global LIBRARY_DIRS
     old = LIBRARY_DIRS[:]
     add_library_locations([os.path.dirname(_ctypes_test.__file__)])
     yield
-    global LIBRARY_DIRS
     LIBRARY_DIRS = old
 
 
