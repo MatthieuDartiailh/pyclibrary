@@ -1,23 +1,52 @@
 sudo: false
+dist: trusty
 
-language: python
-python:
-    - 2.7
-    - 3.3
-    - 3.4
+branches:
+  only:
+    - master
+
+matrix:
+  include:
+    - env: PYTHON=2.7
+    - env: PYTHON=3.5
+    - env: PYTHON=3.6
 
 before_install:
-  - SRC_DIR=$(pwd)
-  - REDIRECT_TO=/dev/null # change to /dev/stdout to unsilence travis
+
+  # Install Miniconda
+  - travis_retry wget -q https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
+  - chmod +x miniconda.sh
+  - ./miniconda.sh -b -p ~/anaconda
+  - export PATH=~/anaconda/bin:$PATH
+
+  # Setup environment
+  - travis_retry conda update --yes conda
+  - conda config --set always_yes yes
+  - conda info -a
+  - conda create -n travisci python=$PYTHON pip
+  - source activate travisci
+  - CONDA_INSTALL="conda install -q"
+  - PIP_INSTALL="pip install -q"
+
+  # Install pyclibrary dependencies
+  - $CONDA_INSTALL future
+
+  # Intall test tools
+  - $CONDA_INSTALL pytest
+  - $PIP_INSTALL pytest-cov
+
+  # Install codecov report tools
+  - $PIP_INSTALL codecov
 
 install:
-  - pip install -q pytest future pytest-cov pytest-capturelog pytest-xdist
-  - pip install -q python-coveralls
+  - cd $TRAVIS_BUILD_DIR
+  - python setup.py install
 
 script:
-  - cd ${SRC_DIR}
-  - python setup.py install > ${REDIRECT_TO}
-  - py.test tests -m "not no_travis" -v --cov pyclibrary --cov-report term-missing
+  - cd ~
+  - export COVERAGE_DATAFILE=$TRAVIS_BUILD_DIR/.coverage
+  - pytest $TRAVIS_BUILD_DIR/tests -m "not no_travis" -v --cov pyclibrary --cov-report xml:$TRAVIS_BUILD_DIR/coverage.xml --cov-config $TRAVIS_BUILD_DIR/.coveragerc
 
 after_success:
-  - coveralls;
+  - cd $TRAVIS_BUILD_DIR
+  - codecov
