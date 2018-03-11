@@ -4,7 +4,6 @@
 [![Coverage Status](https://codecov.io/gh/MatthieuDartiailh/pyclibrary/branch/master/graph/badge.svg)](https://codecov.io/gh/MatthieuDartiailh/pyclibrary)
 [![Documentation Status](https://readthedocs.org/projects/pyclibrary/badge/?version=latest)](https://readthedocs.org/projects/pyclibrary/?badge=latest)
 [![Latest Version](https://img.shields.io/pypi/v/pyclibrary.svg)](https://pypi.python.org/pypi/pyclibrary/)
-[![Downloads](https://img.shields.io/pypi/dm/pyclibrary.svg)](https://pypi.python.org/pypi/pyclibrary/)
 [![Supported Python versions](https://img.shields.io/pypi/pyversions/pyclibrary.svg)](https://pypi.python.org/pypi/pyclibrary/)
 [![Wheel Status](https://img.shields.io/pypi/wheel/pyclibrary.svg)](https://pypi.python.org/pypi/pyclibrary/)
 [![License](https://img.shields.io/pypi/l/pyclibrary.svg)](https://pypi.python.org/pypi/pyclibrary/)
