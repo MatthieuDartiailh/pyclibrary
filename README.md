@@ -1,7 +1,7 @@
 # PyClibrary
 
 [![Build Status](https://travis-ci.org/MatthieuDartiailh/pyclibrary.svg?branch=master)](https://travis-ci.org/MatthieuDartiailh/pyclibrary)
-[![Coverage Status](https://coveralls.io/repos/MatthieuDartiailh/pyclibrary/badge.svg?branch=master)](https://coveralls.io/r/MatthieuDartiailh/pyclibrary?branch=master)
+[![Coverage Status](https://codecov.io/gh/MatthieuDartiailh/pyclibrary/branch/master/graph/badge.svg)](https://codecov.io/gh/MatthieuDartiailh/pyclibrary)
 [![Documentation Status](https://readthedocs.org/projects/pyclibrary/badge/?version=latest)](https://readthedocs.org/projects/pyclibrary/?badge=latest)
 [![Latest Version](https://img.shields.io/pypi/v/pyclibrary.svg)](https://pypi.python.org/pypi/pyclibrary/)
 [![Downloads](https://img.shields.io/pypi/dm/pyclibrary.svg)](https://pypi.python.org/pypi/pyclibrary/)
