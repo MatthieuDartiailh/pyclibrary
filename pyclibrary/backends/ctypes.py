@@ -276,7 +276,7 @@ class CTypesCLibrary(CLibrary):
                     while True:
                         name = 'anon_member%d' % c
                         if name not in members:
-                            d = (name, *d[1:])
+                            d = (name,) + d[1:]
                             defs[i] = d
                             anon.append(name)
                             break
