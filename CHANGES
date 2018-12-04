@@ -1,6 +1,14 @@
 PyCLibrary Changelog
 ====================
 
+0.1.4
+-----
+
+- Add "long unsigned int" equivalent to "unsigned long int" PR #33
+- Fix _get_struct. Previously the index of unnamed fields were not incremented
+  and their definition was not added.  PR #33
+
+
 0.1.3
 -----
 
