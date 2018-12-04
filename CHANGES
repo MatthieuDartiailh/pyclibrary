@@ -1,6 +1,11 @@
 PyCLibrary Changelog
 ====================
-
+0.1.4
+-----
+- Add "long unsigned int" equivalent to "unsigned long int"
+- Fix python 3 compatibility in _get_struct() function
+  (Phil McLaughlin
+  
 0.1.3
 -----
 
