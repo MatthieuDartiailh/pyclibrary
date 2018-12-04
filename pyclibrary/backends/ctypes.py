@@ -276,9 +276,11 @@ class CTypesCLibrary(CLibrary):
                     while True:
                         name = 'anon_member%d' % c
                         if name not in members:
-                            d[0] = name
+                            d = (name, *d[1:])
+                            defs[i] = d
                             anon.append(name)
                             break
+                        c += 1
                 members.append(d[0])
 
             s._anonymous_ = anon
@@ -367,6 +369,7 @@ def init_clibrary(extra_types={}):
         'long int': c_long,
         'unsigned long': c_ulong,
         'unsigned long int': c_ulong,
+        'long unsigned int': c_ulong,
         'long long': c_longlong,
         'long long int': c_longlong,
         'unsigned __int64': c_ulonglong,
