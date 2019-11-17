@@ -700,6 +700,14 @@ class CParser(object):
             else:
                 pprint(self.file_defs[filename][k])
 
+    def __str__(self):
+        from pprint import pformat
+        s = ""
+        for k in self.data_list:
+            s += "============== {} ==================\n".format(k)
+            s += pformat(self.defs[k], indent=4) + "\n"
+        return s
+
     # =========================================================================
     # --- Processing functions
     # =========================================================================
