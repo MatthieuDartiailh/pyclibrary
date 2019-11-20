@@ -683,6 +683,17 @@ class CParser(object):
         self.init_opts['files'].append(bn)
         return True
 
+    def _format_parsed_file(self, filename=None):
+        from pprint import pformat
+        s = ""
+        for k in self.data_list:
+            s += "============== {} ==================\n".format(k)
+            if filename is None:
+                s += pformat(self.defs[k], indent=4) + "\n"
+            else:
+                s += pformat(self.file_defs[filename][k]) + "\n"
+        return s       
+
     def print_all(self, filename=None):
         """Print everything parsed from files. Useful for debugging.
 
@@ -692,21 +703,10 @@ class CParser(object):
             Name of the file whose definition should be printed.
 
         """
-        from pprint import pprint
-        for k in self.data_list:
-            print("============== {} ==================".format(k))
-            if filename is None:
-                pprint(self.defs[k])
-            else:
-                pprint(self.file_defs[filename][k])
+        print(self._format_parsed_file(filename))
 
     def __str__(self):
-        from pprint import pformat
-        s = ""
-        for k in self.data_list:
-            s += "============== {} ==================\n".format(k)
-            s += pformat(self.defs[k], indent=4) + "\n"
-        return s
+        return self._format_parsed_file()
 
     # =========================================================================
     # --- Processing functions
