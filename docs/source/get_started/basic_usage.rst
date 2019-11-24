@@ -17,7 +17,7 @@ using PyCLibrary is to check that it can correctly Parse the header files::
 
     >>> from pyclibrary import CParser
     >>> parser = CParser(['first_header_file_path','second_header_file_path'])
-    >>> parser.print_all()
+    >>> print(parser)
 	
 If the second command does not raise any issue it means that it successfully 
 parsed the headers. However even in such a case the parser might have 
