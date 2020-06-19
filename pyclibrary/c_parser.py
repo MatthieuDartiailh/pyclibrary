@@ -667,8 +667,14 @@ class CParser(object):
             self.files[path] = None
             return False
 
-        # U causes all newline types to be converted to \n
-        with open(path, 'rU') as fd:
+        if sys.version_info >= (3,):
+            open_mode = "r"
+        else:
+            # U causes all newline types to be converted to \n, but is the default from
+            # Python 3 on
+            open_mode = "rU"
+
+        with open(path, open_mode) as fd:
             self.files[path] = fd.read()
 
         if replace is not None:
