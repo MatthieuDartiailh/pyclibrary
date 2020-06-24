@@ -51,7 +51,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'PyCLibrary'
-copyright = u'2015, Luke Campagnola, Matthieu Dartiailh'
+copyright = u'2015-2020, Luke Campagnola, Matthieu Dartiailh'
 author = u'Luke Campagnola, Matthieu Dartiailh'
 
 # The version info for the project you're documenting, acts as replacement for
