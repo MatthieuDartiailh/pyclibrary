@@ -12,6 +12,14 @@ struct struct_name
   char str[10]; /* commented brace } */
 } struct_inst;
 
+
+// Test creating a structure using only base types.
+// Test for default values, array handling and bit length specifications.
+struct struct_arr
+{
+  char str[10][20]; /* commented brace } */
+} struct_arr;
+
 // Test creating a pointer type from a structure.
 typedef struct struct_name *struct_name_ptr;
 
