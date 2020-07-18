@@ -185,19 +185,22 @@ class CTypesCLibrary(CLibrary):
 
 
             n_mods = []
+            # Go through the modifier looking for array modifiers.
+            # Array modifiers are list and if we find consecutive modifiers we merge
+            # them. This allows to iterate on them in reverse order to create the
+            # proper ctypes type
             if len(mods):
                 seen = mods[0]
                 for m in mods[1:]:
-                    # Merge consecutive array to be able to go in reverse when
-                    # creating the ctypes
                     if isinstance(seen, list) and isinstance(m, list):
                         seen += m
                     else:
                         n_mods.append(seen)
                         seen = m
                 n_mods.append(seen)
+            mods = n_mods
 
-            # apply pointers and arrays
+            # Apply pointers and arrays
             while len(mods) > 0:
                 m = mods.pop(0)
                 if istext(m):  # pointer or reference
