@@ -183,7 +183,24 @@ class CTypesCLibrary(CLibrary):
             if not pointers:
                 return cls
 
-            # apply pointers and arrays
+
+            n_mods = []
+            # Go through the modifier looking for array modifiers.
+            # Array modifiers are list and if we find consecutive modifiers we merge
+            # them. This allows to iterate on them in reverse order to create the
+            # proper ctypes type
+            if len(mods):
+                seen = mods[0]
+                for m in mods[1:]:
+                    if isinstance(seen, list) and isinstance(m, list):
+                        seen += m
+                    else:
+                        n_mods.append(seen)
+                        seen = m
+                n_mods.append(seen)
+            mods = n_mods
+
+            # Apply pointers and arrays
             while len(mods) > 0:
                 m = mods.pop(0)
                 if istext(m):  # pointer or reference
@@ -192,7 +209,8 @@ class CTypesCLibrary(CLibrary):
                             cls = POINTER(cls)
 
                 elif isinstance(m, list):      # array
-                    for i in m:
+                    # Go in reverse order to get nd array to work properly
+                    for i in reversed(m):
                         # -1 indicates an 'incomplete type' like "int
                         # variable[]"
                         if i == -1:

@@ -571,6 +571,8 @@ class TestParsing(object):
         # Test array handling
         assert ('array' in variables and
                 variables['array'] == ([1, 3141500.0], Type('float', [2])))
+        # assert ('array2d' in variables and
+        #         variables['array2d'] == ([[1, 2, 3], [4, 5, 6]], Type('float', [2, 3])))
         assert ('intJunk' in variables and
                 variables['intJunk'] == (
                     None,
@@ -682,6 +684,13 @@ class TestParsing(object):
                Struct(('x', Type('int'), 1),
                       ('y', Type('type_type_int'), None, 2),
                       ('str', Type('char', [10]), None))
+        assert ('struct_inst' in variables and
+                variables['struct_inst'] == (None, Type('struct struct_name')))
+
+        # Test creating a structure using only base types.
+        assert ('struct_arr' in structs and 'struct struct_arr' in types)
+        assert structs['struct_arr'] == \
+               Struct(('str', Type('char', [10], [20]), None))
         assert ('struct_inst' in variables and
                 variables['struct_inst'] == (None, Type('struct struct_name')))
 

@@ -26,6 +26,10 @@ EXPORT(char *) my_strdup(char *src);
 // made of complex structures.
 
 typedef struct {
+    char names[10][20];
+} T;
+
+typedef struct {
     char *name;
     char *value;
 } SPAM;

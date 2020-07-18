@@ -63,6 +63,9 @@ class TestCTypesCLibrary(object):
     def test_make_struct(self):
         self.library.BITS
 
+    def test_make_ndarray(self):
+        assert "Array_20_Array_10" in str(self.library.T.names)
+
     def test_function_call1(self):
         # Test calling a function taking no arguments.
         res = self.library.get_an_integer()

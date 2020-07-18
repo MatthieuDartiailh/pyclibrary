@@ -5,3 +5,5 @@ dist
 __pycache__
 .tox
 *.egg-info
+
+.mypy_cache
