@@ -10,6 +10,8 @@ matrix:
     - env: PYTHON=2.7
     - env: PYTHON=3.5
     - env: PYTHON=3.6
+    - env: PYTHON=3.7
+    - env: PYTHON=3.8
 
 before_install:
 
