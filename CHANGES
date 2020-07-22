@@ -1,7 +1,7 @@
 PyCLibrary Changelog
 ====================
 
-0.1.6 - unreleased
+0.1.6 - 22/07/2020
 ------------------
 
 - fix issue when creating nd array in ctypes PR # 45
