@@ -1,7 +1,7 @@
 PyCLibrary Changelog
 ====================
 
-0.1.7 - 10/11/2020
+0.1.7 - unreleased
 ------------------
 
 - remove vendored copy of pyparsing PR # 46
