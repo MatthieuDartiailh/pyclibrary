@@ -26,7 +26,7 @@ from .errors import DefinitionError
 from .utils import find_header
 
 # Import parsing elements
-from .thirdparty.pyparsing import \
+from pyparsing import \
     (ParserElement, ParseResults, Forward, Optional, Word, WordStart,
      WordEnd, Keyword, Regex, Literal, SkipTo, ZeroOrMore, OneOrMore,
      Group, LineEnd, quotedString, oneOf, nestedExpr,
@@ -1107,8 +1107,7 @@ class CParser(object):
         if extra_modifier is not None:
             type_ += extra_modifier
         type_.setParseAction(recombine)
-        self.type_spec = (type_qualifier('pre_qual') +
-                          type_("name"))
+        self.type_spec = Group(type_qualifier('pre_qual') + type_("name"))
 
         # --- Abstract declarators for use in function pointer arguments
         #   Thus begins the extremely hairy business of parsing C declarators.
@@ -1276,7 +1275,7 @@ class CParser(object):
             else:
                 ex = lambda x: (x[0],) if len(x)!=0 else (None,)
                 toks.append(tuple([self.process_type(a['type'],
-                                                     a['decl']) +
+                                                     a['decl'][0]) +
                                    ex(a['val']) for a in decl['args']]
                                   )
                             )

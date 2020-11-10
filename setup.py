@@ -44,6 +44,6 @@ cdll/windll.''',
     packages = ['pyclibrary', 'pyclibrary.backends', 'pyclibrary.thirdparty'],
 	package_data = {'pyclibrary': ['headers/*']},
     requires = ['future'],
-    install_requires = ['future'],
+    install_requires = ['future', 'pyparsing>=2.3.1,<3'],
 )
 
