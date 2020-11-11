@@ -3,7 +3,7 @@ PyClibrary
 
 .. image:: https://github.com/MatthieuDartiailh/pyclibrary/workflows/Continuous%20Integration/badge.svg
     :target: https://github.com/MatthieuDartiailh/pyclibrary/actions
-.. image:: https://github.com/MatthieuDartiailh/pyclibrary/Documentation%20building/badge.svg
+.. image:: https://github.com/MatthieuDartiailh/pyclibrary/workflows/Documentation%20building/badge.svg
     :target: https://github.com/MatthieuDartiailh/pyclibrary/actions
 .. image:: https://codecov.io/gh/MatthieuDartiailh/pyclibrary/branch/master/graph/badge.svg
     :target: https://codecov.io/gh/MatthieuDartiailh/pyclibrary
