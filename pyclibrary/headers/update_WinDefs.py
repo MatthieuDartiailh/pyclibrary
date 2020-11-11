@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # -----------------------------------------------------------------------------
-# Copyright 2015 by PyCLibrary Authors, see AUTHORS for more details.
+# Copyright 2015-2020 by PyCLibrary Authors, see AUTHORS for more details.
 #
 # Distributed under the terms of the MIT/X11 license.
 #
@@ -17,8 +17,6 @@ It has to be run on one of the following conditions:
 * another Visual C/C++ compiler version is used
 * the object model of the parser was updated.
 """
-from __future__ import (division, unicode_literals, print_function,
-                        absolute_import)
 from pyclibrary.c_parser import win_defs
 from pyclibrary.utils import add_header_locations
 

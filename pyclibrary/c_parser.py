@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # -----------------------------------------------------------------------------
-# Copyright 2015 by PyCLibrary Authors, see AUTHORS for more details.
+# Copyright 2015-2020 by PyCLibrary Authors, see AUTHORS for more details.
 #
 # Distributed under the terms of the MIT/X11 license.
 #
@@ -11,15 +11,11 @@ Used for extracting data such as macro definitions, variables, typedefs, and
 function signatures from C header files.
 
 """
-from __future__ import (division, unicode_literals, print_function,
-                        absolute_import)
-
 import sys
 import re
 import os
 import logging
 from inspect import cleandoc
-from future.utils import istext, isbytes
 from traceback import format_exc
 
 from .errors import DefinitionError
@@ -437,7 +433,7 @@ class CParser(object):
         self.files = {}
 
         if files is not None:
-            if istext(files) or isbytes(files):
+            if isinstance(files, str):
                 files = [files]
             for f in self.find_headers(files):
                 self.load_file(f, replace)
@@ -551,8 +547,8 @@ class CParser(object):
         """
 
         # Make sure cache file exists
-        if not istext(cache_file):
-            raise ValueError("Cache file option must be a unicode.")
+        if not isinstance(cache_file, str):
+            raise ValueError("Cache file option must be a str.")
         if not os.path.isfile(cache_file):
             # If file doesn't exist, search for it in this module's path
             d = os.path.dirname(__file__)
@@ -1415,7 +1411,7 @@ class CParser(object):
                         break
                     n += 1
             else:
-                if istext(t.name):
+                if isinstance(t.name, str):
                     sname = t.name
                 else:
                     sname = t.name[0]
@@ -1500,7 +1496,7 @@ class CParser(object):
         """
         logger.debug("Eval: {}".format(toks))
         try:
-            if istext(toks) or isbytes(toks):
+            if isinstance(toks, str):
                 val = self.eval(toks, None, self.defs['values'])
             elif toks.array_values != '':
                 val = [self.eval(x, None, self.defs['values'])
@@ -1584,7 +1580,7 @@ class CParser(object):
             for t in fd:
                 typ = fd[t]
                 for k in typ:
-                    if istext(name):
+                    if isinstance(name, str):
                         if k == name:
                             res.append((f, t))
                     else:

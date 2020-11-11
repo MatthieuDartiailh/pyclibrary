@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # -----------------------------------------------------------------------------
-# Copyright 2015 by PyCLibrary Authors, see AUTHORS for more details.
+# Copyright 2015-2020 by PyCLibrary Authors, see AUTHORS for more details.
 #
 # Distributed under the terms of the MIT/X11 license.
 #
@@ -8,9 +8,6 @@
 # -----------------------------------------------------------------------------
 """
 """
-from __future__ import (division, unicode_literals, print_function,
-                        absolute_import)
-
 from .ctypes import (init_clibrary as c_init,
                      identify_library as c_iden,
                      get_library_path as cpath)

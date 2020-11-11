@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # -----------------------------------------------------------------------------
-# Copyright 2015 by PyCLibrary Authors, see AUTHORS for more details.
+# Copyright 2015-2020 by PyCLibrary Authors, see AUTHORS for more details.
 #
 # Distributed under the terms of the MIT/X11 license.
 #
@@ -12,8 +12,6 @@ Those should be run before creating a CParser and can be run only once. They
 are used to declare additional types and modifiers for the parser.
 
 """
-from __future__ import (division, unicode_literals, print_function,
-                        absolute_import)
 import sys
 from .c_parser import _init_cparser, CParser
 from .c_library import CLibrary

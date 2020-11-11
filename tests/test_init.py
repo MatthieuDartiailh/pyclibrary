@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # -----------------------------------------------------------------------------
-# Copyright 2015 by PyCLibrary Authors, see AUTHORS for more details.
+# Copyright 2015-2020 by PyCLibrary Authors, see AUTHORS for more details.
 #
 # Distributed under the terms of the MIT/X11 license.
 #
@@ -9,8 +9,6 @@
 """Test init mechanisms.
 
 """
-from __future__ import (division, unicode_literals, print_function,
-                        absolute_import)
 import pytest
 
 from pyclibrary.init import init, auto_init
