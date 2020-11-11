@@ -1,6 +1,6 @@
 # .readthedocs.yml
 
-version: 3
+version: 2
 
 formats:
   - epub
