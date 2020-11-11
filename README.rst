@@ -1,4 +1,5 @@
-# PyClibrary
+PyClibrary
+==========
 
 .. image:: https://github.com/MatthieuDartiailh/pyclibrary/workflows/Continuous%20Integration/badge.svg
     :target: https://github.com/MatthieuDartiailh/pyclibrary/actions
