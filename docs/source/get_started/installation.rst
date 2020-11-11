@@ -11,16 +11,16 @@ must get a copy from github see using_dev_)::
 
 	$ pip install pyclibrary
 
-It has a single mandatory dependency : `future`_ for Python2/3.
+It has a single mandatory dependency : `pyparsing`_.
 
 In order to run the testsuite you will also need py.test and if you want to
-build the docs you will need sphinx (>1.3 current development version). All 
+build the docs you will need sphinx (>1.3 current development version). All
 those can be installed through pip using the following commands::
 
     $ pip install py.test
-    $ pip install sphinx==1.3
+    $ pip install sphinx
 
-.. _future: http://python-future.org/
+.. _pyparsing: https://github.com/pyparsing/pyparsing/
 
 
 Testing your installation
