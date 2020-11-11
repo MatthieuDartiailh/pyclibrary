@@ -12,7 +12,7 @@
 .. image:: https://badge.fury.io/py/pyclibrary.svg
     :target: https://badge.fury.io/py/pyclibrary
     :alt: Latest Version
-.. image:: https://img.shields.io/pypi/v/pyclibrary.svg
+.. image:: https://img.shields.io/pypi/pyversions/pyclibrary.svg
     :target: https://badge.fury.io/py/pyclibrary
     :alt: Supported Python versions
 .. image:: https://img.shields.io/pypi/wheel/pyclibrary.svg

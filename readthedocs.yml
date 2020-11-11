@@ -1,3 +1,14 @@
+# .readthedocs.yml
+
+version: 3
+
 formats:
-    - epub
-    - pdf
+  - epub
+  - pdf
+
+python:
+  version: 3.7
+  install:
+     - requirements: docs/requirements.txt
+     - method: pip
+       path: .
