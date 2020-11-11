@@ -541,7 +541,7 @@ class CParser(object):
               - cache file must not be older than any source files
               - cache file must not be older than this library file
               - options recorded in cache must match options used to initialize
-              CParser
+                CParser
 
         Returns
         -------
@@ -698,7 +698,7 @@ class CParser(object):
                 s += pformat(self.defs[k], indent=4) + "\n"
             else:
                 s += pformat(self.file_defs[filename][k]) + "\n"
-        return s       
+        return s
 
     def print_all(self, filename=None):
         """Print everything parsed from files. Useful for debugging.
@@ -1307,19 +1307,20 @@ class CParser(object):
           declarator
         - basetype is the string representing the base type
         - modifiers can be:
-            - '*'    : pointer (multiple pointers "***" allowed)
-            - '&'    : reference
-            - '__X'  : calling convention (windows only). X can be 'cdecl' or
-              'stdcall'
+
+            - `*`    : pointer (multiple pointers `***` allowed)
+            - `&`    : reference
+            - `__X`  : calling convention (windows only). X can be `cdecl` or
+              `stdcall`
             - list   : array. Value(s) indicate the length of each array, -1
               for incomplete type.
             - tuple  : function, items are the output of processType for each
               function argument.
 
         Examples:
-          - int *x[10]            =>  ('x', ['int', [10], '*'])
-          - char fn(int x)         =>  ('fn', ['char', [('x', ['int'])]])
-          - struct s (*)(int, int*)   =>
+          - int *x[10]               =>  ('x', ['int', [10], '*'])
+          - char fn(int x)           =>  ('fn', ['char', [('x', ['int'])]])
+          - struct s (*)(int, int*)  =>
             (None, ["struct s", ((None, ['int']), (None, ['int', '*'])), '*'])
 
         """
