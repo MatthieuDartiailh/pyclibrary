@@ -29,7 +29,7 @@ jobs:
           pip install dist/*.tar.gz
           cd ..
           python -m pytest pyclibrary/tests
-          pip uninstall pyclibrary
+          pip uninstall pyclibrary --yes
           pip install pyclibrary/dist/*.whl
           python -m pytest pyclibrary/tests
       - name: Store artifacts
