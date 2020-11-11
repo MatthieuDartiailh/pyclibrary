@@ -1,5 +1,11 @@
-include README
+include README.rst
+include AUTHORS
+include CHANGES
+include LICENSE
 
 # Include also the header folder which contains the cached
 # windows headers.
 include pyclibrary/headers/*
+recursive-include docs/source *rst *.py
+include docs/make.bat
+include docs/Makefile

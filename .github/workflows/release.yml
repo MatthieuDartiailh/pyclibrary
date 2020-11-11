@@ -23,11 +23,14 @@ jobs:
           pip install --upgrade pip
           pip install wheel
           python setup.py sdist bdist_wheel
-      - name: Test sdist
+      - name: Test sdist and wheel
         run: |
           pip install pytest
           pip install dist/*.tar.gz
           cd ..
+          python -m pytest pyclibrary/tests
+          pip uninstall pyclibrary
+          pip install pyclibrary/dist/*.whl
           python -m pytest pyclibrary/tests
       - name: Store artifacts
         uses: actions/upload-artifact@v2
