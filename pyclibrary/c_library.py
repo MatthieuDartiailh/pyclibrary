@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # -----------------------------------------------------------------------------
-# Copyright 2015 by PyCLibrary Authors, see AUTHORS for more details.
+# Copyright 2015-2020 by PyCLibrary Authors, see AUTHORS for more details.
 #
 # Distributed under the terms of the MIT/X11 license.
 #
@@ -11,10 +11,6 @@ Proxy to library object, allowing automatic type conversion and
 function calling based on C header definitions.
 
 """
-from __future__ import (division, unicode_literals, print_function,
-                        absolute_import)
-
-from future.utils import istext, isbytes, with_metaclass
 import logging
 import sys
 import os
@@ -57,7 +53,7 @@ class CLibraryMeta(type):
     def __call__(cls, lib, *args, **kwargs):
 
         # Identify the library path.
-        if istext(lib) or isbytes(lib):
+        if isinstance(lib, str):
             if os.sep not in lib:
                 lib_path = find_library(lib).path
             else:
@@ -88,7 +84,7 @@ class CLibraryMeta(type):
             return obj
 
 
-class CLibrary(with_metaclass(CLibraryMeta, object)):
+class CLibrary(object, metaclass=CLibraryMeta):
     """The CLibrary class is intended to automate much of the work in using
     ctypes by integrating header file definitions from CParser. This class
     serves as a proxy to a backend, adding a few features:
@@ -176,7 +172,7 @@ class CLibrary(with_metaclass(CLibraryMeta, object)):
         self._defs_ = self._headers_.defs
 
         # Create or store the internal representation of the library.
-        if istext(lib) or isbytes(lib):
+        if isinstance(lib, str):
             self._lib_ = self._link_library(lib, convention)
         else:
             self._lib_ = lib
@@ -516,7 +512,7 @@ class CFunction(object):
             Name or index of the argument whose type should be returned.
 
         """
-        if istext(arg) or isbytes(arg):
+        if isinstance(arg, str):
             arg = self.arg_inds[arg]
         return self.lib._get_type(self.sig[1][arg][1])
 
@@ -583,7 +579,7 @@ class CallResult(object):
     def __getitem__(self, n):
         if isinstance(n, int):
             arg = self.args[n]
-        elif istext(n) or isbytes(n):
+        elif isinstance(n, str):
             n = self.find_arg(n)
             arg = self.args[n]
         else:

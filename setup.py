@@ -1,6 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 from setuptools import setup
 
 import os.path
@@ -37,13 +35,14 @@ cdll/windll.''',
         'Natural Language :: English',
         'Operating System :: OS Independent',
         'Topic :: Software Development :: Libraries :: Python Modules',
-        'Programming Language :: Python :: 2',
-        'Programming Language :: Python :: 3'
+        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9'
         ],
     zip_safe = False,
     packages = ['pyclibrary', 'pyclibrary.backends', 'pyclibrary.thirdparty'],
 	package_data = {'pyclibrary': ['headers/*']},
-    requires = ['future'],
-    install_requires = ['future', 'pyparsing>=2.3.1,<3'],
+    install_requires = ['pyparsing>=2.3.1,<3'],
 )
 

@@ -1,6 +1,11 @@
 PyCLibrary Changelog
 ====================
 
+0.2.0 - unreleased
+------------------
+
+- remove support for Python 2 PR #47
+
 0.1.7 - 11/11/2020
 ------------------
 

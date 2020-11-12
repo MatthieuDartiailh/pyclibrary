@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # -----------------------------------------------------------------------------
-# Copyright 2015 by PyCLibrary Authors, see AUTHORS for more details.
+# Copyright 2015-2020 by PyCLibrary Authors, see AUTHORS for more details.
 #
 # Distributed under the terms of the MIT/X11 license.
 #
@@ -11,10 +11,6 @@ Proxy to both CHeader and ctypes, allowing automatic type conversion and
 function calling based on C header definitions.
 
 """
-from __future__ import (division, unicode_literals, print_function,
-                        absolute_import)
-
-from future.utils import istext
 import logging
 import os
 import sys
@@ -203,7 +199,7 @@ class CTypesCLibrary(CLibrary):
             # Apply pointers and arrays
             while len(mods) > 0:
                 m = mods.pop(0)
-                if istext(m):  # pointer or reference
+                if isinstance(m, str):  # pointer or reference
                     if m[0] == '*' or m[0] == '&':
                         for i in m:
                             cls = POINTER(cls)

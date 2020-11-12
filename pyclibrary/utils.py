@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # -----------------------------------------------------------------------------
-# Copyright 2015 by PyCLibrary Authors, see AUTHORS for more details.
+# Copyright 2015-2020 by PyCLibrary Authors, see AUTHORS for more details.
 #
 # Distributed under the terms of the MIT/X11 license.
 #
@@ -17,9 +17,6 @@ find_header : Find the path to a header file.
 find_library : Find the path to a shared library from its name.
 
 """
-from __future__ import (division, unicode_literals, print_function,
-                        absolute_import)
-
 import os
 import sys
 import logging
@@ -30,13 +27,6 @@ import subprocess
 from .thirdparty.find_library import find_library as find_lib
 
 logger = logging.getLogger(__name__)
-
-
-if sys.version >= '3':
-    _struct_unpack = struct.unpack
-else:
-    def _struct_unpack(fmt, string):
-        return struct.unpack(str(fmt), string)
 
 
 HEADER_DIRS = [os.path.join(os.path.dirname(__file__), 'headers')]
@@ -271,7 +261,7 @@ def get_shared_library_arch(filename):
         dos_headers = fp.read(64)
         fp.read(4)
 
-        magic, skip, offset = _struct_unpack(str('2s58sl'), dos_headers)
+        magic, skip, offset = struct.unpack(str('2s58sl'), dos_headers)
 
         if magic != b'MZ':
             raise Exception('Not an executable')
@@ -279,7 +269,7 @@ def get_shared_library_arch(filename):
         fp.seek(offset, io.SEEK_SET)
         pe_header = fp.read(6)
 
-        sig, skip, machine = _struct_unpack(str('2s2sH'), pe_header)
+        sig, skip, machine = struct.unpack(str('2s2sH'), pe_header)
 
         if sig != b'PE':
             raise Exception('Not a PE executable')

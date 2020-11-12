@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # -----------------------------------------------------------------------------
-# Copyright 2015 by PyCLibrary Authors, see AUTHORS for more details.
+# Copyright 2015-2020 by PyCLibrary Authors, see AUTHORS for more details.
 #
 # Distributed under the terms of the MIT/X11 license.
 #
@@ -9,9 +9,6 @@
 """Errors that can happen during parsing or binding.
 
 """
-from __future__ import (division, unicode_literals, print_function,
-                        absolute_import)
-
 
 class PyCLibError(Exception):
     """Base exception for all PyCLibrary exceptions.
