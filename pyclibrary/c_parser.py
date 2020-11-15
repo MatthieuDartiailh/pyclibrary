@@ -318,7 +318,7 @@ def win_defs(version='1500'):
     header_files = ['WinNt.h', 'WinDef.h', 'WinBase.h', 'BaseTsd.h',
                     'WTypes.h', 'WinUser.h']
     if not CParser._init:
-        logger.warning('Automatic initialisation : OS is assumed to be win32')
+        logger.info('Automatic initialisation : OS is assumed to be win32')
         from .init import auto_init
         auto_init()
     d = os.path.dirname(__file__)
@@ -411,7 +411,7 @@ class CParser(object):
                  process_all=True, cache=None, check_cache_validity=True, **kwargs):
 
         if not self._init:
-            logger.warning('Automatic initialisation based on OS detection')
+            logger.info('Automatic initialisation based on OS detection')
             from .init import auto_init
             auto_init()
 
