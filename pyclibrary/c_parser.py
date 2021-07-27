@@ -26,7 +26,8 @@ from pyparsing import \
      WordEnd, Keyword, Regex, Literal, SkipTo, ZeroOrMore, OneOrMore,
      Group, LineEnd, quotedString, oneOf, nestedExpr,
      delimitedList, restOfLine, cStyleComment, alphas, alphanums, hexnums,
-     lineno, Suppress)
+     lineno, Suppress, FollowedBy, printables)
+
 ParserElement.enablePackrat()
 
 logger = logging.getLogger(__name__)
@@ -326,7 +327,7 @@ def win_defs(version='1500'):
         macros={'_WIN32': '', '_MSC_VER': version, 'CONST': 'const',
                 'NO_STRICT': None, 'MS_WIN32': ''},
         process_all=False
-        )
+    )
 
     p.process_all(cache=os.path.join(d, 'headers', 'WinDefs.cache'))
 
@@ -426,7 +427,7 @@ class CParser(object):
         self.init_opts['replace'] = {}
 
         self.data_list = ['types', 'variables', 'fnmacros', 'macros',
-                          'structs', 'unions', 'enums', 'functions', 'values']
+                          'structs', 'unions', 'enums', 'functions', 'values', 'comments']
 
         self.file_order = []
         self.files = {}
@@ -500,6 +501,9 @@ class CParser(object):
                 # cache.
                 mess = 'Could not find header file "{}" or a cache file.'
                 raise IOError(mess.format(f))
+
+            logger.debug("Getting comments from file '{}'...".format(f))
+            self.extract_comments(f)
 
             logger.debug("Removing comments from file '{}'...".format(f))
             self.remove_comments(f)
@@ -705,6 +709,29 @@ class CParser(object):
     # =========================================================================
     # --- Processing functions
     # =========================================================================
+
+    def extract_comments(self, path):
+        """Extract comments of structure attributes from file and save them.
+
+        Operates in memory, does not alter the original files.
+
+        """
+        # Create a Regex to match `type name; /// Hint (unit)` (for instance `float max_regen_current; /// Negative value (A)`); note that Hint and unit are both optional
+        type_parser = Word(alphanums + '_')
+        name_parser = Word(alphanums + '_[]') + FollowedBy(';')
+        hint_parser = Regex(r'([^\(\n]*)')
+        unit_parser = Regex(r'\((.+)\)')
+        attr_expression = type_parser + name_parser + Suppress(';') + Suppress('///') + hint_parser + Optional(unit_parser)
+
+        # Find all lines of file_content matching that Regex
+        file_content = self.files[path]
+        lines = attr_expression.searchString(file_content).asList()
+        for line in lines:
+            key = line[1] # name of the property
+            hint = line[2].rstrip()
+            unit = line[3][1:-1] if len(line) == 4 else None
+                
+            self.add_def('comments', key, (hint, unit))
 
     def remove_comments(self, path):
         """Remove all comments from file.
@@ -1013,8 +1040,6 @@ class CParser(object):
                     exp = name
                     end = line[m.end(N):]
                     mess = "Function macro expansion failed: {}, {}\n {}"
-                    logger.error(mess.format(name, line[m.end(N):],
-                                             format_exc()))
 
                 parts.append(line[:m.start(N)])
                 line = end
@@ -1041,7 +1066,7 @@ class CParser(object):
             args = [a.strip() for a in args.split(',')]
         except Exception:
             mess = "Function macro {} argument analysis failed :\n{}"
-            raise DefinitionError(0,  mess.format(name, format_exc()))
+            raise DefinitionError(0, mess.format(name, format_exc()))
 
         args = [self.expand_macros(arg) for arg in args]
         new_str = defn[0].format(*[args[i] for i in defn[1]])
@@ -1122,14 +1147,14 @@ class CParser(object):
              (lparen + self.abstract_declarator + rparen)('center')) +
             Optional(lparen +
                      Optional(delimitedList(Group(
-                              self.type_spec('type') +
-                              self.abstract_declarator('decl') +
-                              Optional(Literal('=').suppress() + expression,
-                                       default=None)('val')
-                              )), default=None) +
+                         self.type_spec('type') +
+                         self.abstract_declarator('decl') +
+                         Optional(Literal('=').suppress() + expression,
+                                  default=None)('val')
+                     )), default=None) +
                      rparen)('args') +
             Group(ZeroOrMore(lbrack + Optional(expression, default='-1') +
-                  rbrack))('arrays')
+                             rbrack))('arrays')
         )
 
         # Declarators look like:
@@ -1150,12 +1175,12 @@ class CParser(object):
                                (self.declarator |
                                 self.abstract_declarator)('decl') +
                                Optional(Literal('=').suppress() +
-                               expression, default=None)('val')
+                                        expression, default=None)('val')
                                )),
-                              default=None) +
+                         default=None) +
                      rparen)('args') +
             Group(ZeroOrMore(lbrack + Optional(expression, default='-1') +
-                  rbrack))('arrays')
+                             rbrack))('arrays')
         )
         self.declarator_list = Group(delimitedList(self.declarator))
 
@@ -1166,19 +1191,19 @@ class CParser(object):
 
         # Variable declaration
         self.variable_decl = (
-            Group(storage_class_spec +
-                  self.type_spec('type') +
-                  Optional(self.declarator_list('decl_list')) +
-                  Optional(Literal('=').suppress() +
-                           (expression('value') |
-                            (lbrace +
-                             Group(delimitedList(expression))('array_values') +
-                             rbrace
-                             )
-                            )
-                           )
-                  ) +
-            semi)
+                Group(storage_class_spec +
+                      self.type_spec('type') +
+                      Optional(self.declarator_list('decl_list')) +
+                      Optional(Literal('=').suppress() +
+                               (expression('value') |
+                                (lbrace +
+                                 Group(delimitedList(expression))('array_values') +
+                                 rbrace
+                                 )
+                                )
+                               )
+                      ) +
+                semi)
         self.variable_decl.setParseAction(self.process_variable)
 
         # Function definition
@@ -1194,15 +1219,15 @@ class CParser(object):
         self.struct_decl = Forward()
         struct_kw = (Keyword('struct') | Keyword('union'))
         self.struct_member = (
-            Group(self.variable_decl.copy().setParseAction(lambda: None)) |
-            # Hack to handle bit width specification.
-            Group(Group(self.type_spec('type') +
-                        Optional(self.declarator_list('decl_list')) +
-                        colon + integer('bit') + semi)) |
-            (self.type_spec + self.declarator +
-             nestedExpr('{', '}')).suppress() |
-            (self.declarator + nestedExpr('{', '}')).suppress()
-            )
+                Group(self.variable_decl.copy().setParseAction(lambda: None)) |
+                # Hack to handle bit width specification.
+                Group(Group(self.type_spec('type') +
+                            Optional(self.declarator_list('decl_list')) +
+                            colon + integer('bit') + semi)) |
+                (self.type_spec + self.declarator +
+                 nestedExpr('{', '}')).suppress() |
+                (self.declarator + nestedExpr('{', '}')).suppress()
+        )
 
         self.decl_list = (lbrace +
                           Group(OneOrMore(self.struct_member))('members') +
@@ -1218,7 +1243,7 @@ class CParser(object):
         # Enum definition
         enum_var_decl = Group(ident('name') +
                               Optional(Literal('=').suppress() +
-                              expression('value')))
+                                       expression('value')))
 
         self.enum_type << (Keyword('enum') +
                            (Optional(ident)('name') +
@@ -1417,7 +1442,7 @@ class CParser(object):
                     typ = m[0].type
                     val = self.eval_expr(m[0].value)
                     logger.debug("    member: {}, {}, {}".format(
-                                 m, m[0].keys(), m[0].decl_list))
+                        m, m[0].keys(), m[0].decl_list))
 
                     if len(m[0].decl_list) == 0:  # anonymous member
                         member = [None, Type(typ[0]), None]
@@ -1432,7 +1457,7 @@ class CParser(object):
                             member.append(int(m[0].bit))
                         struct.append(tuple(member))
                         logger.debug("      {} {} {} {}".format(name, decl,
-                                     val, m[0].bit))
+                                                                val, m[0].bit))
 
                 str_cls = (Struct if str_typ == 'struct' else Union)
                 self.add_def(str_typ + 's', sname,
@@ -1454,13 +1479,13 @@ class CParser(object):
                 # This is a function prototype
                 if type(typ[-1]) is tuple:
                     logger.debug("  Add function prototype: {} {} {}".format(
-                                 name, typ, val))
+                        name, typ, val))
                     self.add_def('functions', name,
                                  typ.add_compatibility_hack())
                 # This is a variable
                 else:
                     logger.debug("  Add variable: {} {} {}".format(name,
-                                 typ, val))
+                                                                   typ, val))
                     self.add_def('variables', name, (val, typ))
                     self.add_def('values', name, val)
 
@@ -1489,7 +1514,7 @@ class CParser(object):
         logger.debug("Eval: {}".format(toks))
         try:
             if isinstance(toks, str):
-                val = self.eval(toks, None, self.defs['values'])
+                val = self.eval(toks, None, self.defs['fnmacros'])
             elif toks.array_values != '':
                 val = [self.eval(x, None, self.defs['values'])
                        for x in toks.array_values]
@@ -1601,13 +1626,13 @@ def kwl(strs):
 
 
 def flatten(lst):
-        res = []
-        for i in lst:
-            if isinstance(i, (list, tuple)):
-                res.extend(flatten(i))
-            else:
-                res.append(str(i))
-        return res
+    res = []
+    for i in lst:
+        if isinstance(i, (list, tuple)):
+            res.extend(flatten(i))
+        else:
+            res.append(str(i))
+    return res
 
 
 def recombine(tok):
@@ -1729,7 +1754,7 @@ def _init_cparser(extra_types=None, extra_modifiers=None):
 
     # Language elements
     fund_type = OneOrMore(kwl(sign_modifiers + size_modifiers +
-                          base_types)).setParseAction(lambda t: ' '.join(t))
+                              base_types)).setParseAction(lambda t: ' '.join(t))
 
     # Is there a better way to process expressions with cast operators??
     cast_atom = (
