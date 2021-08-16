@@ -223,7 +223,7 @@ class TestFileHandling(object):
         path = os.path.join(self.h_dir, 'c_comments.h')
         self.parser.load_file(path)
         self.parser.remove_comments(path)
-        with open(os.path.join(self.h_dir, 'c_comments_removed.h'), 'rU') as f:
+        with open(os.path.join(self.h_dir, 'c_comments_removed.h'), 'r') as f:
             compare_lines(self.parser.files[path].split('\n'), f.readlines())
 
     def test_removing_cpp_comments(self):
@@ -232,7 +232,7 @@ class TestFileHandling(object):
         self.parser.load_file(path)
         self.parser.remove_comments(path)
         with open(os.path.join(self.h_dir,
-                               'cpp_comments_removed.h'), 'rU') as f:
+                               'cpp_comments_removed.h'), 'r') as f:
             compare_lines(self.parser.files[path].split('\n'), f.readlines())
 
 
