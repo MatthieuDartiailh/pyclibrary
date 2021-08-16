@@ -1649,8 +1649,8 @@ rparen = Literal(")").ignore(quotedString).suppress()
 
 # Numbers
 int_strip = lambda t: t[0].rstrip('UL')
-hexint = Regex('[+-]?\s*0[xX][{}]+[UL]*'.format(hexnums)).setParseAction(int_strip)
-decint = Regex('[+-]?\s*[0-9]+[UL]*').setParseAction(int_strip)
+hexint = Regex(r'[+-]?\s*0[xX][{}]+[UL]*'.format(hexnums)).setParseAction(int_strip)
+decint = Regex(r'[+-]?\s*[0-9]+[UL]*').setParseAction(int_strip)
 integer = (hexint | decint)
 # The floating regex is ugly but it is because we do not want to match
 # integer to it.
