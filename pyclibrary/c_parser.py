@@ -716,31 +716,18 @@ class CParser(object):
         Operates in memory, does not alter the original files.
 
         """
-        # Create a Regex to match `type name; /// hint (unit) [used_if]` (for instance `float max_regen_current; /// Negative value (A)`); note that hint, unit and used_if are all optional
+        # Create a Regex to match `type name; /// comment` (for instance `float max_regen_current; /// Negative value (A)`)
         type_parser = Word(alphanums + '_')
         name_parser = Word(alphanums + '_[]') + FollowedBy(';')
-        hint_parser = Regex(r'([^\(\[\n]*)') # Any chain of characters except parenthesis, bracket or carriage return
-        unit_parser = Regex(r'\((.+)\)') # A chain of characters inside parentheses
-        used_if_parser = Regex(r'\[(.+)\]') # A chain of characters inside brackets
-        attr_expression = type_parser + name_parser + Suppress(';') + Suppress('///') + hint_parser + Optional(unit_parser) + Optional(used_if_parser)
+        comment_parser = Regex(r'([^\n]+)')
+        attr_expression = type_parser + name_parser + Suppress(';') + Suppress('///') + comment_parser
 
         # Find all lines of file_content matching that Regex
         file_content = self.files[path]
         lines = attr_expression.searchString(file_content).asList()
         for line in lines:
             name = line[1] # name of the property
-            comment = {}
-            hint = line[2].rstrip()
-            if hint != '':
-                comment['hint'] = hint
-            if len(line) >= 4: # we have unit, used_if or both
-                if line[3].startswith('['): # we only have used_if
-                    comment['used_if'] = line[3][1:-1]
-                else: # we have unit or both
-                    comment['unit'] = line[3][1:-1]
-                if len(line)== 5: # we have both
-                    comment['used_if'] = line[4][1:-1]
-                
+            comment = line[2]
             self.add_def('comments', name, comment)
 
     def remove_comments(self, path):
