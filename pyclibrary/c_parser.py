@@ -1208,10 +1208,11 @@ class CParser(object):
         self.decl_list = (lbrace +
                           Group(OneOrMore(self.struct_member))('members') +
                           rbrace)
+        
         self.struct_type << (struct_kw('struct_type') +
-                             ((Optional(ident)('name') +
-                               self.decl_list) | ident('name'))
-                             )
+                             Optional(ident)('tag_name') +
+                             self.decl_list + Optional(ident_name('name')))
+        
         self.struct_type.setParseAction(self.process_struct)
 
         self.struct_decl = self.struct_type + semi
@@ -1408,7 +1409,12 @@ class CParser(object):
                     sname = t.name
                 else:
                     sname = t.name[0]
-
+            
+            # HACK : Make sure nested Structs are shown correctly
+            if t.tag_name:
+                tag = t.tag_name[0].replace('tag_', '') + ":"
+                sname = tag + sname
+            
             logger.debug("  NAME: {}".format(sname))
             if (len(t.members) > 0 or sname not in self.defs[str_typ+'s'] or
                     self.defs[str_typ+'s'][sname] == {}):
@@ -1688,7 +1694,7 @@ nonnum_types = ['char', 'bool', 'void']
 # Define some common language elements when initialising.
 def _init_cparser(extra_types=None, extra_modifiers=None):
     global expression
-    global call_conv, ident
+    global call_conv, ident, ident_name
     global base_types
     global type_qualifier, storage_class_spec, extra_modifier
     global fund_type
@@ -1708,6 +1714,11 @@ def _init_cparser(extra_types=None, extra_modifiers=None):
     ident = (WordStart(wordchars) + ~keyword +
              Word(alphas + "_", alphanums + "_$") +
              WordEnd(wordchars)).setParseAction(lambda t: t[0])
+    
+    ident_name = (WordStart(wordchars) + 
+                  Word(alphas + "_", alphanums + "_$") + 
+                  Optional(nestedExpr('[', ']').suppress()) +
+                  WordEnd(wordchars)).setParseAction(lambda t: t[0])
 
     call_conv = Optional(Keyword('__cdecl') |
                          Keyword('__stdcall'))('call_conv')
