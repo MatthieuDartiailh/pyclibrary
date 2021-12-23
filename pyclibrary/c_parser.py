@@ -16,6 +16,7 @@ import os
 import logging
 from inspect import cleandoc
 from traceback import format_exc
+from typing import Tuple, TypedDict
 
 from .errors import DefinitionError
 from .utils import find_header
@@ -34,7 +35,6 @@ logger = logging.getLogger(__name__)
 
 
 __all__ = ['win_defs', 'CParser']
-
 
 class Type(tuple):
     """
@@ -118,7 +118,7 @@ class Type(tuple):
         return tuple(self[1:])
 
     @property
-    def type_spec(self):
+    def type_spec(self) -> str:
         """Return the base type of this type.
 
         """
@@ -223,6 +223,8 @@ class Type(tuple):
         return (self.type_spec,) + self.declarators
 
 
+StructMember = Tuple[str, Type, None]
+
 class Compound(dict):
     """Base class for representing object using a dict-like interface.
 
@@ -242,7 +244,7 @@ class Compound(dict):
                 ', '.join(map(repr, self.members)) + packParam + ')')
 
     @property
-    def members(self):
+    def members(self) -> list[StructMember]:
         return self['members']
 
     @property
@@ -291,6 +293,12 @@ class Enum(dict):
                           for nm, val in sorted(self.items())) +
                 ')')
 
+
+class ParserDefs(TypedDict):
+    comments: dict[str, str]
+    enums: dict[str, Enum]
+    structs: dict[str, Struct]
+    types: dict[str, Type]
 
 def win_defs(version='1500'):
     """Loads selection of windows headers included with PyCLibrary.
@@ -416,7 +424,7 @@ class CParser(object):
             auto_init()
 
         # Holds all definitions
-        self.defs = {}
+        self.defs: ParserDefs = {}
         # Holds definitions grouped by the file they came from
         self.file_defs = {}
         # Description of the struct packing rules as defined by #pragma pack
