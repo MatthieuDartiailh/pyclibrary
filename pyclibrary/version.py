@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # -----------------------------------------------------------------------------
-# Copyright 2015-2020 by PyCLibrary Authors, see AUTHORS for more details.
+# Copyright 2015-2022 by PyCLibrary Authors, see AUTHORS for more details.
 #
 # Distributed under the terms of the MIT/X11 license.
 #
@@ -26,7 +26,7 @@ MINOR = 2
 MICRO = 0
 
 # The status indicate if this is a development or pre-release version
-STATUS = 'dev'
+STATUS = ''
 
 #: A namedtuple of the version info for the current release.
 version_info = namedtuple('version_info', 'major minor micro status')

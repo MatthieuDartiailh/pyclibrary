@@ -22,6 +22,7 @@ and can evaluate typedefs down to their fundamental C types +
 pointers/arrays/function signatures. Pyclibrary can automatically build c
 structs/unions and perform type conversions when calling functions via
 cdll/windll.''',
+    long_description_content_type="text/x-rst",
     author = 'PyCLibrary Developers',
     author_email = 'm.dartiailh@gmail.com',
     url = 'http://github.com/MatthieuDartiailh/pyclibrary',

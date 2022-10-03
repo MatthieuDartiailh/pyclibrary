@@ -1,10 +1,11 @@
 PyCLibrary Changelog
 ====================
 
-0.2.0 - unreleased
+0.2.0 - 03/10/2022
 ------------------
 
 - remove support for Python 2 PR #47
+- fix issues with parsing rules not using raw strings PR #52
 
 0.1.7 - 11/11/2020
 ------------------
