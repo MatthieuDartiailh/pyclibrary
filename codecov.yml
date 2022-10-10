@@ -3,5 +3,3 @@ comment:
 coverage:
   status:
     patch: false
-fixes:
-  - "~/anaconda/envs/travisci/Lib/site-packages/::"
