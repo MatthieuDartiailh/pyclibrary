@@ -1,6 +1,5 @@
-# -*- coding: utf-8 -*-
 # -----------------------------------------------------------------------------
-# Copyright 2015-2020 by PyCLibrary Authors, see AUTHORS for more details.
+# Copyright 2015-2022 by PyCLibrary Authors, see AUTHORS for more details.
 #
 # Distributed under the terms of the MIT/X11 license.
 #
@@ -12,7 +11,9 @@
 import os
 import sys
 from pickle import dumps, loads
-from pytest import raises
+
+import pytest
+
 from pyclibrary.c_parser import CParser, Type, Struct, Union, Enum
 import pyclibrary.utils
 
@@ -31,7 +32,7 @@ def compare_lines(lines, lines2):
 class TestType(object):
 
     def test_init(self):
-        with raises(ValueError):
+        with pytest.raises(ValueError):
             Type('int', '*', type_quals=(('volatile',),))
 
     def test_tuple_equality(self):

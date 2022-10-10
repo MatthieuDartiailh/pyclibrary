@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Taken from PyVisa cthelper.
 
 import os
