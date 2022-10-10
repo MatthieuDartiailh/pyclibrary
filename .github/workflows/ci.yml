@@ -48,8 +48,8 @@ jobs:
       - name: Test with oldest supported pyparsing
         run: |
           pip install pyparsing==2.3.1
-          python-m pytest tests
+          python -m pytest tests
       - name: Test with latest supported pyparsing
         run: |
           pip install --upgrade --upgrade-strategy eager pyparsing
-          python-m pytest tests
+          python -m pytest tests
