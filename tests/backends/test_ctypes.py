@@ -14,7 +14,8 @@ This actually needs ctypes to make sense but it affects all wrappers.
 import os
 import ctypes
 import _ctypes_test
-from pytest import raises
+
+import pytest
 
 from pyclibrary.utils import (add_header_locations, HEADER_DIRS)
 from pyclibrary.c_library import CLibrary, cast_to, build_array
@@ -48,7 +49,7 @@ class TestCTypesCLibrary(object):
         point_cls = self.library('structs', 'tagpoint')
         point_cls(x=1, y=2)
 
-        with raises(KeyError):
+        with pytest.raises(KeyError):
             self.library('r', 't')
 
     def test_getattr(self):

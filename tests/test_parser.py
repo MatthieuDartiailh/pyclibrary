@@ -635,14 +635,14 @@ class TestParsing(object):
         assert ('x' in variables and variables['x'] ==
                 (None, Type('undefined')))
         assert not self.parser.is_fund_type('SomeOtherType')
-        with raises(Exception):
+        with pytest.raises(Exception):
             self.parser.eval_type(Type('undefined'))
 
         # Testing recursive defs
         assert 'recType1' in types
         assert 'recType2' in types
         assert 'recType3' in types
-        with raises(Exception):
+        with pytest.raises(Exception):
             self.parser.eval_type(Type('recType3'))
 
     def test_enums(self):
