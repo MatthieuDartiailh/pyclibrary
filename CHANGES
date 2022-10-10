@@ -1,6 +1,12 @@
 PyCLibrary Changelog
 ====================
 
+0.2.1 - 10/10/2022
+------------------
+
+- test compatibility with Python 3.10 PR #62
+- test compatibility with pyparsing 3.x PR #62
+
 0.2.0 - 03/10/2022
 ------------------
 
