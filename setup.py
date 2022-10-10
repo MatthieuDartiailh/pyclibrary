@@ -39,11 +39,12 @@ cdll/windll.''',
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
-        'Programming Language :: Python :: 3.9'
+        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10'
         ],
     zip_safe = False,
     packages = ['pyclibrary', 'pyclibrary.backends', 'pyclibrary.thirdparty'],
 	package_data = {'pyclibrary': ['headers/*']},
-    install_requires = ['pyparsing>=2.3.1,<3'],
+    install_requires = ['pyparsing>=2.3.1,<4'],
 )
 

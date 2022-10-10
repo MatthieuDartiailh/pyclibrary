@@ -21,7 +21,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: [3.6, 3.7, 3.8, 3.9]
+        python-version: ['3.6', '3.7', '3.8', '3.9', '3.10']
     steps:
       - uses: actions/checkout@v2
       - name: Set up Python ${{ matrix.python-version }}
@@ -45,3 +45,11 @@ jobs:
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: true
+      - name: Test with oldest supported pyparsing
+        run: |
+          pip install pyparsing==2.3.1
+          python-m pytest tests
+      - name: Test with latest supported pyparsing
+        run: |
+          pip install --upgrade --upgrade-strategy eager pyparsing
+          python-m pytest tests
