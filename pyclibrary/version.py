@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # -----------------------------------------------------------------------------
 # Copyright 2015-2022 by PyCLibrary Authors, see AUTHORS for more details.
 #
@@ -23,7 +22,7 @@ MINOR = 2
 
 # The micro release number. The micro release number is incremented
 # for bug fix releases and small feature additions.
-MICRO = 0
+MICRO = 1
 
 # The status indicate if this is a development or pre-release version
 STATUS = ''

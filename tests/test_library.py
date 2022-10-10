@@ -1,6 +1,5 @@
-# -*- coding: utf-8 -*-
 # -----------------------------------------------------------------------------
-# Copyright 2015-2020 by PyCLibrary Authors, see AUTHORS for more details.
+# Copyright 2015-2022 by PyCLibrary Authors, see AUTHORS for more details.
 #
 # Distributed under the terms of the MIT/X11 license.
 #
@@ -14,7 +13,8 @@ This actually needs ctypes to make sense but it affects all wrappers.
 import os
 import _ctypes_test
 import ctypes
-from pytest import yield_fixture, mark
+
+import pytest
 
 from pyclibrary.utils import (add_library_locations, add_header_locations,
                               LIBRARY_DIRS, HEADER_DIRS)
@@ -38,7 +38,7 @@ def teardown_module():
         HEADER_DIRS = BACKUPS
 
 
-@yield_fixture
+@pytest.fixture
 def library_location_fixture():
     global LIBRARY_DIRS
     old = LIBRARY_DIRS[:]
@@ -68,8 +68,6 @@ class TestCLibrary(object):
         library = CLibrary(lib, ['ctypes_test.h'])
         assert library._lib_ is lib
 
-    # This works on both windows and python locally but fails on Travis
-    @mark.no_travis
     def test_already_opened_library(self):
 
         lib = ctypes.CDLL(_ctypes_test.__file__)

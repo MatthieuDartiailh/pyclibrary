@@ -1,6 +1,5 @@
-# -*- coding: utf-8 -*-
 # -----------------------------------------------------------------------------
-# Copyright 2015-2020 by PyCLibrary Authors, see AUTHORS for more details.
+# Copyright 2015-2022 by PyCLibrary Authors, see AUTHORS for more details.
 #
 # Distributed under the terms of the MIT/X11 license.
 #
@@ -16,7 +15,7 @@ import pyclibrary.c_parser as cp
 import pyclibrary.c_library as cl
 
 
-@pytest.yield_fixture
+@pytest.fixture
 def init_fixture():
     yield
     cp.CParser._init = False
