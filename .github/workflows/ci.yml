@@ -31,9 +31,9 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-      - name: Install project
+      - name: Install project with the latest dependency versions
         run: |
-          python setup.py develop
+          pip install --upgrade --upgrade-strategy eager -e .
       - name: Test with pytest
         run: |
           pip install pytest-cov
@@ -45,11 +45,7 @@ jobs:
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: true
-      - name: Test with oldest supported pyparsing
+      - name: Test with the oldest supported dependency versions
         run: |
           pip install pyparsing==2.3.1
-          python -m pytest tests
-      - name: Test with latest supported pyparsing
-        run: |
-          pip install --upgrade --upgrade-strategy eager pyparsing
           python -m pytest tests
