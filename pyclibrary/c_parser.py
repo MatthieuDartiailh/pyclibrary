@@ -295,6 +295,7 @@ class Enum(dict):
 
 
 class ParserDefs(TypedDict):
+    macros: dict[str, str]
     comments: dict[str, str]
     enums: dict[str, Enum]
     structs: dict[str, Struct]
