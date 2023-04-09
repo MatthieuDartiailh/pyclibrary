@@ -566,6 +566,14 @@ class TestParsing(object):
         assert ('x2' in variables and
                 variables['x2'] == (88342528, Type('int')))
 
+        # Test int div 9 / 2 should be 4
+        assert ('x3' in variables and
+                variables['x3'] == (4.5, Type('float')))
+        assert ('x4' in variables and
+                variables['x4'] == (4, Type('int')))
+        assert ('x5' in variables and
+                variables['x5'] == (4., Type('float')))
+
         # Test array handling
         assert ('array' in variables and
                 variables['array'] == ([1, 3141500.0], Type('float', [2])))

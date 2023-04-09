@@ -56,6 +56,11 @@ float x1 = (5 + 3 * 0x1) / 8.0;
 // Test type casting handling.
 int x2 = (typeCast)0x544 <<16;
 
+// Test int div 9 / 2 should be 4
+float x3 = 9.0 / 2.0;
+int x4 = 9 / 2;
+float x5 = 9 / 2;
+
 // Test array
 float array[2] = {0x1, 3.1415e6};
 static const int * const (**intJunk[4]);
