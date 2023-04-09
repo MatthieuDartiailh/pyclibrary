@@ -60,6 +60,10 @@ int x2 = (typeCast)0x544 <<16;
 float x3 = 9.0 / 2.0;
 int x4 = 9 / 2;
 float x5 = 9 / 2;
+int x6_1 = 9;
+int x6_2 = 2;
+float x6 = x6_1 / x6_2;
+float x7 = x6_1 / 2.0;
 
 // Test array
 float array[2] = {0x1, 3.1415e6};

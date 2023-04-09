@@ -573,6 +573,10 @@ class TestParsing(object):
                 variables['x4'] == (4, Type('int')))
         assert ('x5' in variables and
                 variables['x5'] == (4., Type('float')))
+        assert ('x6' in variables and
+                variables['x6'] == (4., Type('float')))
+        assert ('x7' in variables and
+                variables['x7'] == (4.5, Type('float')))
 
         # Test array handling
         assert ('array' in variables and
