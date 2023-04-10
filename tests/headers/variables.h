@@ -64,6 +64,9 @@ int x6_1 = 9;
 int x6_2 = 2;
 float x6 = x6_1 / x6_2;
 float x7 = x6_1 / 2.0;
+float x8 = (9 / 2) * 2 + 9 % 2;
+int x9 = -9 / 2; // -4
+int x10 = -9 % 2; // -1
 
 // Test array
 float array[2] = {0x1, 3.1415e6};
