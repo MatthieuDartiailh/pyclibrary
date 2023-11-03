@@ -1743,8 +1743,8 @@ integer_in_expr = (hexint | octal | decint)
 # The floating regex is ugly but it is because we do not want to match
 # integer to it.
 floating = Regex(r'[+-]?\s*((((\d(\.\d*)?)|(\.\d+))[eE][+-]?\d+)|((\d\.\d*)|(\.\d+)))')
-number =  (floating |integer)
-number_in_expr = (floating |integer_in_expr)
+number = (floating | integer)
+number_in_expr = (floating | integer_in_expr)
 
 # Miscelaneous
 bi_operator = oneOf("+ - / * | & || && ! ~ ^ % == != > < >= <= -> . :: << >> = ? :")
