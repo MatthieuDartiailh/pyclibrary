@@ -37,8 +37,7 @@ __all__ = ['win_defs', 'CParser']
 
 def wrap_int(t):
     logger.debug('wrap_int: {} {}'.format(t.dump(), type(t)))
-    t[0] = "CInt({})".format(int(t[0], 0))
-    return t
+    return CInt(int(t[0], 0))
 
 class CInt(int):
     def __new__(cls, base=10, *args, **kwargs):
