@@ -1735,10 +1735,11 @@ rparen = Literal(")").ignore(quotedString).suppress()
 int_strip = lambda t: t[0].rstrip('UL')
 hexint = Regex(r'[+-]?\s*0[xX][{}]+[UL]*'.format(hexnums)).setParseAction(int_strip)
 decint = Regex(r'[+-]?\s*[0-9]+[UL]*').setParseAction(int_strip)
-integer = (hexint | decint)
+octal =  Regex(r'[+-]?\s*0[0-7]+[UL]*').setParseAction(lambda t: int_strip(t).replace('0', '0o', 1))
+integer = (hexint | octal | decint)
 integer.setParseAction(wrap_int)
 # in eval expr would not match identifier, it would match a number cause error
-integer_in_expr = (hexint | decint)
+integer_in_expr = (hexint | octal | decint)
 # The floating regex is ugly but it is because we do not want to match
 # integer to it.
 floating = Regex(r'[+-]?\s*((((\d(\.\d*)?)|(\.\d+))[eE][+-]?\d+)|((\d\.\d*)|(\.\d+)))')

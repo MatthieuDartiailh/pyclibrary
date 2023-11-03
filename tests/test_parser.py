@@ -290,6 +290,17 @@ class TestPreprocessing(object):
                 macros['MACRO_H3'] == '0X000002UL' and
                 values['MACRO_H3'] == 2)
 
+        # Octal integer
+        assert ('MACRO_OCT1' in macros and
+                macros['MACRO_OCT1'] == '+ 010' and
+                values['MACRO_OCT1'] == 0o10)
+        assert ('MACRO_OCT2' in macros and
+                macros['MACRO_OCT2'] == '-03000U' and
+                values['MACRO_OCT2'] == -0o3000)
+        assert ('MACRO_OCT3' in macros and
+                macros['MACRO_OCT3'] == '02UL' and
+                values['MACRO_OCT3'] == 0o2)
+
         # Bit shifted hexadecimal integer
         assert ('MACRO_SH1' in macros and
                 macros['MACRO_SH1'] == '(0x000000 << 1)' and

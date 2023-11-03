@@ -18,6 +18,11 @@
 #define MACRO_H2 - 0x000001U
 #define MACRO_H3 0X000002UL
 
+// Octal values
+#define MACRO_OCT1 + 010
+#define MACRO_OCT2 -03000U
+#define MACRO_OCT3 02UL
+
 // Bit shifted hexadecimal values
 #define MACRO_SH1 (0x000000 << 1)
 #define MACRO_SH2 (0x000001U << 2)
