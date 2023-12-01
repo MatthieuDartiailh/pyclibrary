@@ -662,7 +662,7 @@ class CParser(object):
             self.files[path] = None
             return False
 
-        with open(path, "r") as fd:
+        with open(path, "r", encoding="utf8") as fd:
             self.files[path] = fd.read()
 
         if replace is not None:
