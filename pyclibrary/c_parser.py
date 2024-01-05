@@ -726,7 +726,7 @@ class CParser(object):
         file_content = self.files[path]
         lines = attr_expression.searchString(file_content).asList()
         for line in lines:
-            name = line[1] # name of the property
+            name = line[1].split('[')[0] # name of the property; if it's an array, keep only the part before the opening bracket
             comment = line[2]
             self.add_def('comments', name, comment)
 
