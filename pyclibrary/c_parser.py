@@ -366,6 +366,9 @@ class CParser(object):
         Flag indicating whether to perform validity checking when using a cache file. This is useful
         in a scenario where the python wrapper needs to be used without access to the headers
 
+    encoding : str, optional
+        The encoding to use for reading the file. Default is 'utf-8'.
+
     kwargs :
         Extra parameters may be used to specify the starting state of the
         parser. For example, one could provide a set of missing type
@@ -406,8 +409,8 @@ class CParser(object):
     #: Private flag allowing to know if the parser has been initiliased.
     _init = False
 
-    def __init__(self, files=None, copy_from=None, replace=None,
-                 process_all=True, cache=None, check_cache_validity=True, **kwargs):
+    def __init__(self, files=None, copy_from=None, replace=None, process_all=True,
+                 cache=None, check_cache_validity=True, encoding="utf-8", **kwargs):
 
         if not self._init:
             logger.info('Automatic initialisation based on OS detection')
@@ -431,11 +434,13 @@ class CParser(object):
         self.file_order = []
         self.files = {}
 
+        self.default_encoding = encoding
+
         if files is not None:
             if isinstance(files, str):
                 files = [files]
             for f in self.find_headers(files):
-                self.load_file(f, replace)
+                self.load_file(f, replace, encoding)
 
         # Initialize empty definition lists
         for k in self.data_list:
@@ -639,7 +644,7 @@ class CParser(object):
 
         return hs
 
-    def load_file(self, path, replace=None):
+    def load_file(self, path, replace=None, encoding=None):
         """Read a file, make replacements if requested.
 
         Called by __init__, should not be called manually.
@@ -653,7 +658,13 @@ class CParser(object):
             Dictionary containing strings to replace by the associated value
             when loading the file.
 
+        encoding : str, optional
+            String with encoding options for the file to be opened. The default
+            is the value specified during the construction of the instance.
         """
+        if encoding is None:
+            encoding = self.default_encoding
+
         if not os.path.isfile(path):
             # Not a fatal error since we might be able to function properly if
             # there is a cache file.
@@ -662,7 +673,7 @@ class CParser(object):
             self.files[path] = None
             return False
 
-        with open(path, "r", encoding="utf8") as fd:
+        with open(path, "r", encoding=encoding) as fd:
             self.files[path] = fd.read()
 
         if replace is not None:
