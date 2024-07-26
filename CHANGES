@@ -1,6 +1,11 @@
 PyCLibrary Changelog
 ====================
 
+0.2.3 - unreleased
+------------------
+
+- allow selection of encoding when loading files (issue #51)
+
 0.2.2 - 22/01/2024
 ------------------
 
