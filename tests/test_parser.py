@@ -160,8 +160,7 @@ class TestFileHandling(object):
 
     h_dir = os.path.join(H_DIRECTORY, 'file_handling')
 
-    def setup(self):
-
+    def setup_method(self):
         self.parser = CParser(process_all=False)
 
     def test_init(self):
@@ -243,7 +242,7 @@ class TestPreprocessing(object):
     """
     h_dir = os.path.join(H_DIRECTORY, 'macros')
 
-    def setup(self):
+    def setup_method(self):
 
         self.parser = CParser(process_all=False)
 
@@ -465,7 +464,7 @@ class TestParsing(object):
 
     h_dir = H_DIRECTORY
 
-    def setup(self):
+    def setup_method(self):
 
         self.parser = CParser(process_all=False)
 

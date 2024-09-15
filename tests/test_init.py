@@ -17,9 +17,9 @@ import pyclibrary.c_library as cl
 
 @pytest.fixture
 def init_fixture():
-    yield
     cp.CParser._init = False
     cl.CLibrary._init = False
+    yield
 
 
 def test_init(init_fixture):
@@ -38,7 +38,7 @@ def test_reinit_attempt(init_fixture):
         init()
 
 
-def test_auto_init():
+def test_auto_init(init_fixture):
 
     auto_init({'new_type': int}, ['__modifier'], 'win32')
     assert 'new_type' in cp.base_types

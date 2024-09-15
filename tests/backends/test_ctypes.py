@@ -42,7 +42,7 @@ class TestCTypesCLibrary(object):
     """Test the ctypes wrapper functionality.
 
     """
-    def setup(self):
+    def setup_method(self):
         self.library = CLibrary(_ctypes_test.__file__, ['ctypes_test.h'])
 
     def test_call(self):
