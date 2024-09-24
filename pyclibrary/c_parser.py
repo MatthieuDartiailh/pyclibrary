@@ -35,6 +35,90 @@ logger = logging.getLogger(__name__)
 __all__ = ['win_defs', 'CParser']
 
 
+def wrap_int(t):
+    logger.debug('wrap_int: {} {}'.format(t.dump(), type(t)))
+    return CInt(int(t[0], 0))
+
+class CInt(int):
+    def __new__(cls, base=10, *args, **kwargs):
+        return  super(CInt, cls).__new__(cls, base, *args, **kwargs)
+
+    def __truediv__(self, other):
+        if isinstance(other, CInt):
+            is_positive = self >= 0 and other >= 0
+            return CInt(int(self) // int(other)) if is_positive else -CInt(-int(self) // int(other))
+        else:
+            return super(CInt, self).__truediv__(other)
+
+    def __rtruediv__(self, other):
+        if isinstance(other, CInt):
+            is_positive = self >= 0 and other >= 0
+            return CInt(int(other) // int(self)) if is_positive else -CInt(-int(other) // int(self))
+        else:
+            return super(CInt, self).__rtruediv__(other)
+        
+    def __mod__(self, other):
+        if isinstance(other, CInt):
+            is_positive = self >= 0 and other >= 0
+            return CInt(int(self) % int(other)) if is_positive else -CInt(-int(self) % int(other))
+        else:
+            return super(CInt, self).__mod__(other)
+        
+    def __rmod__(self, other):
+        if isinstance(other, CInt):
+            is_positive = self >= 0 and other >= 0
+            return CInt(int(other) % int(self)) if is_positive else -CInt(-int(other) % int(self))
+        else:
+            return super(CInt, self).__rmod__(other)
+    
+    def __sub__(self, other):
+        if isinstance(other, CInt):
+            return CInt(int(self) - int(other))
+        else:
+            return super(CInt, self).__sub__(other)
+        
+    def __rsub__(self, other):
+        if isinstance(other, CInt):
+            return CInt(int(other) - int(self))
+        else:
+            return super(CInt, self).__rsub__(other)
+        
+    def __add__(self, other):
+        if isinstance(other, CInt):
+            return CInt(int(self) + int(other))
+        else:
+            return super(CInt, self).__add__(other)
+        
+    def __radd__(self, other):
+        if isinstance(other, CInt):
+            return CInt(int(other) + int(self))
+        else:
+            return super(CInt, self).__radd__(other)
+        
+    def __mul__(self, other):
+        if isinstance(other, CInt):
+            return CInt(int(self) * int(other))
+        else:
+            return super(CInt, self).__mul__(other)
+        
+    def __rmul__(self, other):
+        if isinstance(other, CInt):
+            return CInt(int(other) * int(self))
+        else:
+            return super(CInt, self).__rmul__(other)
+
+    def __str__(self):
+        return "CInt({})".format(super(CInt, self).__str__())
+    
+    def __repr__(self):
+        return "CInt({})".format(super(CInt, self).__repr__())
+    
+    def __neg__(self):
+        return CInt(-int(self))
+    
+    def __pos__(self):
+        return CInt(+int(self))
+        
 class Type(tuple):
     """
     Representation of a C type. CParser uses this class to store the parsed
@@ -1519,7 +1603,7 @@ class CParser(object):
         expr = expr.strip()
         cast = (lparen + self.type_spec + self.abstract_declarator +
                 rparen).suppress()
-        expr = (quotedString | number | cast).transformString(expr)
+        expr = (quotedString | number_in_expr | cast).transformString(expr)
         if expr == '':
             return None
         return eval(expr, *args)
@@ -1661,11 +1745,16 @@ rparen = Literal(")").ignore(quotedString).suppress()
 int_strip = lambda t: t[0].rstrip('UL')
 hexint = Regex(r'[+-]?\s*0[xX][{}]+[UL]*'.format(hexnums)).setParseAction(int_strip)
 decint = Regex(r'[+-]?\s*[0-9]+[UL]*').setParseAction(int_strip)
-integer = (hexint | decint)
+octal =  Regex(r'[+-]?\s*0[0-7]+[UL]*').setParseAction(lambda t: int_strip(t).replace('0', '0o', 1))
+integer = (hexint | octal | decint)
+integer.setParseAction(wrap_int)
+# in eval expr would not match identifier, it would match a number cause error
+integer_in_expr = (hexint | octal | decint)
 # The floating regex is ugly but it is because we do not want to match
 # integer to it.
 floating = Regex(r'[+-]?\s*((((\d(\.\d*)?)|(\.\d+))[eE][+-]?\d+)|((\d\.\d*)|(\.\d+)))')
 number = (floating | integer)
+number_in_expr = (floating | integer_in_expr)
 
 # Miscelaneous
 bi_operator = oneOf("+ - / * | & || && ! ~ ^ % == != > < >= <= -> . :: << >> = ? :")

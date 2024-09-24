@@ -289,6 +289,17 @@ class TestPreprocessing(object):
                 macros['MACRO_H3'] == '0X000002UL' and
                 values['MACRO_H3'] == 2)
 
+        # Octal integer
+        assert ('MACRO_OCT1' in macros and
+                macros['MACRO_OCT1'] == '+ 010' and
+                values['MACRO_OCT1'] == 0o10)
+        assert ('MACRO_OCT2' in macros and
+                macros['MACRO_OCT2'] == '-03000U' and
+                values['MACRO_OCT2'] == -0o3000)
+        assert ('MACRO_OCT3' in macros and
+                macros['MACRO_OCT3'] == '02UL' and
+                values['MACRO_OCT3'] == 0o2)
+
         # Bit shifted hexadecimal integer
         assert ('MACRO_SH1' in macros and
                 macros['MACRO_SH1'] == '(0x000000 << 1)' and
@@ -565,6 +576,24 @@ class TestParsing(object):
         assert ('x2' in variables and
                 variables['x2'] == (88342528, Type('int')))
 
+        # Test int div 9 / 2 should be 4
+        assert ('x3' in variables and
+                variables['x3'] == (4.5, Type('float')))
+        assert ('x4' in variables and
+                variables['x4'] == (4, Type('int')))
+        assert ('x5' in variables and
+                variables['x5'] == (4., Type('float')))
+        assert ('x6' in variables and
+                variables['x6'] == (4., Type('float')))
+        assert ('x7' in variables and
+                variables['x7'] == (4.5, Type('float')))
+        assert ('x8' in variables and
+                variables['x8'] == (9., Type('float')))
+        assert ('x9' in variables and
+                variables['x9'] == (-4, Type('int')))
+        assert ('x10' in variables and
+                variables['x10'] == (-1, Type('int')))
+        
         # Test array handling
         assert ('array' in variables and
                 variables['array'] == ([1, 3141500.0], Type('float', [2])))
