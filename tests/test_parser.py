@@ -160,8 +160,7 @@ class TestFileHandling(object):
 
     h_dir = os.path.join(H_DIRECTORY, 'file_handling')
 
-    def setup(self):
-
+    def setup_method(self):
         self.parser = CParser(process_all=False)
 
     def test_init(self):
@@ -243,7 +242,7 @@ class TestPreprocessing(object):
     """
     h_dir = os.path.join(H_DIRECTORY, 'macros')
 
-    def setup(self):
+    def setup_method(self):
 
         self.parser = CParser(process_all=False)
 
@@ -465,7 +464,7 @@ class TestParsing(object):
 
     h_dir = H_DIRECTORY
 
-    def setup(self):
+    def setup_method(self):
 
         self.parser = CParser(process_all=False)
 
@@ -717,6 +716,21 @@ class TestParsing(object):
                Struct(('x', Type('int'), None),
                       ('y', Type('type_type_int'), None),
                       ('str', Type('char', [10]), "brace }  \0"),
+                      pack=16)
+
+        # Test nested structures
+        NESTED_STRUCT_ENUM_0 = self.parser.defs['enums']['root_nested_enum']['NESTED_STRUCT_ENUM_0']
+        NESTED_STRUCT_ENUM_1 = self.parser.defs['enums']['root_nested_enum']['NESTED_STRUCT_ENUM_1']
+        NESTED_STRUCT_ENUM_2 = self.parser.defs['enums']['root_nested_enum']['NESTED_STRUCT_ENUM_2']
+        assert NESTED_STRUCT_ENUM_0 == 0
+        assert NESTED_STRUCT_ENUM_1 == 1
+        assert NESTED_STRUCT_ENUM_2 == 2
+
+        assert ('root_nested_structure' in structs and 'struct root_nested_structure' in types)
+        assert structs['root_nested_structure'] == \
+               Struct(('x', Type('struct leaf1_nested_structure', [NESTED_STRUCT_ENUM_2]), None),
+                      ('y', Type('root_nested_enum_type'), None),
+                      ('z', Type('struct leaf2_nested_structure'), None),
                       pack=16)
 
     def test_unions(self):

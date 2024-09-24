@@ -46,3 +46,23 @@ struct struct_name_p
   int x; type_type_int y;
   char str[10] = "brace }  \0"; /* commented brace } */
 };
+
+// Test a nested structure
+
+typedef enum root_nested_enum
+{
+  NESTED_STRUCT_ENUM_0,
+  NESTED_STRUCT_ENUM_1,
+  NESTED_STRUCT_ENUM_2
+} root_nested_enum_type;
+
+struct root_nested_structure
+{
+  struct leaf1_nested_structure{
+    char x;
+  } x[NESTED_STRUCT_ENUM_2];
+  root_nested_enum_type y;
+  struct leaf2_nested_structure{
+    char x;        
+  } z;
+};
