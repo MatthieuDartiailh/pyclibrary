@@ -3,24 +3,27 @@
 import os
 import sys
 
+__all__ = ("find_library",)
+
 # On Linux, find Library returns the name not the path.
 # This excerpt provides a modified find_library.
 # noinspection PyUnresolvedReferences
-if os.name == "posix" and sys.platform.startswith('linux'):
-
+if os.name == "posix" and sys.platform.startswith("linux"):
     # Andreas Degert's find functions, using gcc, /sbin/ldconfig, objdump
     def define_find_libary():
+        import errno
         import re
         import tempfile
-        import errno
 
         def _findlib_gcc(name):
-            expr = r'[^\(\)\s]*lib%s\.[^\(\)\s]*' % re.escape(name)
+            expr = r"[^\(\)\s]*lib%s\.[^\(\)\s]*" % re.escape(name)
             fdout, ccout = tempfile.mkstemp()
             os.close(fdout)
-            cmd = 'if type gcc >/dev/null 2>&1; then CC=gcc; else CC=cc; fi;' \
-                  '$CC -Wl,-t -o ' + ccout + ' 2>&1 -l' + name
-            trace = ''
+            cmd = (
+                "if type gcc >/dev/null 2>&1; then CC=gcc; else CC=cc; fi;"
+                "$CC -Wl,-t -o " + ccout + " 2>&1 -l" + name
+            )
+            trace = ""
             try:
                 f = os.popen(cmd)
                 trace = f.read()
@@ -38,12 +41,11 @@ if os.name == "posix" and sys.platform.startswith('linux'):
 
         def _findlib_ldconfig(name):
             # XXX assuming GLIBC's ldconfig (with option -p)
-            expr = r'/[^\(\)\s]*lib%s\.[^\(\)\s]*' % re.escape(name)
-            res = re.search(expr,
-                            os.popen('/sbin/ldconfig -p 2>/dev/null').read())
+            expr = r"/[^\(\)\s]*lib%s\.[^\(\)\s]*" % re.escape(name)
+            res = re.search(expr, os.popen("/sbin/ldconfig -p 2>/dev/null").read())
             if not res:
                 # Hm, this works only for libs needed by the python executable.
-                cmd = 'ldd %s 2>/dev/null' % sys.executable
+                cmd = "ldd %s 2>/dev/null" % sys.executable
                 res = re.search(expr, os.popen(cmd).read())
                 if not res:
                     return None

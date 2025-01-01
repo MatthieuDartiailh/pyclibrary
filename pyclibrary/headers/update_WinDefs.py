@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------------------
-# Copyright 2015-2022 by PyCLibrary Authors, see AUTHORS for more details.
+# Copyright 2015-2025 by PyCLibrary Authors, see AUTHORS for more details.
 #
 # Distributed under the terms of the MIT/X11 license.
 #
@@ -16,15 +16,16 @@ It has to be run on one of the following conditions:
 * another Visual C/C++ compiler version is used
 * the object model of the parser was updated.
 """
+
 from pyclibrary.c_parser import win_defs
 from pyclibrary.utils import add_header_locations
 
-SDK_DIR = r'c:\program files\microsoft sdks\windows\v6.0a\include'
+SDK_DIR = r"c:\program files\microsoft sdks\windows\v6.0a\include"
 
-if __name__ == '__main__':
-    print('parsing windows definitions (may take some while)')
+if __name__ == "__main__":
+    print("parsing windows definitions (may take some while)")
     add_header_locations([SDK_DIR])
     parser = win_defs()
-    print('parsed:')
-    for objcls in ['variables', 'functions', 'types', 'macros', 'fnmacros']:
-        print('   ', len(parser.defs[objcls]), objcls)
+    print("parsed:")
+    for objcls in ["variables", "functions", "types", "macros", "fnmacros"]:
+        print("   ", len(parser.defs[objcls]), objcls)

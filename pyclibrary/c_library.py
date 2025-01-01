@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------------------
-# Copyright 2015-2022 by PyCLibrary Authors, see AUTHORS for more details.
+# Copyright 2015-2025 by PyCLibrary Authors, see AUTHORS for more details.
 #
 # Distributed under the terms of the MIT/X11 license.
 #
@@ -10,21 +10,22 @@ Proxy to library object, allowing automatic type conversion and
 function calling based on C header definitions.
 
 """
-import logging
-import sys
-import os
-from inspect import cleandoc
-from weakref import WeakValueDictionary
-from threading import RLock
 
-from .utils import find_library, LibraryPath
+import logging
+import os
+import sys
+from inspect import cleandoc
+from threading import RLock
+from weakref import WeakValueDictionary
+
 from .c_parser import CParser
+from .utils import LibraryPath, find_library
 
 logger = logging.getLogger(__name__)
 
 
 def make_mess(mess):
-    return cleandoc(mess).replace('\n', ' ')
+    return cleandoc(mess).replace("\n", " ")
 
 
 class CLibraryMeta(type):
@@ -32,15 +33,16 @@ class CLibraryMeta(type):
     duplicates libraries exists.
 
     """
+
     backends = {}
     libs = WeakValueDictionary()
 
     def __new__(meta, name, bases, dct):
-        if name == 'CLibrary':
+        if name == "CLibrary":
             return super(CLibraryMeta, meta).__new__(meta, name, bases, dct)
-        if 'backend' not in dct:
-            mess = make_mess('''{} does not declare a backend name, it cannot
-                              be registered.''')
+        if "backend" not in dct:
+            mess = make_mess("""{} does not declare a backend name, it cannot
+                              be registered.""")
             logger.warning(mess.format(name))
             return None
 
@@ -50,16 +52,16 @@ class CLibraryMeta(type):
         return cls
 
     def __call__(cls, lib, *args, **kwargs):
-
         # Identify the library path.
         if isinstance(lib, str):
             if os.sep not in lib:
                 lib_path = find_library(lib).path
             else:
                 lib_path = os.path.realpath(lib)
-                assert os.path.isfile(lib_path),\
-                    'Provided path does not point to a file'
-            backend_cls = cls.backends[kwargs.get('backend', 'ctypes')]
+                assert os.path.isfile(
+                    lib_path
+                ), "Provided path does not point to a file"
+            backend_cls = cls.backends[kwargs.get("backend", "ctypes")]
 
             lib_arch = LibraryPath(lib_path).arch
             py_bitness = 64 if sys.maxsize > 2**32 else 32
@@ -67,7 +69,8 @@ class CLibraryMeta(type):
                 raise OSError("Library bitness does not match Python's")
             lib = lib_path
         else:
-            from .backends import identify_library, get_library_path
+            from .backends import get_library_path, identify_library
+
             backend = identify_library(lib)
             backend_cls = cls.backends[backend]
             lib_path = get_library_path(lib, backend)
@@ -77,8 +80,7 @@ class CLibraryMeta(type):
             return cls.libs[lib_path]
 
         else:
-            obj = super(CLibraryMeta, backend_cls).__call__(lib, *args,
-                                                            **kwargs)
+            obj = super(CLibraryMeta, backend_cls).__call__(lib, *args, **kwargs)
             cls.libs[lib_path] = obj
             return obj
 
@@ -149,14 +151,23 @@ class CLibrary(object, metaclass=CLibraryMeta):
         is created.
 
     """
+
     #: Private flag allowing to know if the class has been initiliased.
     _init = False
 
     #: Balise to use when a NULL pointer is needed
     Null = object()
 
-    def __init__(self, lib, headers, prefix=None, lock_calls=False,
-                 convention='cdll', backend='ctypes', **kwargs):
+    def __init__(
+        self,
+        lib,
+        headers,
+        prefix=None,
+        lock_calls=False,
+        convention="cdll",
+        backend="ctypes",
+        **kwargs,
+    ):
         # name everything using underscores to avoid name collisions with
         # library
 
@@ -166,7 +177,7 @@ class CLibrary(object, metaclass=CLibraryMeta):
         elif isinstance(headers, CParser):
             self._headers_ = headers
         else:
-            msg = 'Expected a CParser instance or list for headers, not {}'
+            msg = "Expected a CParser instance or list for headers, not {}"
             raise ValueError(msg.format(type(headers)))
         self._defs_ = self._headers_.defs
 
@@ -189,8 +200,7 @@ class CLibrary(object, metaclass=CLibraryMeta):
             self._lock_ = RLock()
 
         self._objs_ = {}
-        for k in ['values', 'functions', 'types', 'structs', 'unions',
-                  'enums']:
+        for k in ["values", "functions", "types", "structs", "unions", "enums"]:
             self._objs_[k] = {}
         self._all_objs_ = {}
         self._structs_ = {}
@@ -215,8 +225,15 @@ class CLibrary(object, metaclass=CLibraryMeta):
         """
         if name not in self._all_objs_:
             names = self._all_names_(name)
-            for k in ['values', 'functions', 'types', 'structs', 'unions',
-                      'enums', None]:
+            for k in [
+                "values",
+                "functions",
+                "types",
+                "structs",
+                "unions",
+                "enums",
+                None,
+            ]:
                 if k is None:
                     raise NameError(name)
                 obj = None
@@ -230,9 +247,7 @@ class CLibrary(object, metaclass=CLibraryMeta):
         return self._all_objs_[name]
 
     def __getitem__(self, name):
-        """Used to retrieve a specific dictionary from the headers.
-
-        """
+        """Used to retrieve a specific dictionary from the headers."""
         return self._defs_[name]
 
     # --- Private API ---------------------------------------------------------
@@ -245,9 +260,7 @@ class CLibrary(object, metaclass=CLibraryMeta):
         return [name] + [p + name for p in self._prefix_]
 
     def _make_obj_(self, typ, name):
-        """Build the correct C-like object from the header definitions.
-
-        """
+        """Build the correct C-like object from the header definitions."""
         names = self._all_names_(name)
         objs = self._objs_[typ]
 
@@ -256,33 +269,33 @@ class CLibrary(object, metaclass=CLibraryMeta):
                 return self.objs[n]
 
         for n in names:  # try with and without prefix
-            if (n not in self._defs_[typ] and
-                not (typ in ['structs', 'unions', 'enums'] and
-                     n in self._defs_['types'])):
+            if n not in self._defs_[typ] and not (
+                typ in ["structs", "unions", "enums"] and n in self._defs_["types"]
+            ):
                 continue
 
-            if typ == 'values':
+            if typ == "values":
                 return self._defs_[typ][n]
-            elif typ == 'functions':
+            elif typ == "functions":
                 return self._get_function(n)
-            elif typ == 'types':
+            elif typ == "types":
                 obj = self._defs_[typ][n]
                 return self._get_type(obj)
-            elif typ == 'structs':
-                return self._get_struct('structs', n)
-            elif typ == 'unions':
-                return self._get_struct('unions', n)
-            elif typ == 'enums':
+            elif typ == "structs":
+                return self._get_struct("structs", n)
+            elif typ == "unions":
+                return self._get_struct("unions", n)
+            elif typ == "enums":
                 # Allow automatic resolving of typedefs that alias enums
-                if n not in self._defs_['enums']:
-                    if n not in self._defs_['types']:
+                if n not in self._defs_["enums"]:
+                    if n not in self._defs_["types"]:
                         raise KeyError('No enums named "{}"'.format(n))
                     typ = self._headers_.eval_type([n])[0]
-                    if typ[:5] != 'enum ':
+                    if typ[:5] != "enum ":
                         raise KeyError('No enums named "{}"'.format(n))
                     # Look up internal name of enum
-                    n = self._defs_['types'][typ][1]
-                obj = self._defs_['enums'][n]
+                    n = self._defs_["types"][typ][1]
+                obj = self._defs_["enums"][n]
 
                 return obj
             else:
@@ -294,9 +307,7 @@ class CLibrary(object, metaclass=CLibraryMeta):
         return "<CLibrary instance: %s>" % str(self._lib_)
 
     def _build_parser(self, headers, kwargs):
-        """Find the headers and parse them to extract the definitions.
-
-        """
+        """Find the headers and parse them to extract the definitions."""
         return CParser(headers, **kwargs)
 
     def _link_library(self, lib_path, convention):
@@ -314,23 +325,24 @@ class CLibrary(object, metaclass=CLibraryMeta):
         raise NotImplementedError()
 
     def _extract_val_(self, obj):
-        """Extract a python representation from a function return value.
-
-        """
+        """Extract a python representation from a function return value."""
         raise NotImplementedError()
 
     def _get_function(self, func_name):
-        """Return a CFuntion instance.
-
-        """
+        """Return a CFuntion instance."""
         try:
             func = getattr(self._lib_, func_name)
-        except:
+        except Exception:
             mess = "Function name '{}' appears in headers but not in library!"
             raise KeyError(mess.format(func_name))
 
-        return CFunction(self, func, self._defs_['functions'][func_name],
-                         func_name, self._lock_calls_)
+        return CFunction(
+            self,
+            func,
+            self._defs_["functions"][func_name],
+            func_name,
+            self._lock_calls_,
+        )
 
     def _init_function(self, function):
         """Finish the function wrapper initialisation.
@@ -352,50 +364,39 @@ class CLibrary(object, metaclass=CLibraryMeta):
         raise NotImplementedError()
 
     def _get_struct(self, str_type, str_name):
-        """Return an object representing the named structure or union.
-
-        """
+        """Return an object representing the named structure or union."""
         raise NotImplementedError()
 
     def _get_pointer(self, arg_type):
-        """Build an uninitialised pointer for the given type.
-
-        """
+        """Build an uninitialised pointer for the given type."""
         raise NotImplementedError()
 
     def _get_array(self, typ, size, obj):
-        """Build an array of the specified type and size.
-
-        """
+        """Build an array of the specified type and size."""
         raise NotImplementedError()
 
     def _resolve_struct_alias(self, str_type, str_name):
-        """Resolve struct name--typedef aliases.
-
-        """
+        """Resolve struct name--typedef aliases."""
         if str_name not in self._defs_[str_type]:
-
-            if str_name not in self._defs_['types']:
+            if str_name not in self._defs_["types"]:
                 mess = 'No struct/union named "{}"'
                 raise KeyError(mess.format(str_name))
 
             typ = self._headers_.eval_type([str_name])[0]
-            if typ[:7] != 'struct ' and typ[:6] != 'union ':
+            if typ[:7] != "struct " and typ[:6] != "union ":
                 mess = 'No struct/union named "{}"'
                 raise KeyError(mess.format(str_name))
 
-            return self._defs_['types'][typ][1]
+            return self._defs_["types"][typ][1]
 
         else:
             return str_name
 
 
 class CFunction(object):
-    """Wrapper object for a function from the library.
+    """Wrapper object for a function from the library."""
 
-    """
     def __init__(self, lib, func, sig, name, lock_call):
-
         self.lock_call = lock_call
         self.lib = lib
         self.func = func
@@ -405,8 +406,8 @@ class CFunction(object):
         self.sig = list(sig)
 
         # remove void args from list
-        self.sig[1] = [s for s in sig[1] if s[1] != ('void',)]
-        for conv in ['__stdcall', '__cdecl']:
+        self.sig[1] = [s for s in sig[1] if s[1] != ("void",)]
+        for conv in ["__stdcall", "__cdecl"]:
             if conv in self.sig[0]:
                 self.sig[0].remove(conv)
         self.name = name
@@ -459,8 +460,11 @@ class CFunction(object):
         # Finally, fill in remaining arguments if they are pointers to
         # int/float/void*/struct values (we assume these are to be modified by
         # the function and their initial value is not important)
-        missings = {i: arg for i, arg in enumerate(arg_list)
-                    if arg is None or arg is self.lib.Null}
+        missings = {
+            i: arg
+            for i, arg in enumerate(arg_list)
+            if arg is None or arg is self.lib.Null
+        }
         for i, arg in missings.items():
             try:
                 sig = self.sig[1][i][1]
@@ -482,8 +486,7 @@ class CFunction(object):
                 if sys.exc_info()[0] is not AssertionError:
                     raise
                 mess = "Function call '{}' missing required argument {} {}"
-                raise TypeError(mess.format(self.name, i,
-                                            self.sig[1][i][0]))
+                raise TypeError(mess.format(self.name, i, self.sig[1][i][0]))
 
         try:
             if self.lock_call:
@@ -492,14 +495,14 @@ class CFunction(object):
             else:
                 res = self.func(*arg_list)
         except Exception:
-            logger.error("Function call failed. Signature is: {}".format(
-                self.pretty_signature()))
+            logger.error(
+                "Function call failed. Signature is: {}".format(self.pretty_signature())
+            )
             logger.error("Arguments: {}".format(arg_list))
             logger.error("Argtypes: {}".format(self.func.argtypes))
             raise
 
-        cr = CallResult(self.lib, res, arg_list, self.sig,
-                        guessed=guessed_args)
+        cr = CallResult(self.lib, res, arg_list, self.sig, guessed=guessed_args)
         return cr
 
     def arg_c_type(self, arg):
@@ -516,10 +519,11 @@ class CFunction(object):
         return self.lib._get_type(self.sig[1][arg][1])
 
     def pretty_signature(self):
-        args = (''.join(self.sig[0]), self.name,
-                ', '.join(["{} {}".format(s[1], s[0])
-                          for s in self.sig[1]])
-                )
+        args = (
+            "".join(self.sig[0]),
+            self.name,
+            ", ".join(["{} {}".format(s[1], s[0]) for s in self.sig[1]]),
+        )
         return "{} {}({})".format(*args)
 
 
@@ -563,15 +567,16 @@ class CallResult(object):
         Pointers that were created on the fly.
 
     """
+
     def __init__(self, lib, rval, args, sig, guessed):
         self.lib = lib
-        self.rval = rval        # return value of function call
-        self.args = args        # list of arguments to function call
-        self.sig = sig          # function signature
+        self.rval = rval  # return value of function call
+        self.args = args  # list of arguments to function call
+        self.sig = sig  # function signature
         self.guessed = guessed  # list of arguments that were auto-generated
 
     def __call__(self):
-        if self.sig[0] == ['void']:
+        if self.sig[0] == ["void"]:
             return None
         return self.lib._extract_val_(self.rval)
 
@@ -599,9 +604,7 @@ class CallResult(object):
             raise ValueError("Index must be int or str.")
 
     def find_arg(self, arg):
-        """Find argument based on name.
-
-        """
+        """Find argument based on name."""
         for i, a in enumerate(self.sig[1]):
             if a[0] == arg:
                 return i
@@ -611,7 +614,7 @@ class CallResult(object):
 
     def __iter__(self):
         yield self()
-        yield(self[i] for i in range(len(self.args)))
+        yield (self[i] for i in range(len(self.args)))
 
     def auto(self):
         """Return a list of all the auto-generated values.
