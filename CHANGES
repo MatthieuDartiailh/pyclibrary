@@ -1,9 +1,12 @@
 PyCLibrary Changelog
 ====================
 
-0.2.3 - unreleased
+0.3.0 - unreleased
 ------------------
 
+- officially support Python 3.10+ (up to 3.13) PR #78
+- drop support for Python < 3.9 PR #78
+- move installation to pyproject base installation procedure PR #78
 - allow selection of encoding when loading files (issue #51)
 
 0.2.2 - 22/01/2024
