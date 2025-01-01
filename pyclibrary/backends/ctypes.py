@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------------------
-# Copyright 2015-2022 by PyCLibrary Authors, see AUTHORS for more details.
+# Copyright 2015-2025 by PyCLibrary Authors, see AUTHORS for more details.
 #
 # Distributed under the terms of the MIT/X11 license.
 #
@@ -10,30 +10,60 @@ Proxy to both CHeader and ctypes, allowing automatic type conversion and
 function calling based on C header definitions.
 
 """
+
 import logging
 import os
 import sys
+from ctypes import (
+    CDLL,
+    CFUNCTYPE,
+    POINTER,
+    Structure,
+    Union,
+    c_bool,
+    c_char,
+    c_char_p,
+    c_double,
+    c_float,
+    c_int,
+    c_int8,
+    c_int16,
+    c_int32,
+    c_int64,
+    c_long,
+    c_longdouble,
+    c_longlong,
+    c_short,
+    c_ubyte,
+    c_uint,
+    c_uint8,
+    c_uint16,
+    c_uint32,
+    c_uint64,
+    c_ulong,
+    c_ulonglong,
+    c_ushort,
+    c_void_p,
+    c_wchar,
+    c_wchar_p,
+    cast,
+    cdll,
+    pointer,
+)
 from inspect import cleandoc
-from ctypes import (c_char, c_wchar, c_ubyte, c_short, c_ushort,
-                    c_int, c_uint, c_long, c_ulong, c_longlong, c_ulonglong,
-                    c_float, c_double, c_longdouble, c_int8, c_uint8, c_int16,
-                    c_uint16, c_int32, c_uint32, c_int64, c_uint64, c_bool,
-                    c_char_p, c_wchar_p, c_void_p,
-                    pointer, Union, Structure, cast,
-                    cdll, POINTER, CFUNCTYPE, CDLL)
 
-if sys.platform == 'win32':
-    from ctypes import windll, oledll, WINFUNCTYPE, HRESULT
+if sys.platform == "win32":
+    from ctypes import HRESULT, WINFUNCTYPE, oledll, windll
 
-from ..errors import DefinitionError
 from ..c_library import CLibrary
+from ..errors import DefinitionError
 from ..utils import find_library
 
 logger = logging.getLogger(__name__)
 
 
 def make_mess(mess):
-    return cleandoc(mess).replace('\n', ' ')
+    return cleandoc(mess).replace("\n", " ")
 
 
 class CTypesCLibrary(CLibrary):
@@ -88,6 +118,7 @@ class CTypesCLibrary(CLibrary):
         names.
 
     """
+
     #: Private flag allowing to know if the class has been initiliased.
     _init = False
 
@@ -95,33 +126,32 @@ class CTypesCLibrary(CLibrary):
     Null = object()
 
     #: Id of the backend
-    backend = 'ctypes'
+    backend = "ctypes"
 
     #: Types (filled by init_clibrary)
     _types_ = {}
 
     #: Types for which ctypes provides a special pointer type.
-    _ptr_types_ = {'char': c_char_p,
-                   'wchar': c_wchar_p,
-                   'wchar_t': c_wchar_p,
-                   'void': c_void_p
-                   }
+    _ptr_types_ = {
+        "char": c_char_p,
+        "wchar": c_wchar_p,
+        "wchar_t": c_wchar_p,
+        "void": c_void_p,
+    }
 
     def __repr__(self):
         return "<CTypesCLibrary instance: %s>" % str(self._lib_)
 
     def _link_library(self, lib_path, convention):
-        """Find and link the external librairy if only a path was provided.
-
-        """
-        if convention == 'cdll':
+        """Find and link the external librairy if only a path was provided."""
+        if convention == "cdll":
             return cdll.LoadLibrary(lib_path)
-        elif convention == 'windll':
+        elif convention == "windll":
             return windll.LoadLibrary(lib_path)
-        elif convention == 'oledll':
+        elif convention == "oledll":
             return oledll.LoadLibrary(lib_path)
         else:
-            raise ValueError('Convention cannot be {}'.format(convention))
+            raise ValueError("Convention cannot be {}".format(convention))
 
     def _extract_val_(self, obj):
         """Extract a Python value from a ctype object.
@@ -130,12 +160,12 @@ class CTypesCLibrary(CLibrary):
         it wrong (a pointer being often an array).
 
         """
-        if not hasattr(obj, 'value'):
+        if not hasattr(obj, "value"):
             return obj
 
         return obj.value
 
-    def _get_type(self, typ, pointers=True):
+    def _get_type(self, typ, pointers=True):  # noqa
         """Return a ctype object representing the named type.
 
         If pointers is True, the class returned includes all pointer/array
@@ -150,8 +180,12 @@ class CTypesCLibrary(CLibrary):
             # Create the initial type
             # Some types like ['char', '*'] have a specific ctype (c_char_p)
             # (but only do this if pointers == True)
-            if (pointers and len(typ) > 1 and typ[1] == '*' and
-                    typ[0] in self._ptr_types_):
+            if (
+                pointers
+                and len(typ) > 1
+                and typ[1] == "*"
+                and typ[0] in self._ptr_types_
+            ):
                 cls = self._ptr_types_[typ[0]]
                 mods = typ[2:]
 
@@ -160,24 +194,21 @@ class CTypesCLibrary(CLibrary):
                 cls = self._types_[typ[0]]
 
             # structs, unions, enums:
-            elif typ[0][:7] == 'struct ':
-                cls = self._get_struct('structs',
-                                       self._defs_['types'][typ[0]][1])
-            elif typ[0][:6] == 'union ':
-                cls = self._get_struct('unions',
-                                       self._defs_['types'][typ[0]][1])
-            elif typ[0][:5] == 'enum ':
+            elif typ[0][:7] == "struct ":
+                cls = self._get_struct("structs", self._defs_["types"][typ[0]][1])
+            elif typ[0][:6] == "union ":
+                cls = self._get_struct("unions", self._defs_["types"][typ[0]][1])
+            elif typ[0][:5] == "enum ":
                 cls = c_int
 
             # void
-            elif typ[0] == 'void':
+            elif typ[0] == "void":
                 cls = None
             else:
                 raise KeyError("Can't find base type for {}".format(typ))
 
             if not pointers:
                 return cls
-
 
             n_mods = []
             # Go through the modifier looking for array modifiers.
@@ -199,11 +230,11 @@ class CTypesCLibrary(CLibrary):
             while len(mods) > 0:
                 m = mods.pop(0)
                 if isinstance(m, str):  # pointer or reference
-                    if m[0] == '*' or m[0] == '&':
+                    if m[0] == "*" or m[0] == "&":
                         for i in m:
                             cls = POINTER(cls)
 
-                elif isinstance(m, list):      # array
+                elif isinstance(m, list):  # array
                     # Go in reverse order to get nd array to work properly
                     for i in reversed(m):
                         # -1 indicates an 'incomplete type' like "int
@@ -218,17 +249,17 @@ class CTypesCLibrary(CLibrary):
                 elif isinstance(m, tuple):
                     # Find pointer and calling convention
                     is_ptr = False
-                    conv = '__cdecl'
+                    conv = "__cdecl"
                     if len(mods) == 0:
                         mess = "Function signature with no pointer:"
                         raise DefinitionError(mess, m, mods)
                     for i in [0, 1]:
                         if len(mods) < 1:
                             break
-                        if mods[0] == '*':
+                        if mods[0] == "*":
                             mods.pop(0)
                             is_ptr = True
-                        elif mods[0] in ['__stdcall', '__cdecl']:
+                        elif mods[0] in ["__stdcall", "__cdecl"]:
                             conv = mods.pop(0)
                         else:
                             break
@@ -237,7 +268,7 @@ class CTypesCLibrary(CLibrary):
                             (function without single pointer): {}""")
                         raise DefinitionError(mess.format(typ))
 
-                    if conv == '__stdcall':
+                    if conv == "__stdcall":
                         mkfn = WINFUNCTYPE
 
                     else:
@@ -257,19 +288,20 @@ class CTypesCLibrary(CLibrary):
 
     def _get_struct(self, str_type, str_name):
         if str_name not in self._structs_:
-
             str_name = self._resolve_struct_alias(str_type, str_name)
 
             # Pull struct definition
             defn = self._defs_[str_type][str_name]
 
             # create ctypes class
-            defs = defn['members'][:]
-            if str_type == 'structs':
+            defs = defn["members"][:]
+            if str_type == "structs":
+
                 class s(Structure):
                     def __repr__(self):
                         return "<ctypes struct '%s'>" % str_name
-            elif str_type == 'unions':
+            elif str_type == "unions":
+
                 class s(Union):
                     def __repr__(self):
                         return "<ctypes union '%s'>" % str_name
@@ -277,8 +309,8 @@ class CTypesCLibrary(CLibrary):
             # Must register struct here to allow recursive definitions.
             self._structs_[str_name] = s
 
-            if defn['pack'] is not None:
-                s._pack_ = defn['pack']
+            if defn["pack"] is not None:
+                s._pack_ = defn["pack"]
 
             # Assign names to anonymous members
             members = []
@@ -287,7 +319,7 @@ class CTypesCLibrary(CLibrary):
                 if d[0] is None:
                     c = 0
                     while True:
-                        name = 'anon_member%d' % c
+                        name = "anon_member%d" % c
                         if name not in members:
                             d = (name,) + d[1:]
                             defs[i] = d
@@ -300,23 +332,23 @@ class CTypesCLibrary(CLibrary):
             # Handle bit field specifications, ctypes only supports bit fields
             # for integer but I am not sure how to test for it in a nice
             # fashion.
-            s._fields_ = [(m[0], self._get_type(m[1])) if m[2] is None else
-                          (m[0], self._get_type(m[1]), m[2]) for m in defs]
+            s._fields_ = [
+                (m[0], self._get_type(m[1]))
+                if m[2] is None
+                else (m[0], self._get_type(m[1]), m[2])
+                for m in defs
+            ]
             s._defaults_ = [m[2] for m in defs]
 
         return self._structs_[str_name]
 
     def _get_pointer(self, arg_type, sig):
-        """Build an uninitialised pointer for the given type.
-
-        """
+        """Build an uninitialised pointer for the given type."""
         # Must be 2-part type, second part must be '*' or '**'
-        assert 2 <= len(arg_type) <= 3 and set(arg_type[1:]) == {'*'}
+        assert 2 <= len(arg_type) <= 3 and set(arg_type[1:]) == {"*"}
         arg_type_list = list(arg_type)
         cls = self._get_type(sig, pointers=False)
-        special_pointer_types = {None:    c_void_p,
-                                 c_char:  c_char_p,
-                                 c_wchar: c_wchar_p}
+        special_pointer_types = {None: c_void_p, c_char: c_char_p, c_wchar: c_wchar_p}
         if cls in special_pointer_types:
             cls = special_pointer_types[cls]
             del arg_type_list[1]
@@ -325,23 +357,19 @@ class CTypesCLibrary(CLibrary):
         return pointer(cls())
 
     def _cast_to(self, obj, typ):
-        """Cast an object to a new type (new type must be a pointer).
-
-        """
+        """Cast an object to a new type (new type must be a pointer)."""
         if not isinstance(typ, type):
             typ = self._get_type((typ,))
 
         return cast(obj, typ)
 
     def _get_array(self, typ, size, vals):
-        """Build an array.
-
-        """
+        """Build an array."""
         if not isinstance(typ, type):
             typ = self._get_type((typ,))
 
         if not isinstance(size, tuple):
-            size = (size, )
+            size = (size,)
 
         new = typ
         for s in size[::-1]:
@@ -353,55 +381,53 @@ class CTypesCLibrary(CLibrary):
             return new()
 
     def _init_function(self, function):
-        """Overrided here to declare the arguments types and return type.
-
-        """
+        """Overrided here to declare the arguments types and return type."""
         function.func.argtypes = function.arg_types
         function.func.restype = function.res_type
 
 
-if sys.platform == 'win32':
-    WIN_TYPES = {'__int64': c_longlong, 'HRESULT': HRESULT}
+if sys.platform == "win32":
+    WIN_TYPES = {"__int64": c_longlong, "HRESULT": HRESULT}
 
 
 def init_clibrary(extra_types={}):
     # First load all standard types
     CTypesCLibrary._types_ = {
-        'bool': c_bool,
-        'char': c_char,
-        'wchar': c_wchar,
-        'unsigned char': c_ubyte,
-        'short': c_short,
-        'short int': c_short,
-        'unsigned short': c_ushort,
-        'unsigned short int': c_ushort,
-        'int': c_int,
-        'unsigned': c_uint,
-        'unsigned int': c_uint,
-        'long': c_long,
-        'long int': c_long,
-        'unsigned long': c_ulong,
-        'unsigned long int': c_ulong,
-        'long unsigned int': c_ulong,
-        'long long': c_longlong,
-        'long long int': c_longlong,
-        'unsigned __int64': c_ulonglong,
-        'unsigned long long': c_ulonglong,
-        'unsigned long long int': c_ulonglong,
-        'float': c_float,
-        'double': c_double,
-        'long double': c_longdouble,
-        'uint8_t': c_uint8,
-        'int8_t': c_int8,
-        'uint16_t': c_uint16,
-        'int16_t': c_int16,
-        'uint32_t': c_uint32,
-        'int32_t': c_int32,
-        'uint64_t': c_uint64,
-        'int64_t': c_int64
+        "bool": c_bool,
+        "char": c_char,
+        "wchar": c_wchar,
+        "unsigned char": c_ubyte,
+        "short": c_short,
+        "short int": c_short,
+        "unsigned short": c_ushort,
+        "unsigned short int": c_ushort,
+        "int": c_int,
+        "unsigned": c_uint,
+        "unsigned int": c_uint,
+        "long": c_long,
+        "long int": c_long,
+        "unsigned long": c_ulong,
+        "unsigned long int": c_ulong,
+        "long unsigned int": c_ulong,
+        "long long": c_longlong,
+        "long long int": c_longlong,
+        "unsigned __int64": c_ulonglong,
+        "unsigned long long": c_ulonglong,
+        "unsigned long long int": c_ulonglong,
+        "float": c_float,
+        "double": c_double,
+        "long double": c_longdouble,
+        "uint8_t": c_uint8,
+        "int8_t": c_int8,
+        "uint16_t": c_uint16,
+        "int16_t": c_int16,
+        "uint32_t": c_uint32,
+        "int32_t": c_int32,
+        "uint64_t": c_uint64,
+        "int64_t": c_int64,
     }
 
-    if sys.platform == 'win32':
+    if sys.platform == "win32":
         for k in extra_types:
             if k in WIN_TYPES:
                 extra_types[k] = WIN_TYPES[k]
