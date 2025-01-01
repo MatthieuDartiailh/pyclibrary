@@ -8,3 +8,5 @@ __pycache__
 
 .mypy_cache
 *.pyclibcache
+
+version.py
