@@ -8,6 +8,8 @@ PyCLibrary Changelog
 - drop support for Python < 3.9 PR #78
 - move installation to pyproject base installation procedure PR #78
 - allow selection of encoding when loading files (issue #51)
+- fix parsing of enum types as function arguments PR #79
+- support size_t/ssize_t/time_t types PR #80
 
 0.2.2 - 22/01/2024
 ------------------
