@@ -1481,7 +1481,10 @@ class CParser(object):
                         break
                     n += 1
             else:
-                name = t.name[0]
+                if isinstance(t.name, str):
+                    name = t.name
+                else:
+                    name = t.name[0]
 
             logger.debug("  name: {}".format(name))
 
