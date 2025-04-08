@@ -719,6 +719,7 @@ class TestParsing(object):
         enums = self.parser.defs["enums"]
         types = self.parser.defs["types"]
         variables = self.parser.defs["variables"]
+        functions = self.parser.defs["functions"]
         print(self.parser.defs["values"])
         assert "enum_name" in enums and "enum enum_name" in types
         assert enums["enum_name"] == {"enum1": 129, "enum2": 6, "enum3": 7, "enum4": 8}
@@ -736,6 +737,11 @@ class TestParsing(object):
         assert "anon_enum0" in enums
         assert "anon_enum1" in enums
         assert "no_name_enum_typeddef" in types
+
+        assert "function_taking_enum" in functions
+        assert functions["function_taking_enum"] == Type(
+            Type("void"), (("e", Type("enum enum_name"), None),)
+        )
 
     def test_struct(self):
         path = os.path.join(self.h_dir, "structs.h")
