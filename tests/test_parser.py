@@ -563,6 +563,16 @@ class TestParsing(object):
             Type("unsigned long " "long int"),
         )
 
+        # stddef integers
+        assert "size" in variables and variables["size"] == (
+            1,
+            Type("size_t"),
+        )
+        assert "ssize" in variables and variables["ssize"] == (
+            1,
+            Type("ssize_t"),
+        )
+
         # C99 integers
         for i in (8, 16, 32, 64):
             assert "i%d" % i in variables and variables["i%d" % i] == (
@@ -637,6 +647,13 @@ class TestParsing(object):
                 type_quals=(("const",), ("const",), (), (), ()),
             ),
         )
+
+        # time_t
+        if sys.version_info >= (3, 12):
+            assert "time" in variables and variables["time"] == (
+                1,
+                Type("time_t"),
+            )
 
         # test type qualifiers
         assert variables.get("typeQualedIntPtrPtr") == (

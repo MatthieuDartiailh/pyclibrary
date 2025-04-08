@@ -34,6 +34,8 @@ from ctypes import (
     c_longdouble,
     c_longlong,
     c_short,
+    c_size_t,
+    c_ssize_t,
     c_ubyte,
     c_uint,
     c_uint8,
@@ -54,6 +56,9 @@ from inspect import cleandoc
 
 if sys.platform == "win32":
     from ctypes import HRESULT, WINFUNCTYPE, oledll, windll
+
+if sys.version_info >= (3, 12):
+    from ctypes import c_time_t
 
 from ..c_library import CLibrary
 from ..errors import DefinitionError
@@ -425,12 +430,17 @@ def init_clibrary(extra_types={}):
         "int32_t": c_int32,
         "uint64_t": c_uint64,
         "int64_t": c_int64,
+        "size_t": c_size_t,
+        "ssize_t": c_ssize_t,
     }
 
     if sys.platform == "win32":
         for k in extra_types:
             if k in WIN_TYPES:
                 extra_types[k] = WIN_TYPES[k]
+
+    if sys.version_info >= (3, 12):
+        extra_types['time_t'] = c_time_t
 
     # Now complete the list with some more exotic types
     CTypesCLibrary._types_.update(extra_types)

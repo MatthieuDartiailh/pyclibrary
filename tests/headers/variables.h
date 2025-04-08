@@ -22,6 +22,10 @@ long long int long_long_int = 1;
 unsigned long long long_long_un = 1;
 unsigned long long int long_long_int_un = 1;
 
+// stddef integers
+size_t size = 1;
+ssize_t ssize = 1;
+
 // C99 integers
 int8_t i8 = 1;
 int16_t i16 = 1;
@@ -59,6 +63,9 @@ int x2 = (typeCast)0x544 <<16;
 // Test array
 float array[2] = {0x1, 3.1415e6};
 static const int * const (**intJunk[4]);
+
+// time_t
+time_t time = 1;
 
 const int * volatile * typeQualedIntPtrPtr, volatile * typeQualedIntPtr;
 
