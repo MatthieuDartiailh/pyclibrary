@@ -1829,9 +1829,15 @@ c99_int_types = [
     "int64_t",
     "uint64_t",
 ]
-num_types = ["int", "float", "double", *c99_int_types]
-nonnum_types = ["char", "bool", "void"]
+stddef_int_types = ["size_t", "ssize_t"]
+num_types = ["int", "float", "double", *c99_int_types, *stddef_int_types]
+nonnum_types = ["char", "wchar", "wchar_t", "bool", "void"]
 
+if sys.version_info >= (3, 12):
+    num_types.append("time_t")
+
+if sys.platform == "win32":
+    num_types.append("__int64")
 
 # Define some common language elements when initialising.
 def _init_cparser(extra_types=None, extra_modifiers=None):
