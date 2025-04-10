@@ -392,7 +392,11 @@ class CTypesCLibrary(CLibrary):
 
 
 if sys.platform == "win32":
-    WIN_TYPES = {"__int64": c_longlong, "HRESULT": HRESULT}
+    WIN_TYPES = {
+        "__int64": c_longlong,
+        "unsigned __int64": c_ulonglong,
+        "HRESULT": HRESULT,
+    }
 
 
 def init_clibrary(extra_types={}):
@@ -401,6 +405,7 @@ def init_clibrary(extra_types={}):
         "bool": c_bool,
         "char": c_char,
         "wchar": c_wchar,
+        "wchar_t": c_wchar,
         "unsigned char": c_ubyte,
         "short": c_short,
         "short int": c_short,
@@ -416,7 +421,6 @@ def init_clibrary(extra_types={}):
         "long unsigned int": c_ulong,
         "long long": c_longlong,
         "long long int": c_longlong,
-        "unsigned __int64": c_ulonglong,
         "unsigned long long": c_ulonglong,
         "unsigned long long int": c_ulonglong,
         "float": c_float,
@@ -440,7 +444,7 @@ def init_clibrary(extra_types={}):
                 extra_types[k] = WIN_TYPES[k]
 
     if sys.version_info >= (3, 12):
-        extra_types['time_t'] = c_time_t
+        extra_types["time_t"] = c_time_t
 
     # Now complete the list with some more exotic types
     CTypesCLibrary._types_.update(extra_types)
