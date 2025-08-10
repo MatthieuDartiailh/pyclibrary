@@ -41,7 +41,7 @@ jobs:
           pip install -e .
       - name: Install dependencies
         run: |
-          pip install -U -r lint_requirements.txt
+          pip install --group lint
       - name: Formatting
         if: always()
         run: |
