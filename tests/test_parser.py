@@ -602,7 +602,7 @@ class TestParsing(object):
         )
         assert "long_long_int_un" in variables and variables["long_long_int_un"] == (
             1,
-            Type("unsigned long " "long int"),
+            Type("unsigned long long int"),
         )
 
         # stddef integers

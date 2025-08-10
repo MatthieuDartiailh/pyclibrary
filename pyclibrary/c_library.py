@@ -34,8 +34,8 @@ class CLibraryMeta(type):
 
     """
 
-    backends = {}
-    libs = WeakValueDictionary()
+    backends: dict[str, type["CLibrary"]] = {}
+    libs: WeakValueDictionary[str, "CLibrary"] = WeakValueDictionary()
 
     def __new__(meta, name, bases, dct):
         if name == "CLibrary":
@@ -58,9 +58,9 @@ class CLibraryMeta(type):
                 lib_path = find_library(lib).path
             else:
                 lib_path = os.path.realpath(lib)
-                assert os.path.isfile(
-                    lib_path
-                ), "Provided path does not point to a file"
+                assert os.path.isfile(lib_path), (
+                    "Provided path does not point to a file"
+                )
             backend_cls = cls.backends[kwargs.get("backend", "ctypes")]
 
             lib_arch = LibraryPath(lib_path).arch

@@ -204,9 +204,11 @@ class Type(tuple):
             pt.type_spec,
             *(pt.declarators + self.declarators),
             type_quals=(
-                pt.type_quals[:-1]
-                + (pt.type_quals[-1] + self.type_quals[0],)
-                + self.type_quals[1:]
+                (
+                    *pt.type_quals[:-1],
+                    pt.type_quals[-1] + self.type_quals[0],
+                    *self.type_quals[1:],
+                )
             ),
         )
 
@@ -1426,7 +1428,7 @@ class CParser(object):
             if n is not None:
                 name = n
             toks.extend(t)
-            quals = quals[:-1] + [quals[-1] + q[0]] + list(q[1:])
+            quals = [*quals[:-1], quals[-1] + q[0], *list(q[1:])]
 
         if "name" in decl:
             name = decl["name"]
@@ -1466,7 +1468,7 @@ class CParser(object):
         pre_typequal = tuple(typ.get("pre_qual", []))
         return (
             name,
-            Type(typ["name"], *decl, type_quals=(pre_typequal + quals[0],) + quals[1:]),
+            Type(typ["name"], *decl, type_quals=(pre_typequal + quals[0], *quals[1:])),
         )
 
     def process_enum(self, s, line, t):
@@ -1838,6 +1840,7 @@ if sys.version_info >= (3, 12):
 
 if sys.platform == "win32":
     num_types.append("__int64")
+
 
 # Define some common language elements when initialising.
 def _init_cparser(extra_types=None, extra_modifiers=None):
