@@ -1,7 +1,7 @@
 PyCLibrary Changelog
 ====================
 
-0.3.0 - unreleased
+0.3.0 - 03/09/2025
 ------------------
 
 - officially support Python 3.10+ (up to 3.14) PR #78 #83
