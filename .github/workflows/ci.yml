@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.12']
+        python-version: ['3.13']
     steps:
       - uses: actions/checkout@v4
       - name: Get history and tags for SCM versioning to work
@@ -33,7 +33,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
           cache-dependency-path: 'lint_requirements.txt'
-      - name: Install dependencies
+      - name: Upgrade pip
         run: |
           python -m pip install --upgrade pip
       - name: Install project
@@ -41,7 +41,7 @@ jobs:
           pip install -e .
       - name: Install dependencies
         run: |
-          pip install -U -r lint_requirements.txt
+          pip install --group lint
       - name: Formatting
         if: always()
         run: |
@@ -50,17 +50,17 @@ jobs:
         if: always()
         run: |
           ruff check pyclibrary tests
-      # - name: Typing
-      #   if: always()
-      #   run: |
-      #     mypy pyclibrary
+      - name: Typing
+        if: always()
+        run: |
+          mypy pyclibrary
   tests:
     name: Unit tests
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ['3.10', '3.11', '3.12', '3.13']
+        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14-dev']
     steps:
       - uses: actions/checkout@v4
       - name: Get history and tags for SCM versioning to work

@@ -23,6 +23,7 @@
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: Implementation :: CPython",
   ]
   dependencies = ["pyparsing>=2.3.1,<4"]
@@ -33,6 +34,20 @@
     documentation = "https://pyclibrary.readthedocs.io/en/latest/"
     repository    = "https://github.com/MatthieuDartiailh/pyclibrary"
     changelog     = "https://github.com/MatthieuDartiailh/pyclibrary/blob/main/CHANGES"
+
+
+[dependency-groups]
+  test = [
+    "pytest",
+    "pytest-cov",
+  ]
+  docs = ["sphinx>=4", "sphinx-rtd-theme", "pyparsing"]
+  lint = ["ruff", "mypy"]
+  dev = [
+    { include-group = "test" },
+    { include-group = "docs" },
+    { include-group = "lint" },
+  ]
 
 [build-system]
   requires      = ["setuptools>=61.2", "wheel", "setuptools_scm[toml]>=3.4.3"]
@@ -79,7 +94,6 @@ __version__ = "{version}"
 
     [tool.ruff.lint.isort]
       combine-as-imports = true
-      known-first-party  = ["atom"]
 
     [tool.ruff.lint.mccabe]
       max-complexity = 20
@@ -94,7 +108,7 @@ __version__ = "{version}"
 [tool.coverage]
   [tool.coverage.run]
     branch = true
-    source = ["atom"]
+    source = ["pyclibrary"]
 
   [tool.coverage.report]
     # Regexes for lines to exclude from consideration

@@ -134,7 +134,7 @@ class CTypesCLibrary(CLibrary):
     backend = "ctypes"
 
     #: Types (filled by init_clibrary)
-    _types_ = {}
+    _types_: dict[str, type] = {}
 
     #: Types for which ctypes provides a special pointer type.
     _ptr_types_ = {
@@ -326,7 +326,7 @@ class CTypesCLibrary(CLibrary):
                     while True:
                         name = "anon_member%d" % c
                         if name not in members:
-                            d = (name,) + d[1:]
+                            d = (name, *d[1:])
                             defs[i] = d
                             anon.append(name)
                             break
