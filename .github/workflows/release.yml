@@ -14,15 +14,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Get history and tags for SCM versioning to work
+        run: |
+          git fetch --prune --unshallow
+          git fetch --depth=1 origin +refs/tags/*:refs/tags/*
       - name: Setup Python
         uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
       - name: Build sdist
         run: |
           pip install --upgrade pip
-          pip install wheel
-          python setup.py sdist bdist_wheel
+          pip install wheel build
+          python -m build .
       - name: Test sdist and wheel
         run: |
           pip install pytest
@@ -33,7 +35,7 @@ jobs:
           pip install pyclibrary/dist/*.whl
           python -m pytest pyclibrary/tests
       - name: Store artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: artifact
           path: dist/*
