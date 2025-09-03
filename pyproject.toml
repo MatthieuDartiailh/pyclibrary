@@ -40,7 +40,7 @@
     "pytest",
     "pytest-cov",
   ]
-  docs = ["sphinx>=4", "pyparsing"]
+  docs = ["sphinx>=4", "sphinx-rtd-theme", "pyparsing"]
   lint = ["ruff", "mypy"]
   dev = [
     { include-group = "test" },
