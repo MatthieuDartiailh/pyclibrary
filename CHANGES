@@ -4,7 +4,7 @@ PyCLibrary Changelog
 0.3.0 - unreleased
 ------------------
 
-- officially support Python 3.10+ (up to 3.13) PR #78
+- officially support Python 3.10+ (up to 3.14) PR #78 #83
 - drop support for Python < 3.9 PR #78
 - move installation to pyproject base installation procedure PR #78
 - allow selection of encoding when loading files (issue #51)
