@@ -10,10 +10,11 @@ struct sizeof_child {
 /* test sizeof operator */
 struct sizeof_st {
   char x[sizeof(int*)];
-  char y[sizeof(sizeof_st*)];
-  char z[sizeof(sizeof_child)];
+  char y[sizeof(struct sizeof_st*)];
+  char z[sizeof(struct sizeof_child)];
+  char u[sizeof 1 + sizeof 2];
+  char v[sizeof (1) + sizeof (2) + sizeof(sizeof(int*))];
   char w[sizeof(int) + sizeof(float)];
-  char u[sizeof (1) + sizeof (2) + sizeof(sizeof(int*))];
 }
 
 // Test creating a structure using only base types.
