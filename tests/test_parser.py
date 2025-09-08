@@ -975,4 +975,5 @@ class TestParsing(object):
             ("u", Type("char", [None]), None),
             ("v", Type("char", [None]), None),
             ("w", Type("char", [None]), None),
+            ("t", Type("char", [None]), None),
         )

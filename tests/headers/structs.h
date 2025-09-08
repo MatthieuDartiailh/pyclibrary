@@ -15,6 +15,7 @@ struct sizeof_st {
   char u[sizeof 1 + sizeof 2];
   char v[sizeof (1) + sizeof (2) + sizeof(sizeof(int*))];
   char w[sizeof(int) + sizeof(float)];
+  char t[8 - sizeof(int*)]
 };
 
 // Test creating a structure using only base types.
