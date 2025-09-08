@@ -961,3 +961,17 @@ class TestParsing(object):
         assert functions.get("typeQualedFunc") == Type(
             Type("int"), ((None, ptyp, None),)
         )
+
+    def test_sizeof(self):
+        path = os.path.join(self.h_dir, "structs.h")
+        self.parser.load_file(path)
+        self.parser.process_all()
+
+        structs = self.parser.defs["structs"]
+        assert structs["sizeof_st"] == Struct(
+            ("x", Type("char", [None]), None),
+            ("y", Type("char", [None]), None),
+            ("z", Type("char", [None]), None),
+            ("w", Type("char", [None]), None),
+            ("u", Type("char", [None]), None),
+        )
