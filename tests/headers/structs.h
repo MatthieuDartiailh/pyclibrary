@@ -3,6 +3,19 @@
 typedef int type_int;
 typedef type_int type_type_int;
 
+struct sizeof_child {
+  int x[sizeof(int[2])];
+}
+
+/* test sizeof operator */
+struct sizeof_st {
+  char x[sizeof(int*)];
+  char y[sizeof(sizeof_st*)];
+  char z[sizeof(sizeof_child)];
+  char w[sizeof(int) + sizeof(float)];
+  char u[sizeof (1) + sizeof (2) + sizeof(sizeof(int*))];
+}
+
 // Test creating a structure using only base types.
 // Test for default values, array handling and bit length specifications.
 struct struct_name
