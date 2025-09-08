@@ -5,7 +5,7 @@ typedef type_int type_type_int;
 
 struct sizeof_child {
   int x[sizeof(int[2])];
-}
+};
 
 /* test sizeof operator */
 struct sizeof_st {
@@ -15,7 +15,7 @@ struct sizeof_st {
   char u[sizeof 1 + sizeof 2];
   char v[sizeof (1) + sizeof (2) + sizeof(sizeof(int*))];
   char w[sizeof(int) + sizeof(float)];
-}
+};
 
 // Test creating a structure using only base types.
 // Test for default values, array handling and bit length specifications.
