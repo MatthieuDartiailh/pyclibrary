@@ -8,15 +8,16 @@ struct sizeof_child {
 };
 
 /* test sizeof operator */
-struct sizeof_st {
+typedef struct sizeof_st {
   char x[sizeof(int*)];
   char y[sizeof(struct sizeof_st*)];
   char z[sizeof(struct sizeof_child)];
   char u[sizeof 1 + sizeof 2];
   char v[sizeof (1) + sizeof (2) + sizeof(sizeof(int*))];
   char w[sizeof(int) + sizeof(float)];
-  char t[8 - sizeof(sizeof_child**)];
-};
+  char t[47 - sizeof(sizeof_child*)];
+  int bar;
+} sizeof_st_t;
 
 // Test creating a structure using only base types.
 // Test for default values, array handling and bit length specifications.

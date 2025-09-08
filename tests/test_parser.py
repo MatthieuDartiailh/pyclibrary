@@ -976,4 +976,5 @@ class TestParsing(object):
             ("v", Type("char", [None]), None),
             ("w", Type("char", [None]), None),
             ("t", Type("char", [None]), None),
+            ("bar", Type("int"), None),
         )
