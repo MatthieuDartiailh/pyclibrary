@@ -15,7 +15,7 @@ typedef struct sizeof_st {
   char u[sizeof 1 + sizeof 2];
   char v[sizeof (1) + sizeof (2) + sizeof(sizeof(int*))];
   char w[sizeof(int) + sizeof(float)];
-  char t[47 - sizeof(sizeof_child*)];
+  char t[47 - sizeof(struct sizeof_child*)];
   int bar;
 } sizeof_st_t;
 
