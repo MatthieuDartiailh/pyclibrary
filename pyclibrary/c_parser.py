@@ -10,6 +10,7 @@ Used for extracting data such as macro definitions, variables, typedefs, and
 function signatures from C header files.
 
 """
+
 import sys
 import re
 import os
@@ -22,19 +23,44 @@ from .errors import DefinitionError
 from .utils import find_header
 
 # Import parsing elements
-from pyparsing import \
-    (ParserElement, ParseResults, Forward, Optional, Word, WordStart,
-     WordEnd, Keyword, Regex, Literal, SkipTo, ZeroOrMore, OneOrMore,
-     Group, LineEnd, quotedString, oneOf, nestedExpr,
-     delimitedList, restOfLine, cStyleComment, alphas, alphanums, hexnums,
-     lineno, Suppress, FollowedBy, printables)
+from pyparsing import (
+    ParserElement,
+    ParseResults,
+    Forward,
+    Optional,
+    Word,
+    WordStart,
+    WordEnd,
+    Keyword,
+    Regex,
+    Literal,
+    SkipTo,
+    ZeroOrMore,
+    OneOrMore,
+    Group,
+    LineEnd,
+    quotedString,
+    oneOf,
+    nestedExpr,
+    delimitedList,
+    restOfLine,
+    cStyleComment,
+    alphas,
+    alphanums,
+    hexnums,
+    lineno,
+    Suppress,
+    FollowedBy,
+    printables,
+)
 
 ParserElement.enablePackrat()
 
 logger = logging.getLogger(__name__)
 
 
-__all__ = ['win_defs', 'CParser']
+__all__ = ["win_defs", "CParser"]
+
 
 class Type(tuple):
     """
@@ -89,17 +115,17 @@ class Type(tuple):
     >>>      '*', [2])
 
     """
+
     # Cannot slot a subclass of tuple.
     def __new__(cls, type_spec, *declarators, **argv):
         return super(Type, cls).__new__(cls, (type_spec,) + declarators)
 
     def __init__(self, type_spec, *declarators, **argv):
         super(Type, self).__init__()
-        self.type_quals = (argv.pop('type_quals', None) or
-                           ((),) * (1 + len(declarators)))
+        self.type_quals = argv.pop("type_quals", None) or ((),) * (1 + len(declarators))
         if len(self.type_quals) != 1 + len(declarators):
             raise ValueError("wrong number of type qualifiers")
-        assert len(argv) == 0, 'Invalid Parameter'
+        assert len(argv) == 0, "Invalid Parameter"
 
     def __eq__(self, other):
         if isinstance(other, Type):
@@ -112,16 +138,12 @@ class Type(tuple):
 
     @property
     def declarators(self):
-        """Return a tuple of all declarators.
-
-        """
+        """Return a tuple of all declarators."""
         return tuple(self[1:])
 
     @property
     def type_spec(self) -> str:
-        """Return the base type of this type.
-
-        """
+        """Return the base type of this type."""
         return self[0]
 
     def is_fund_type(self):
@@ -130,12 +152,16 @@ class Type(tuple):
 
         """
 
-        if (self[0].startswith('struct ') or self[0].startswith('union ') or
-                self[0].startswith('enum ')):
+        if (
+            self[0].startswith("struct ")
+            or self[0].startswith("union ")
+            or self[0].startswith("enum ")
+        ):
             return True
 
-        names = (num_types + nonnum_types + size_modifiers + sign_modifiers +
-                 extra_type_list)
+        names = (
+            num_types + nonnum_types + size_modifiers + sign_modifiers + extra_type_list
+        )
         for w in self[0].split():
             if w not in names:
                 return False
@@ -160,27 +186,32 @@ class Type(tuple):
 
         if self.is_fund_type():
             # Remove 'signed' before returning evaluated type
-            return Type(re.sub(r'\bsigned\b', '', self.type_spec).strip(),
-                        *self.declarators,
-                        type_quals=self.type_quals)
+            return Type(
+                re.sub(r"\bsigned\b", "", self.type_spec).strip(),
+                *self.declarators,
+                type_quals=self.type_quals,
+            )
 
         parent = self.type_spec
         if parent in used:
-            m = 'Recursive loop while evaluating types. (typedefs are {})'
-            raise DefinitionError(m.format(' -> '.join(used+[parent])))
+            m = "Recursive loop while evaluating types. (typedefs are {})"
+            raise DefinitionError(m.format(" -> ".join(used + [parent])))
 
         used.append(parent)
         if parent not in type_map:
             m = 'Unknown type "{}" (typedefs are {})'
-            raise DefinitionError(m.format(parent, ' -> '.join(used)))
+            raise DefinitionError(m.format(parent, " -> ".join(used)))
 
         pt = type_map[parent]
-        evaled_type = Type(pt.type_spec, *(pt.declarators + self.declarators),
-                           type_quals=(pt.type_quals[:-1] +
-                                       (pt.type_quals[-1] +
-                                        self.type_quals[0],) +
-                                       self.type_quals[1:])
-                           )
+        evaled_type = Type(
+            pt.type_spec,
+            *(pt.declarators + self.declarators),
+            type_quals=(
+                pt.type_quals[:-1]
+                + (pt.type_quals[-1] + self.type_quals[0],)
+                + self.type_quals[1:]
+            ),
+        )
 
         return evaled_type.eval(type_map, used)
 
@@ -197,9 +228,11 @@ class Type(tuple):
             Type(Type('int', '*'), ())
         """
         if type(self[-1]) == tuple:
-            return Type(Type(*self[:-1], type_quals=self.type_quals[:-1]),
-                        self[-1],
-                        type_quals=((), self.type_quals[-1]))
+            return Type(
+                Type(*self[:-1], type_quals=self.type_quals[:-1]),
+                self[-1],
+                type_quals=((), self.type_quals[-1]),
+            )
         else:
             return self
 
@@ -214,10 +247,12 @@ class Type(tuple):
             return self
 
     def __repr__(self):
-        type_qual_str = ('' if not any(self.type_quals) else
-                         ', type_quals='+repr(self.type_quals))
-        return (type(self).__name__ + '(' +
-                ', '.join(map(repr, self)) + type_qual_str + ')')
+        type_qual_str = (
+            "" if not any(self.type_quals) else ", type_quals=" + repr(self.type_quals)
+        )
+        return (
+            type(self).__name__ + "(" + ", ".join(map(repr, self)) + type_qual_str + ")"
+        )
 
     def __getnewargs__(self):
         return (self.type_spec,) + self.declarators
@@ -225,31 +260,36 @@ class Type(tuple):
 
 StructMember = Tuple[str, Type, None]
 
-class Compound(dict):
-    """Base class for representing object using a dict-like interface.
 
-    """
+class Compound(dict):
+    """Base class for representing object using a dict-like interface."""
+
     __slots__ = ()
 
     def __init__(self, *members, **argv):
         members = list(members)
-        pack = argv.pop('pack', None)
+        pack = argv.pop("pack", None)
         assert len(argv) == 0
 
         super(Compound, self).__init__(dict(members=members, pack=pack))
 
     def __repr__(self):
-        packParam = ', pack='+repr(self.pack) if self.pack is not None else ''
-        return (type(self).__name__ + '(' +
-                ', '.join(map(repr, self.members)) + packParam + ')')
+        packParam = ", pack=" + repr(self.pack) if self.pack is not None else ""
+        return (
+            type(self).__name__
+            + "("
+            + ", ".join(map(repr, self.members))
+            + packParam
+            + ")"
+        )
 
     @property
     def members(self) -> list[StructMember]:
-        return self['members']
+        return self["members"]
 
     @property
     def pack(self):
-        return self['pack']
+        return self["pack"]
 
 
 class Struct(Compound):
@@ -260,6 +300,7 @@ class Struct(Compound):
     from dict and can be seen as the dicts from 0.1.0. In future this might
     change to a dict-like object!!!
     """
+
     __slots__ = ()
 
 
@@ -271,6 +312,7 @@ class Union(Compound):
     from dict and can be seen as the dicts from 0.1.0. In future this might
     change to a dict-like object!!!
     """
+
     __slots__ = ()
 
 
@@ -282,16 +324,19 @@ class Enum(dict):
     from dict and can be seen as the dicts from 0.1.0. In future this might
     change to a dict-like object!!!
     """
+
     __slots__ = ()
 
     def __init__(self, **args):
         super(Enum, self).__init__(args)
 
     def __repr__(self):
-        return (type(self).__name__ + '(' +
-                ', '.join(nm + '=' + repr(val)
-                          for nm, val in sorted(self.items())) +
-                ')')
+        return (
+            type(self).__name__
+            + "("
+            + ", ".join(nm + "=" + repr(val) for nm, val in sorted(self.items()))
+            + ")"
+        )
 
 
 class ParserDefs(TypedDict):
@@ -301,7 +346,8 @@ class ParserDefs(TypedDict):
     structs: dict[str, Struct]
     types: dict[str, Type]
 
-def win_defs(version='1500'):
+
+def win_defs(version="1500"):
     """Loads selection of windows headers included with PyCLibrary.
 
     These definitions can either be accessed directly or included before
@@ -324,21 +370,33 @@ def win_defs(version='1500'):
         CParser containing all the infos from te windows headers.
 
     """
-    header_files = ['WinNt.h', 'WinDef.h', 'WinBase.h', 'BaseTsd.h',
-                    'WTypes.h', 'WinUser.h']
+    header_files = [
+        "WinNt.h",
+        "WinDef.h",
+        "WinBase.h",
+        "BaseTsd.h",
+        "WTypes.h",
+        "WinUser.h",
+    ]
     if not CParser._init:
-        logger.info('Automatic initialisation : OS is assumed to be win32')
+        logger.info("Automatic initialisation : OS is assumed to be win32")
         from .init import auto_init
+
         auto_init()
     d = os.path.dirname(__file__)
     p = CParser(
         header_files,
-        macros={'_WIN32': '', '_MSC_VER': version, 'CONST': 'const',
-                'NO_STRICT': None, 'MS_WIN32': ''},
-        process_all=False
+        macros={
+            "_WIN32": "",
+            "_MSC_VER": version,
+            "CONST": "const",
+            "NO_STRICT": None,
+            "MS_WIN32": "",
+        },
+        process_all=False,
     )
 
-    p.process_all(cache=os.path.join(d, 'headers', 'WinDefs.cache'))
+    p.process_all(cache=os.path.join(d, "headers", "WinDefs.cache"))
 
     return p
 
@@ -408,6 +466,7 @@ class CParser(object):
             print s
 
     """
+
     #: Increment every time cache structure or parsing changes to invalidate
     #: old cache files.
     # 2 : add C99 integers
@@ -416,12 +475,20 @@ class CParser(object):
     #: Private flag allowing to know if the parser has been initiliased.
     _init = False
 
-    def __init__(self, files=None, copy_from=None, replace=None,
-                 process_all=True, cache=None, check_cache_validity=True, **kwargs):
-
+    def __init__(
+        self,
+        files=None,
+        copy_from=None,
+        replace=None,
+        process_all=True,
+        cache=None,
+        check_cache_validity=True,
+        **kwargs,
+    ):
         if not self._init:
-            logger.info('Automatic initialisation based on OS detection')
+            logger.info("Automatic initialisation based on OS detection")
             from .init import auto_init
+
             auto_init()
 
         # Holds all definitions
@@ -432,11 +499,21 @@ class CParser(object):
         self.pack_list = {}
 
         self.init_opts = kwargs.copy()
-        self.init_opts['files'] = []
-        self.init_opts['replace'] = {}
+        self.init_opts["files"] = []
+        self.init_opts["replace"] = {}
 
-        self.data_list = ['types', 'variables', 'fnmacros', 'macros',
-                          'structs', 'unions', 'enums', 'functions', 'values', 'comments']
+        self.data_list = [
+            "types",
+            "variables",
+            "fnmacros",
+            "macros",
+            "structs",
+            "unions",
+            "enums",
+            "functions",
+            "values",
+            "comments",
+        ]
 
         self.file_order = []
         self.files = {}
@@ -471,9 +548,14 @@ class CParser(object):
         if process_all:
             self.process_all(cache=cache, check_cache_validity=check_cache_validity)
 
-    def process_all(self, cache=None, return_unparsed=False,
-                    print_after_preprocess=False, check_cache_validity=True):
-        """ Remove comments, preprocess, and parse declarations from all files.
+    def process_all(
+        self,
+        cache=None,
+        return_unparsed=False,
+        print_after_preprocess=False,
+        check_cache_validity=True,
+    ):
+        """Remove comments, preprocess, and parse declarations from all files.
 
         This operates in memory, and thus does not alter the original files.
 
@@ -495,16 +577,19 @@ class CParser(object):
             List of the results from parse_defs.
 
         """
-        if cache is not None and self.load_cache(cache, check_validity=check_cache_validity):
+        if cache is not None and self.load_cache(
+            cache, check_validity=check_cache_validity
+        ):
             logger.debug("Loaded cached definitions; will skip parsing.")
             # Cached values loaded successfully, nothing left to do here
             return
 
         results = []
-        logger.debug(cleandoc('''Parsing C header files (no valid cache found).
-                              This could take several minutes...'''))
+        logger.debug(
+            cleandoc("""Parsing C header files (no valid cache found).
+                              This could take several minutes...""")
+        )
         for f in self.file_order:
-
             if self.files[f] is None:
                 # This means the file could not be loaded and there was no
                 # cache.
@@ -582,29 +667,30 @@ class CParser(object):
         try:
             # Read cache file
             import pickle
-            cache = pickle.load(open(cache_file, 'rb'))
+
+            cache = pickle.load(open(cache_file, "rb"))
 
             # Make sure __init__ options match
             if check_validity:
-                if cache['opts'] != self.init_opts:
+                if cache["opts"] != self.init_opts:
                     db = logger.debug
                     db("Cache file is not valid")
                     db("It was created using different initialization options")
-                    db('{}'.format(cache['opts']))
-                    db('{}'.format(self.init_opts))
+                    db("{}".format(cache["opts"]))
+                    db("{}".format(self.init_opts))
                     return False
 
                 else:
                     logger.debug("Cache init opts are OK:")
-                    logger.debug('{}'.format(cache['opts']))
+                    logger.debug("{}".format(cache["opts"]))
 
-                if cache['version'] < self.cache_version:
+                if cache["version"] < self.cache_version:
                     mess = "Cache file is not valid--cache format has changed."
                     logger.debug(mess)
                     return False
 
             # Import all parse results
-            self.import_dict(cache['file_defs'])
+            self.import_dict(cache["file_defs"])
             return True
 
         except Exception:
@@ -625,21 +711,18 @@ class CParser(object):
                     self.add_def(k, n, data[f][k][n])
 
     def write_cache(self, cache_file):
-        """Store all parsed declarations to cache. Used internally.
-
-        """
+        """Store all parsed declarations to cache. Used internally."""
         cache = {}
-        cache['opts'] = self.init_opts
-        cache['file_defs'] = self.file_defs
-        cache['version'] = self.cache_version
+        cache["opts"] = self.init_opts
+        cache["file_defs"] = self.file_defs
+        cache["version"] = self.cache_version
         import pickle
-        with open(cache_file, 'wb') as f:
+
+        with open(cache_file, "wb") as f:
             pickle.dump(cache, f)
 
     def find_headers(self, headers):
-        """Try to find the specified headers.
-
-        """
+        """Try to find the specified headers."""
         hs = []
         for header in headers:
             if os.path.isfile(header):
@@ -647,7 +730,7 @@ class CParser(object):
             else:
                 h = find_header(header)
                 if not h:
-                    raise OSError('Cannot find header: {}'.format(header))
+                    raise OSError("Cannot find header: {}".format(header))
                 hs.append(h)
 
         return hs
@@ -684,14 +767,15 @@ class CParser(object):
 
         self.file_order.append(path)
         bn = os.path.basename(path)
-        self.init_opts['replace'][bn] = replace
+        self.init_opts["replace"][bn] = replace
         # Only interested in the file names, the directory may change between
         # systems.
-        self.init_opts['files'].append(bn)
+        self.init_opts["files"].append(bn)
         return True
 
     def _format_parsed_file(self, filename=None):
         from pprint import pformat
+
         s = ""
         for k in self.data_list:
             s += "============== {} ==================\n".format(k)
@@ -779,8 +863,9 @@ class CParser(object):
         text = self.files[path]
         cplusplus_line_comment = Literal("//") + restOfLine
         # match quoted strings first to prevent matching comments inside quotes
-        comment_remover = (quotedString | cStyleComment.suppress() |
-                           cplusplus_line_comment.suppress())
+        comment_remover = (
+            quotedString | cStyleComment.suppress() | cplusplus_line_comment.suppress()
+        )
         self.files[path] = comment_remover.transformString(text)
 
     # --- Pre processing
@@ -810,26 +895,28 @@ class CParser(object):
         text = self.files[path]
 
         # First join together lines split by \\n
-        text = Literal('\\\n').suppress().transformString(text)
+        text = Literal("\\\n").suppress().transformString(text)
 
         # Define the structure of a macro definition
-        name = Word(alphas+'_', alphanums+'_')('name')
+        name = Word(alphas + "_", alphanums + "_")("name")
         deli_list = Optional(lparen + delimitedList(name) + rparen)
-        self.pp_define = (name.setWhitespaceChars(' \t')("macro") +
-                          deli_list.setWhitespaceChars(' \t')('args') +
-                          SkipTo(LineEnd())('value'))
+        self.pp_define = (
+            name.setWhitespaceChars(" \t")("macro")
+            + deli_list.setWhitespaceChars(" \t")("args")
+            + SkipTo(LineEnd())("value")
+        )
         self.pp_define.setParseAction(self.process_macro_defn)
 
         # Comb through lines, process all directives
-        lines = text.split('\n')
+        lines = text.split("\n")
 
         result = []
 
-        directive = re.compile(r'\s*#\s*([a-zA-Z]+)(.*)$')
+        directive = re.compile(r"\s*#\s*([a-zA-Z]+)(.*)$")
         if_true = [True]
         if_hit = []
         for i, line in enumerate(lines):
-            new_line = ''
+            new_line = ""
             m = directive.match(line)
 
             # Regular code line
@@ -844,82 +931,93 @@ class CParser(object):
                 d = m.groups()[0]
                 rest = m.groups()[1]
 
-                if d == 'ifdef':
-                    d = 'if'
-                    rest = 'defined ' + rest
-                elif d == 'ifndef':
-                    d = 'if'
-                    rest = '!defined ' + rest
+                if d == "ifdef":
+                    d = "if"
+                    rest = "defined " + rest
+                elif d == "ifndef":
+                    d = "if"
+                    rest = "!defined " + rest
 
                 # Evaluate 'defined' operator before expanding macros
-                if d in ['if', 'elif']:
+                if d in ["if", "elif"]:
+
                     def pa(t):
-                        is_macro = t['name'] in self.defs['macros']
-                        is_macro_func = t['name'] in self.defs['fnmacros']
-                        return ['0', '1'][is_macro or is_macro_func]
+                        is_macro = t["name"] in self.defs["macros"]
+                        is_macro_func = t["name"] in self.defs["fnmacros"]
+                        return ["0", "1"][is_macro or is_macro_func]
 
-                    rest = (Keyword('defined') +
-                            (name | lparen + name + rparen)
-                            ).setParseAction(pa).transformString(rest)
+                    rest = (
+                        (Keyword("defined") + (name | lparen + name + rparen))
+                        .setParseAction(pa)
+                        .transformString(rest)
+                    )
 
-                elif d in ['define', 'undef']:
-                    match = re.match(r'\s*([a-zA-Z_][a-zA-Z0-9_]*)(.*)$', rest)
+                elif d in ["define", "undef"]:
+                    match = re.match(r"\s*([a-zA-Z_][a-zA-Z0-9_]*)(.*)$", rest)
                     macroName, rest = match.groups()
 
                 # Expand macros if needed
-                if rest is not None and (all(if_true) or d in ['if', 'elif']):
+                if rest is not None and (all(if_true) or d in ["if", "elif"]):
                     rest = self.expand_macros(rest)
 
-                if d == 'elif':
+                if d == "elif":
                     if if_hit[-1] or not all(if_true[:-1]):
                         ev = False
                     else:
                         ev = self.eval_preprocessor_expr(rest)
 
-                    logger.debug("  "*(len(if_true)-2) + line +
-                                 '{}, {}'.format(rest, ev))
+                    logger.debug(
+                        "  " * (len(if_true) - 2) + line + "{}, {}".format(rest, ev)
+                    )
 
                     if_true[-1] = ev
                     if_hit[-1] = if_hit[-1] or ev
 
-                elif d == 'else':
-                    logger.debug("  "*(len(if_true)-2) + line +
-                                 '{}'.format(not if_hit[-1]))
+                elif d == "else":
+                    logger.debug(
+                        "  " * (len(if_true) - 2) + line + "{}".format(not if_hit[-1])
+                    )
                     if_true[-1] = (not if_hit[-1]) and all(if_true[:-1])
                     if_hit[-1] = True
 
-                elif d == 'endif':
+                elif d == "endif":
                     if_true.pop()
                     if_hit.pop()
-                    logger.debug("  "*(len(if_true)-1) + line)
+                    logger.debug("  " * (len(if_true) - 1) + line)
 
-                elif d == 'if':
+                elif d == "if":
                     if all(if_true):
                         ev = self.eval_preprocessor_expr(rest)
                     else:
                         ev = False
-                    logger.debug("  "*(len(if_true)-1) + line +
-                                 '{}, {}'.format(rest, ev))
+                    logger.debug(
+                        "  " * (len(if_true) - 1) + line + "{}, {}".format(rest, ev)
+                    )
                     if_true.append(ev)
                     if_hit.append(ev)
 
-                elif d == 'define':
+                elif d == "define":
                     if not if_true[-1]:
                         continue
-                    logger.debug("  "*(len(if_true)-1) + "define: " +
-                                 '{}, {}'.format(macroName, rest))
+                    logger.debug(
+                        "  " * (len(if_true) - 1)
+                        + "define: "
+                        + "{}, {}".format(macroName, rest)
+                    )
                     try:
                         # Macro is registered here
-                        self.pp_define.parseString(macroName + ' ' + rest)
+                        self.pp_define.parseString(macroName + " " + rest)
                     except Exception:
-                        logger.exception("Error processing macro definition:" +
-                                         '{}, {}'.format(macroName, rest))
+                        logger.exception(
+                            "Error processing macro definition:"
+                            + "{}, {}".format(macroName, rest)
+                        )
 
-                elif d == 'undef':
+                elif d == "undef":
                     if not if_true[-1]:
                         continue
                     try:
-                        self.rem_def('macros', macroName.strip())
+                        self.rem_def("macros", macroName.strip())
                     except Exception:
                         if sys.exc_info()[0] is not KeyError:
                             mess = "Error removing macro definition '{}'"
@@ -933,18 +1031,18 @@ class CParser(object):
                 # https://gcc.gnu.org/onlinedocs/gcc/Structure-Packing-Pragmas.html
                 # http://msdn.microsoft.com/fr-fr/library/2e70t5y1.aspx
                 # The current implementation follows the MSVC doc.
-                elif d == 'pragma':
+                elif d == "pragma":
                     if not if_true[-1]:
                         continue
-                    m = re.match(r'\s+pack\s*\(([^\)]*)\)', rest)
+                    m = re.match(r"\s+pack\s*\(([^\)]*)\)", rest)
                     if not m:
                         continue
                     if m.groups():
-                        opts = [s.strip() for s in m.groups()[0].split(',')]
+                        opts = [s.strip() for s in m.groups()[0].split(",")]
 
                     pushpop = id = val = None
                     for o in opts:
-                        if o in ['push', 'pop']:
+                        if o in ["push", "pop"]:
                             pushpop = o
                         elif o.isdigit():
                             val = int(o)
@@ -953,9 +1051,9 @@ class CParser(object):
 
                     packing = val
 
-                    if pushpop == 'push':
+                    if pushpop == "push":
                         pack_stack.append((packing, id))
-                    elif opts[0] == 'pop':
+                    elif opts[0] == "pop":
                         if id is None:
                             pack_stack.pop()
                         else:
@@ -974,19 +1072,20 @@ class CParser(object):
                     self.pack_list[path].append((i, packing))
                 else:
                     # Ignore any other directives
-                    mess = 'Ignored directive {} at line {}'
+                    mess = "Ignored directive {} at line {}"
                     logger.debug(mess.format(d, i))
 
             result.append(new_line)
-        self.files[path] = '\n'.join(result)
+        self.files[path] = "\n".join(result)
 
     def eval_preprocessor_expr(self, expr):
         # Make a few alterations so the expression can be eval'd
         macro_diffs = (
-            Literal('!').setParseAction(lambda: ' not ') |
-            Literal('&&').setParseAction(lambda: ' and ') |
-            Literal('||').setParseAction(lambda: ' or ') |
-            Word(alphas + '_', alphanums + '_').setParseAction(lambda: '0'))
+            Literal("!").setParseAction(lambda: " not ")
+            | Literal("&&").setParseAction(lambda: " and ")
+            | Literal("||").setParseAction(lambda: " or ")
+            | Word(alphas + "_", alphanums + "_").setParseAction(lambda: "0")
+        )
         expr2 = macro_diffs.transformString(expr).strip()
 
         try:
@@ -998,40 +1097,38 @@ class CParser(object):
         return ev
 
     def process_macro_defn(self, t):
-        """Parse a #define macro and register the definition.
-
-        """
+        """Parse a #define macro and register the definition."""
         logger.debug("Processing MACRO: {}".format(t))
         macro_val = t.value.strip()
-        if macro_val in self.defs['fnmacros']:
-            self.add_def('fnmacros', t.macro, self.defs['fnmacros'][macro_val])
+        if macro_val in self.defs["fnmacros"]:
+            self.add_def("fnmacros", t.macro, self.defs["fnmacros"][macro_val])
             logger.debug("  Copy fn macro {} => {}".format(macro_val, t.macro))
 
         else:
-            if t.args == '':
+            if t.args == "":
                 val = self.eval_expr(macro_val)
-                self.add_def('macros', t.macro, macro_val)
-                self.add_def('values', t.macro, val)
+                self.add_def("macros", t.macro, macro_val)
+                self.add_def("values", t.macro, val)
                 mess = "  Add macro: {} ({}); {}"
-                logger.debug(mess.format(t.macro, val,
-                                         self.defs['macros'][t.macro]))
+                logger.debug(mess.format(t.macro, val, self.defs["macros"][t.macro]))
 
             else:
-                self.add_def('fnmacros', t.macro,
-                             self.compile_fn_macro(macro_val,
-                                                   [x for x in t.args]))
+                self.add_def(
+                    "fnmacros",
+                    t.macro,
+                    self.compile_fn_macro(macro_val, [x for x in t.args]),
+                )
                 mess = "  Add fn macro: {} ({}); {}"
-                logger.debug(mess.format(t.macro, t.args,
-                                         self.defs['fnmacros'][t.macro]))
+                logger.debug(
+                    mess.format(t.macro, t.args, self.defs["fnmacros"][t.macro])
+                )
 
         return "#define " + t.macro + " " + macro_val
 
     def compile_fn_macro(self, text, args):
-        """Turn a function macro spec into a compiled description.
-
-        """
+        """Turn a function macro spec into a compiled description."""
         # Find all instances of each arg in text.
-        args_str = '|'.join(args)
+        args_str = "|".join(args)
         arg_regex = re.compile(r'("(\\"|[^"])*")|(\b({})\b)'.format(args_str))
         start = 0
         parts = []
@@ -1041,11 +1138,11 @@ class CParser(object):
         for m in arg_regex.finditer(text):
             arg = m.groups()[N]
             if arg is not None:
-                parts.append(text[start:m.start(N)] + '{}')
+                parts.append(text[start : m.start(N)] + "{}")
                 start = m.end(N)
                 arg_order.append(args.index(arg))
         parts.append(text[start:])
-        return (''.join(parts), arg_order)
+        return ("".join(parts), arg_order)
 
     def expand_macros(self, line):
         """Expand all the macro expressions in a string.
@@ -1057,28 +1154,28 @@ class CParser(object):
         parts = []
         # The group number to check for macro names
         N = 3
-        macros = self.defs['macros']
-        fnmacros = self.defs['fnmacros']
+        macros = self.defs["macros"]
+        fnmacros = self.defs["fnmacros"]
         while True:
             m = reg.search(line)
             if not m:
                 break
             name = m.groups()[N]
             if name in macros:
-                parts.append(line[:m.start(N)])
-                line = line[m.end(N):]
+                parts.append(line[: m.start(N)])
+                line = line[m.end(N) :]
                 parts.append(macros[name])
 
             elif name in fnmacros:
                 # If function macro expansion fails, just ignore it.
                 try:
-                    exp, end = self.expand_fn_macro(name, line[m.end(N):])
+                    exp, end = self.expand_fn_macro(name, line[m.end(N) :])
                 except Exception:
                     exp = name
-                    end = line[m.end(N):]
+                    end = line[m.end(N) :]
                     mess = "Function macro expansion failed: {}, {}\n {}"
 
-                parts.append(line[:m.start(N)])
+                parts.append(line[: m.start(N)])
                 line = end
                 parts.append(exp)
 
@@ -1088,19 +1185,17 @@ class CParser(object):
                 line = line[start:]
 
         parts.append(line)
-        return ''.join(parts)
+        return "".join(parts)
 
     def expand_fn_macro(self, name, text):
-        """Replace a function macro.
-
-        """
+        """Replace a function macro."""
         # defn looks like ('%s + %s / %s', (0, 0, 1))
-        defn = self.defs['fnmacros'][name]
+        defn = self.defs["fnmacros"][name]
 
         try:
-            args, end = text.split(')', 1)
-            _, args = args.split('(', 1)
-            args = [a.strip() for a in args.split(',')]
+            args, end = text.split(")", 1)
+            _, args = args.split("(", 1)
+            args = [a.strip() for a in args.split(",")]
         except Exception:
             mess = "Function macro {} argument analysis failed :\n{}"
             raise DefinitionError(0, mess.format(name, format_exc()))
@@ -1136,7 +1231,7 @@ class CParser(object):
         parser = self.build_parser()
         if return_unparsed:
             text = parser.suppress().transformString(self.files[path])
-            return re.sub(r'\n\s*\n', '\n', text)
+            return re.sub(r"\n\s*\n", "\n", text)
         else:
             return [x[0] for x in parser.scanString(self.files[path])]
 
@@ -1145,19 +1240,21 @@ class CParser(object):
         bits we support, anyway).
 
         """
-        if hasattr(self, 'parser'):
+        if hasattr(self, "parser"):
             return self.parser
 
         self.struct_type = Forward()
         self.enum_type = Forward()
-        type_ = (fund_type |
-                 Optional(kwl(size_modifiers + sign_modifiers)) + ident |
-                 self.struct_type |
-                 self.enum_type)
+        type_ = (
+            fund_type
+            | Optional(kwl(size_modifiers + sign_modifiers)) + ident
+            | self.struct_type
+            | self.enum_type
+        )
         if extra_modifier is not None:
             type_ += extra_modifier
         type_.setParseAction(recombine)
-        self.type_spec = Group(type_qualifier('pre_qual') + type_("name"))
+        self.type_spec = Group(type_qualifier("pre_qual") + type_("name"))
 
         # --- Abstract declarators for use in function pointer arguments
         #   Thus begins the extremely hairy business of parsing C declarators.
@@ -1178,20 +1275,31 @@ class CParser(object):
         #     *( )(int, int)[10]
         #     ...etc...
         self.abstract_declarator << Group(
-            type_qualifier('first_typequal') +
-            Group(ZeroOrMore(Group(Suppress('*') + type_qualifier)))('ptrs') +
-            ((Optional('&')('ref')) |
-             (lparen + self.abstract_declarator + rparen)('center')) +
-            Optional(lparen +
-                     Optional(delimitedList(Group(
-                         self.type_spec('type') +
-                         self.abstract_declarator('decl') +
-                         Optional(Literal('=').suppress() + expression,
-                                  default=None)('val')
-                     )), default=None) +
-                     rparen)('args') +
-            Group(ZeroOrMore(lbrack + Optional(expression, default='-1') +
-                             rbrack))('arrays')
+            type_qualifier("first_typequal")
+            + Group(ZeroOrMore(Group(Suppress("*") + type_qualifier)))("ptrs")
+            + (
+                (Optional("&")("ref"))
+                | (lparen + self.abstract_declarator + rparen)("center")
+            )
+            + Optional(
+                lparen
+                + Optional(
+                    delimitedList(
+                        Group(
+                            self.type_spec("type")
+                            + self.abstract_declarator("decl")
+                            + Optional(
+                                Literal("=").suppress() + expression, default=None
+                            )("val")
+                        )
+                    ),
+                    default=None,
+                )
+                + rparen
+            )("args")
+            + Group(ZeroOrMore(lbrack + Optional(expression, default="-1") + rbrack))(
+                "arrays"
+            )
         )
 
         # Declarators look like:
@@ -1202,97 +1310,129 @@ class CParser(object):
         #     * fnName(int arg1=0)[10]
         #     ...etc...
         self.declarator << Group(
-            type_qualifier('first_typequal') + call_conv +
-            Group(ZeroOrMore(Group(Suppress('*') + type_qualifier)))('ptrs') +
-            ((Optional('&')('ref') + ident('name')) |
-             (lparen + self.declarator + rparen)('center')) +
-            Optional(lparen +
-                     Optional(delimitedList(
-                         Group(self.type_spec('type') +
-                               (self.declarator |
-                                self.abstract_declarator)('decl') +
-                               Optional(Literal('=').suppress() +
-                                        expression, default=None)('val')
-                               )),
-                         default=None) +
-                     rparen)('args') +
-            Group(ZeroOrMore(lbrack + Optional(expression, default='-1') +
-                             rbrack))('arrays')
+            type_qualifier("first_typequal")
+            + call_conv
+            + Group(ZeroOrMore(Group(Suppress("*") + type_qualifier)))("ptrs")
+            + (
+                (Optional("&")("ref") + ident("name"))
+                | (lparen + self.declarator + rparen)("center")
+            )
+            + Optional(
+                lparen
+                + Optional(
+                    delimitedList(
+                        Group(
+                            self.type_spec("type")
+                            + (self.declarator | self.abstract_declarator)("decl")
+                            + Optional(
+                                Literal("=").suppress() + expression, default=None
+                            )("val")
+                        )
+                    ),
+                    default=None,
+                )
+                + rparen
+            )("args")
+            + Group(ZeroOrMore(lbrack + Optional(expression, default="-1") + rbrack))(
+                "arrays"
+            )
         )
         self.declarator_list = Group(delimitedList(self.declarator))
 
         # Typedef
-        self.type_decl = (Keyword('typedef') + self.type_spec('type') +
-                          self.declarator_list('decl_list') + semi)
+        self.type_decl = (
+            Keyword("typedef")
+            + self.type_spec("type")
+            + self.declarator_list("decl_list")
+            + semi
+        )
         self.type_decl.setParseAction(self.process_typedef)
 
         # Variable declaration
         self.variable_decl = (
-                Group(storage_class_spec +
-                      self.type_spec('type') +
-                      Optional(self.declarator_list('decl_list')) +
-                      Optional(Literal('=').suppress() +
-                               (expression('value') |
-                                (lbrace +
-                                 Group(delimitedList(expression))('array_values') +
-                                 rbrace
-                                 )
-                                )
-                               )
-                      ) +
-                semi)
+            Group(
+                storage_class_spec
+                + self.type_spec("type")
+                + Optional(self.declarator_list("decl_list"))
+                + Optional(
+                    Literal("=").suppress()
+                    + (
+                        expression("value")
+                        | (
+                            lbrace
+                            + Group(delimitedList(expression))("array_values")
+                            + rbrace
+                        )
+                    )
+                )
+            )
+            + semi
+        )
         self.variable_decl.setParseAction(self.process_variable)
 
         # Function definition
-        self.typeless_function_decl = (self.declarator('decl') +
-                                       nestedExpr('{', '}').suppress())
-        self.function_decl = (storage_class_spec +
-                              self.type_spec('type') +
-                              self.declarator('decl') +
-                              nestedExpr('{', '}').suppress())
+        self.typeless_function_decl = (
+            self.declarator("decl") + nestedExpr("{", "}").suppress()
+        )
+        self.function_decl = (
+            storage_class_spec
+            + self.type_spec("type")
+            + self.declarator("decl")
+            + nestedExpr("{", "}").suppress()
+        )
         self.function_decl.setParseAction(self.process_function)
 
         # Struct definition
         self.struct_decl = Forward()
-        struct_kw = (Keyword('struct') | Keyword('union'))
+        struct_kw = Keyword("struct") | Keyword("union")
         self.struct_member = (
-                Group(self.variable_decl.copy().setParseAction(lambda: None)) |
-                # Hack to handle bit width specification.
-                Group(Group(self.type_spec('type') +
-                            Optional(self.declarator_list('decl_list')) +
-                            colon + integer('bit') + semi)) |
-                (self.type_spec + self.declarator +
-                 nestedExpr('{', '}')).suppress() |
-                (self.declarator + nestedExpr('{', '}')).suppress()
+            Group(self.variable_decl.copy().setParseAction(lambda: None))
+            |
+            # Hack to handle bit width specification.
+            Group(
+                Group(
+                    self.type_spec("type")
+                    + Optional(self.declarator_list("decl_list"))
+                    + colon
+                    + integer("bit")
+                    + semi
+                )
+            )
+            | (self.type_spec + self.declarator + nestedExpr("{", "}")).suppress()
+            | (self.declarator + nestedExpr("{", "}")).suppress()
         )
 
-        self.decl_list = (lbrace +
-                          Group(OneOrMore(self.struct_member))('members') +
-                          rbrace)
-        self.struct_type << (struct_kw('struct_type') +
-                             ((Optional(ident)('name') +
-                               self.decl_list) | ident('name'))
-                             )
+        self.decl_list = (
+            lbrace + Group(OneOrMore(self.struct_member))("members") + rbrace
+        )
+        self.struct_type << (
+            struct_kw("struct_type")
+            + ((Optional(ident)("name") + self.decl_list) | ident("name"))
+        )
         self.struct_type.setParseAction(self.process_struct)
 
         self.struct_decl = self.struct_type + semi
 
         # Enum definition
-        enum_var_decl = Group(ident('name') +
-                              Optional(Literal('=').suppress() +
-                                       expression('value')))
+        enum_var_decl = Group(
+            ident("name") + Optional(Literal("=").suppress() + expression("value"))
+        )
 
-        self.enum_type << (Keyword('enum') +
-                           (Optional(ident)('name') +
-                            lbrace +
-                            Group(delimitedList(enum_var_decl))('members') +
-                            Optional(comma) + rbrace | ident('name'))
-                           )
+        self.enum_type << (
+            Keyword("enum")
+            + (
+                Optional(ident)("name")
+                + lbrace
+                + Group(delimitedList(enum_var_decl))("members")
+                + Optional(comma)
+                + rbrace
+                | ident("name")
+            )
+        )
         self.enum_type.setParseAction(self.process_enum)
         self.enum_decl = self.enum_type + semi
 
-        self.parser = (self.type_decl | self.variable_decl |
-                       self.function_decl)
+        self.parser = self.type_decl | self.variable_decl | self.function_decl
         return self.parser
 
     def process_declarator(self, decl):
@@ -1303,46 +1443,49 @@ class CParser(object):
 
         """
         toks = []
-        quals = [tuple(decl.get('first_typequal', []))]
+        quals = [tuple(decl.get("first_typequal", []))]
         name = None
         logger.debug("DECL: {}".format(decl))
 
-        if 'call_conv' in decl and len(decl['call_conv']) > 0:
-            toks.append(decl['call_conv'])
+        if "call_conv" in decl and len(decl["call_conv"]) > 0:
+            toks.append(decl["call_conv"])
             quals.append(None)
 
-        if 'ptrs' in decl and len(decl['ptrs']) > 0:
-            toks += ('*',) * len(decl['ptrs'])
-            quals += map(tuple, decl['ptrs'])
+        if "ptrs" in decl and len(decl["ptrs"]) > 0:
+            toks += ("*",) * len(decl["ptrs"])
+            quals += map(tuple, decl["ptrs"])
 
-        if 'arrays' in decl and len(decl['arrays']) > 0:
-            toks.extend([self.eval_expr(x)] for x in decl['arrays'])
-            quals += [()] * len(decl['arrays'])
+        if "arrays" in decl and len(decl["arrays"]) > 0:
+            toks.extend([self.eval_expr(x)] for x in decl["arrays"])
+            quals += [()] * len(decl["arrays"])
 
-        if 'args' in decl and len(decl['args']) > 0:
-            if decl['args'][0] is None:
+        if "args" in decl and len(decl["args"]) > 0:
+            if decl["args"][0] is None:
                 toks.append(())
             else:
-                ex = lambda x: (x[0],) if len(x)!=0 else (None,)
-                toks.append(tuple([self.process_type(a['type'],
-                                                     a['decl'][0]) +
-                                   ex(a['val']) for a in decl['args']]
-                                  )
-                            )
+                ex = lambda x: (x[0],) if len(x) != 0 else (None,)
+                toks.append(
+                    tuple(
+                        [
+                            self.process_type(a["type"], a["decl"][0]) + ex(a["val"])
+                            for a in decl["args"]
+                        ]
+                    )
+                )
             quals.append(())
-        if 'ref' in decl:
-            toks.append('&')
+        if "ref" in decl:
+            toks.append("&")
             quals.append(())
 
-        if 'center' in decl:
-            (n, t, q) = self.process_declarator(decl['center'][0])
+        if "center" in decl:
+            (n, t, q) = self.process_declarator(decl["center"][0])
             if n is not None:
                 name = n
             toks.extend(t)
             quals = quals[:-1] + [quals[-1] + q[0]] + list(q[1:])
 
-        if 'name' in decl:
-            name = decl['name']
+        if "name" in decl:
+            name = decl["name"]
 
         return (name, toks, tuple(quals))
 
@@ -1374,22 +1517,23 @@ class CParser(object):
             (None, ["struct s", ((None, ['int']), (None, ['int', '*'])), '*'])
 
         """
-        logger.debug("PROCESS TYPE/DECL: {}/{}".format(typ['name'], decl))
+        logger.debug("PROCESS TYPE/DECL: {}/{}".format(typ["name"], decl))
         (name, decl, quals) = self.process_declarator(decl)
-        pre_typequal = tuple(typ.get('pre_qual', []))
-        return (name, Type(typ['name'], *decl,
-                           type_quals=(pre_typequal + quals[0],) + quals[1:]))
+        pre_typequal = tuple(typ.get("pre_qual", []))
+        return (
+            name,
+            Type(typ["name"], *decl, type_quals=(pre_typequal + quals[0],) + quals[1:]),
+        )
 
     def process_enum(self, s, l, t):
-        """
-        """
+        """ """
         try:
             logger.debug("ENUM: {}".format(t))
-            if t.name == '':
+            if t.name == "":
                 n = 0
                 while True:
-                    name = 'anon_enum{}'.format(n)
-                    if name not in self.defs['enums']:
+                    name = "anon_enum{}".format(n)
+                    if name not in self.defs["enums"]:
                         break
                     n += 1
             else:
@@ -1397,48 +1541,44 @@ class CParser(object):
 
             logger.debug("  name: {}".format(name))
 
-            if name not in self.defs['enums']:
+            if name not in self.defs["enums"]:
                 i = 0
                 enum = {}
                 for v in t.members:
-                    if v.value != '':
+                    if v.value != "":
                         try:
                             i = self.eval_expr(v.value)
                         except Exception:
                             pass
                     enum[v.name] = i
-                    self.add_def('values', v.name, i)
+                    self.add_def("values", v.name, i)
                     i += 1
                 logger.debug("  members: {}".format(enum))
-                self.add_def('enums', name, enum)
-                self.add_def('types', 'enum '+name, Type('enum', name))
-            return ('enum ' + name)
+                self.add_def("enums", name, enum)
+                self.add_def("types", "enum " + name, Type("enum", name))
+            return "enum " + name
         except:
             logger.exception("Error processing enum: {}".format(t))
 
     def process_function(self, s, l, t):
-        """Build a function definition from the parsing tokens.
-
-        """
+        """Build a function definition from the parsing tokens."""
         logger.debug("FUNCTION {} : {}".format(t, t.keys()))
 
         try:
             name, decl = self.process_type(t.type, t.decl[0])
             if len(decl) == 0 or type(decl[-1]) != tuple:
-                logger.error('{}'.format(t))
+                logger.error("{}".format(t))
                 mess = "Incorrect declarator type for function definition."
                 raise DefinitionError(mess)
             logger.debug("  name: {}".format(name))
             logger.debug("  sig: {}".format(decl))
-            self.add_def('functions', name, decl.add_compatibility_hack())
+            self.add_def("functions", name, decl.add_compatibility_hack())
 
         except Exception:
             logger.exception("Error processing function: {}".format(t))
 
     def packing_at(self, line):
-        """Return the structure packing value at the given line number.
-
-        """
+        """Return the structure packing value at the given line number."""
         packing = None
         for p in self.pack_list[self.current_file]:
             if p[0] <= line:
@@ -1448,20 +1588,19 @@ class CParser(object):
         return packing
 
     def process_struct(self, s, l, t):
-        """
-        """
+        """ """
         try:
             str_typ = t.struct_type  # struct or union
 
             # Check for extra packing rules
             packing = self.packing_at(lineno(l, s))
 
-            logger.debug('{} {} {}'.format(str_typ.upper(), t.name, t))
-            if t.name == '':
+            logger.debug("{} {} {}".format(str_typ.upper(), t.name, t))
+            if t.name == "":
                 n = 0
                 while True:
-                    sname = 'anon_{}{}'.format(str_typ, n)
-                    if sname not in self.defs[str_typ+'s']:
+                    sname = "anon_{}{}".format(str_typ, n)
+                    if sname not in self.defs[str_typ + "s"]:
                         break
                     n += 1
             else:
@@ -1471,15 +1610,19 @@ class CParser(object):
                     sname = t.name[0]
 
             logger.debug("  NAME: {}".format(sname))
-            if (len(t.members) > 0 or sname not in self.defs[str_typ+'s'] or
-                    self.defs[str_typ+'s'][sname] == {}):
+            if (
+                len(t.members) > 0
+                or sname not in self.defs[str_typ + "s"]
+                or self.defs[str_typ + "s"][sname] == {}
+            ):
                 logger.debug("  NEW " + str_typ.upper())
                 struct = []
                 for m in t.members:
                     typ = m[0].type
                     val = self.eval_expr(m[0].value)
-                    logger.debug("    member: {}, {}, {}".format(
-                        m, m[0].keys(), m[0].decl_list))
+                    logger.debug(
+                        "    member: {}, {}, {}".format(m, m[0].keys(), m[0].decl_list)
+                    )
 
                     if len(m[0].decl_list) == 0:  # anonymous member
                         member = [None, Type(typ[0]), None]
@@ -1493,21 +1636,20 @@ class CParser(object):
                         if m[0].bit:
                             member.append(int(m[0].bit))
                         struct.append(tuple(member))
-                        logger.debug("      {} {} {} {}".format(name, decl,
-                                                                val, m[0].bit))
+                        logger.debug(
+                            "      {} {} {} {}".format(name, decl, val, m[0].bit)
+                        )
 
-                str_cls = (Struct if str_typ == 'struct' else Union)
-                self.add_def(str_typ + 's', sname,
-                             str_cls(*struct, pack=packing))
-                self.add_def('types', str_typ+' '+sname, Type(str_typ, sname))
-            return str_typ + ' ' + sname
+                str_cls = Struct if str_typ == "struct" else Union
+                self.add_def(str_typ + "s", sname, str_cls(*struct, pack=packing))
+                self.add_def("types", str_typ + " " + sname, Type(str_typ, sname))
+            return str_typ + " " + sname
 
         except Exception:
-            logger.exception('Error processing struct: {}'.format(t))
+            logger.exception("Error processing struct: {}".format(t))
 
     def process_variable(self, s, l, t):
-        """
-        """
+        """ """
         logger.debug("VARIABLE: {}".format(t))
         try:
             val = self.eval_expr(t[0])
@@ -1515,29 +1657,27 @@ class CParser(object):
                 (name, typ) = self.process_type(t[0].type, d)
                 # This is a function prototype
                 if type(typ[-1]) is tuple:
-                    logger.debug("  Add function prototype: {} {} {}".format(
-                        name, typ, val))
-                    self.add_def('functions', name,
-                                 typ.add_compatibility_hack())
+                    logger.debug(
+                        "  Add function prototype: {} {} {}".format(name, typ, val)
+                    )
+                    self.add_def("functions", name, typ.add_compatibility_hack())
                 # This is a variable
                 else:
-                    logger.debug("  Add variable: {} {} {}".format(name,
-                                                                   typ, val))
-                    self.add_def('variables', name, (val, typ))
-                    self.add_def('values', name, val)
+                    logger.debug("  Add variable: {} {} {}".format(name, typ, val))
+                    self.add_def("variables", name, (val, typ))
+                    self.add_def("values", name, val)
 
         except Exception:
-            logger.exception('Error processing variable: {}'.format(t))
+            logger.exception("Error processing variable: {}".format(t))
 
     def process_typedef(self, s, l, t):
-        """
-        """
+        """ """
         logger.debug("TYPE: {}".format(t))
         typ = t.type
         for d in t.decl_list:
             (name, decl) = self.process_type(typ, d)
             logger.debug("  {} {}".format(name, decl))
-            self.add_def('types', name, decl)
+            self.add_def("types", name, decl)
 
     # --- Utility methods
 
@@ -1551,12 +1691,13 @@ class CParser(object):
         logger.debug("Eval: {}".format(toks))
         try:
             if isinstance(toks, str):
-                val = self.eval(toks, None, self.defs['fnmacros'])
-            elif toks.array_values != '':
-                val = [self.eval(x, None, self.defs['values'])
-                       for x in toks.array_values]
-            elif toks.value != '':
-                val = self.eval(toks.value, None, self.defs['values'])
+                val = self.eval(toks, None, self.defs["fnmacros"])
+            elif toks.array_values != "":
+                val = [
+                    self.eval(x, None, self.defs["values"]) for x in toks.array_values
+                ]
+            elif toks.value != "":
+                val = self.eval(toks.value, None, self.defs["values"])
             else:
                 val = None
             return val
@@ -1568,10 +1709,9 @@ class CParser(object):
     def eval(self, expr, *args):
         """Just eval with a little extra robustness."""
         expr = expr.strip()
-        cast = (lparen + self.type_spec + self.abstract_declarator +
-                rparen).suppress()
+        cast = (lparen + self.type_spec + self.abstract_declarator + rparen).suppress()
         expr = (quotedString | number | cast).transformString(expr)
-        if expr == '':
+        if expr == "":
             return None
         return eval(expr, *args)
 
@@ -1622,12 +1762,10 @@ class CParser(object):
         """
         if not isinstance(typ, Type):
             typ = Type(*typ)
-        return typ.eval(self.defs['types'])
+        return typ.eval(self.defs["types"])
 
     def find(self, name):
-        """Search all definitions for the given name.
-
-        """
+        """Search all definitions for the given name."""
         res = []
         for f in self.file_defs:
             fd = self.file_defs[f]
@@ -1643,12 +1781,10 @@ class CParser(object):
         return res
 
     def find_text(self, text):
-        """Search all file strings for text, return matching lines.
-
-        """
+        """Search all file strings for text, return matching lines."""
         res = []
         for f in self.files:
-            l = self.files[f].split('\n')
+            l = self.files[f].split("\n")
             for i in range(len(l)):
                 if text in l[i]:
                     res.append((f, i, l[i]))
@@ -1657,9 +1793,10 @@ class CParser(object):
 
 # --- Basic parsing elements.
 
+
 def kwl(strs):
     """Generate a match-first list of keywords given a list of strings."""
-    return Regex(r'\b({})\b'.format('|'.join(strs)))
+    return Regex(r"\b({})\b".format("|".join(strs)))
 
 
 def flatten(lst):
@@ -1673,26 +1810,22 @@ def flatten(lst):
 
 
 def recombine(tok):
-    """Flattens a tree of tokens and joins into one big string.
-
-    """
+    """Flattens a tree of tokens and joins into one big string."""
     return " ".join(flatten(tok.asList()))
 
 
-def print_parse_results(pr, depth=0, name=''):
-    """For debugging; pretty-prints parse result objects.
-
-    """
-    start = name + " " * (20 - len(name)) + ':' + '..' * depth
+def print_parse_results(pr, depth=0, name=""):
+    """For debugging; pretty-prints parse result objects."""
+    start = name + " " * (20 - len(name)) + ":" + ".." * depth
     if isinstance(pr, ParseResults):
         print(start)
         for i in pr:
-            name = ''
+            name = ""
             for k in pr.keys():
                 if pr[k] is i:
                     name = k
                     break
-            print_parse_results(i, depth+1, name)
+            print_parse_results(i, depth + 1, name)
     else:
         print(start + str(pr))
 
@@ -1709,24 +1842,23 @@ lparen = Literal("(").ignore(quotedString).suppress()
 rparen = Literal(")").ignore(quotedString).suppress()
 
 # Numbers
-int_strip = lambda t: t[0].rstrip('UL')
-hexint = Regex(r'[+-]?\s*0[xX][{}]+[UL]*'.format(hexnums)).setParseAction(int_strip)
-decint = Regex(r'[+-]?\s*[0-9]+[UL]*').setParseAction(int_strip)
-integer = (hexint | decint)
+int_strip = lambda t: t[0].rstrip("UL")
+hexint = Regex(r"[+-]?\s*0[xX][{}]+[UL]*".format(hexnums)).setParseAction(int_strip)
+decint = Regex(r"[+-]?\s*[0-9]+[UL]*").setParseAction(int_strip)
+integer = hexint | decint
 # The floating regex is ugly but it is because we do not want to match
 # integer to it.
-floating = Regex(r'[+-]?\s*((((\d(\.\d*)?)|(\.\d+))[eE][+-]?\d+)|((\d\.\d*)|(\.\d+)))')
-number = (floating | integer)
+floating = Regex(r"[+-]?\s*((((\d(\.\d*)?)|(\.\d+))[eE][+-]?\d+)|((\d\.\d*)|(\.\d+)))")
+number = floating | integer
 
 # Miscelaneous
 bi_operator = oneOf("+ - / * | & || && ! ~ ^ % == != > < >= <= -> . :: << >> = ? :")
 uni_right_operator = oneOf("++ --")
 uni_left_operator = oneOf("++ -- - + * sizeof new")
-wordchars = alphanums+'_$'
-name = (WordStart(wordchars) + Word(alphas+"_", alphanums+"_$") +
-        WordEnd(wordchars))
-size_modifiers = ['short', 'long']
-sign_modifiers = ['signed', 'unsigned']
+wordchars = alphanums + "_$"
+name = WordStart(wordchars) + Word(alphas + "_", alphanums + "_$") + WordEnd(wordchars)
+size_modifiers = ["short", "long"]
+sign_modifiers = ["signed", "unsigned"]
 
 # Syntax elements defined by _init_parser.
 expression = Forward()
@@ -1740,10 +1872,18 @@ extra_modifier = None
 fund_type = None
 extra_type_list = []
 
-c99_int_types = ['int8_t', 'uint8_t', 'int16_t', 'uint16_t',
-                 'int32_t', 'uint32_t', 'int64_t', 'uint64_t']
-num_types = ['int', 'float', 'double'] + c99_int_types
-nonnum_types = ['char', 'bool', 'void']
+c99_int_types = [
+    "int8_t",
+    "uint8_t",
+    "int16_t",
+    "uint16_t",
+    "int32_t",
+    "uint32_t",
+    "int64_t",
+    "uint64_t",
+]
+num_types = ["int", "float", "double"] + c99_int_types
+nonnum_types = ["char", "bool", "void"]
 
 
 # Define some common language elements when initialising.
@@ -1758,61 +1898,86 @@ def _init_cparser(extra_types=None, extra_modifiers=None):
     # Some basic definitions
     extra_type_list = [] if extra_types is None else list(extra_types)
     base_types = nonnum_types + num_types + extra_type_list
-    storage_classes = ['inline', 'static', 'extern']
-    qualifiers = ['const', 'volatile', 'restrict', 'near', 'far']
+    storage_classes = ["inline", "static", "extern"]
+    qualifiers = ["const", "volatile", "restrict", "near", "far"]
 
-    keywords = (['struct', 'enum', 'union', '__stdcall', '__cdecl'] +
-                qualifiers + base_types + size_modifiers + sign_modifiers)
+    keywords = (
+        ["struct", "enum", "union", "__stdcall", "__cdecl"]
+        + qualifiers
+        + base_types
+        + size_modifiers
+        + sign_modifiers
+    )
 
     keyword = kwl(keywords)
-    wordchars = alphanums+'_$'
-    ident = (WordStart(wordchars) + ~keyword +
-             Word(alphas + "_", alphanums + "_$") +
-             WordEnd(wordchars)).setParseAction(lambda t: t[0])
+    wordchars = alphanums + "_$"
+    ident = (
+        WordStart(wordchars)
+        + ~keyword
+        + Word(alphas + "_", alphanums + "_$")
+        + WordEnd(wordchars)
+    ).setParseAction(lambda t: t[0])
 
-    call_conv = Optional(Keyword('__cdecl') |
-                         Keyword('__stdcall'))('call_conv')
+    call_conv = Optional(Keyword("__cdecl") | Keyword("__stdcall"))("call_conv")
 
     # Removes '__name' from all type specs. may cause trouble.
-    underscore_2_ident = (WordStart(wordchars) + ~keyword + '__' +
-                          Word(alphanums, alphanums+"_$") +
-                          WordEnd(wordchars)).setParseAction(lambda t: t[0])
-    type_qualifier = ZeroOrMore((underscore_2_ident + Optional(nestedExpr())) |
-                                kwl(qualifiers))
+    underscore_2_ident = (
+        WordStart(wordchars)
+        + ~keyword
+        + "__"
+        + Word(alphanums, alphanums + "_$")
+        + WordEnd(wordchars)
+    ).setParseAction(lambda t: t[0])
+    type_qualifier = ZeroOrMore(
+        (underscore_2_ident + Optional(nestedExpr())) | kwl(qualifiers)
+    )
 
     storage_class_spec = Optional(kwl(storage_classes))
 
     if extra_modifiers:
-        extra_modifier = ZeroOrMore(kwl(extra_modifiers) +
-                                    Optional(nestedExpr())).suppress()
+        extra_modifier = ZeroOrMore(
+            kwl(extra_modifiers) + Optional(nestedExpr())
+        ).suppress()
 
     else:
         extra_modifier = None
 
     # Language elements
-    fund_type = OneOrMore(kwl(sign_modifiers + size_modifiers +
-                              base_types)).setParseAction(lambda t: ' '.join(t))
+    fund_type = OneOrMore(
+        kwl(sign_modifiers + size_modifiers + base_types)
+    ).setParseAction(lambda t: " ".join(t))
 
     # Is there a better way to process expressions with cast operators??
     cast_atom = (
-        ZeroOrMore(uni_left_operator) + Optional('('+ident+')').suppress() +
-        ((ident + '(' + Optional(delimitedList(expression)) + ')' |
-          ident + OneOrMore('[' + expression + ']') |
-          ident | number | quotedString
-          ) |
-         ('(' + expression + ')')) +
-        ZeroOrMore(uni_right_operator)
+        ZeroOrMore(uni_left_operator)
+        + Optional("(" + ident + ")").suppress()
+        + (
+            (
+                ident + "(" + Optional(delimitedList(expression)) + ")"
+                | ident + OneOrMore("[" + expression + "]")
+                | ident
+                | number
+                | quotedString
+            )
+            | ("(" + expression + ")")
         )
+        + ZeroOrMore(uni_right_operator)
+    )
 
     uncast_atom = (
-        ZeroOrMore(uni_left_operator) +
-        ((ident + '(' + Optional(delimitedList(expression)) + ')' |
-          ident + OneOrMore('[' + expression + ']') |
-          ident | number | quotedString
-          ) |
-         ('(' + expression + ')')) +
-        ZeroOrMore(uni_right_operator)
+        ZeroOrMore(uni_left_operator)
+        + (
+            (
+                ident + "(" + Optional(delimitedList(expression)) + ")"
+                | ident + OneOrMore("[" + expression + "]")
+                | ident
+                | number
+                | quotedString
+            )
+            | ("(" + expression + ")")
         )
+        + ZeroOrMore(uni_right_operator)
+    )
 
     atom = cast_atom | uncast_atom
 
