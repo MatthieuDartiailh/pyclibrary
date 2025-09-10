@@ -719,6 +719,15 @@ class CParser(object):
     # --- Processing functions
     # =========================================================================
 
+    def find_struct_name(self, lines, n_line):
+        pattern = r"}\s*([a-zA-Z_]\w*);"
+        regex = re.compile(pattern)
+        for line_number, line in enumerate(lines[n_line - 1 :]):
+            match = regex.search(line)
+            if match:
+                return match.group(1)
+        return ""
+
     def extract_comments(self, path):
         """Extract comments of structure attributes from file and save them.
 
@@ -726,18 +735,40 @@ class CParser(object):
 
         """
         # Create a Regex to match `type name; /// comment` (for instance `float max_regen_current; /// Negative value (A)`)
-        type_parser = Word(alphanums + '_')
-        name_parser = Word(alphanums + '_[]') + FollowedBy(';')
-        comment_parser = Regex(r'([^\n]+)')
-        attr_expression = type_parser + name_parser + Suppress(';') + Suppress('///') + comment_parser
+        type_parser = Word(alphanums + "_")
+        name_parser = Word(alphanums + "_[]") + FollowedBy(";")
+        comment_parser = Regex(r"([^\n]+)")
+        attr_expression = (
+            type_parser + name_parser + Suppress(";") + Suppress("///") + comment_parser
+        )
 
-        # Find all lines of file_content matching that Regex
         file_content = self.files[path]
-        lines = attr_expression.searchString(file_content).asList()
-        for line in lines:
-            name = line[1].split('[')[0] # name of the property; if it's an array, keep only the part before the opening bracket
-            comment = line[2]
-            self.add_def('comments', name, comment)
+
+        # Split file content into lines
+        lines = file_content.split("\n")
+
+        # Track line numbers and matched lines
+        matched_lines = []
+        for line_number, line in enumerate(lines, start=1):
+            try:
+                # Attempt to parse the line
+                parsed_line = attr_expression.parseString(line, parseAll=True)
+                matched_lines.append((line_number, parsed_line.asList()))
+            except:
+                # Skip lines that don't match the pattern
+                continue
+        for line_number, parsed_line in matched_lines:
+            member_name = parsed_line[
+                1
+            ].split(
+                "["
+            )[
+                0
+            ]  # name of the property; if it's an array, keep only the part before the opening bracket
+            comment = parsed_line[2]
+            struct_name = self.find_struct_name(lines, line_number)
+            key = struct_name + "_" + member_name
+            self.add_def("comments", key, comment)
 
     def remove_comments(self, path):
         """Remove all comments from file.
