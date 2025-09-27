@@ -1248,6 +1248,9 @@ class CParser(object):
             )
         )
 
+        # https://en.cppreference.com/w/cpp/language/type-id.html#Type_naming
+        sizeof_types << self.abstract_declarator
+
         # Declarators look like:
         #     varName
         #     *varName
@@ -1803,7 +1806,7 @@ number = floating | integer
 # Miscelaneous
 bi_operator = oneOf("+ - / * | & || && ! ~ ^ % == != > < >= <= -> . :: << >> = ? :")
 uni_right_operator = oneOf("++ --")
-uni_left_operator = oneOf("++ -- - + * sizeof new")
+uni_left_operator = oneOf("++ -- - + * new")
 wordchars = alphanums + "_$"
 name = WordStart(wordchars) + Word(alphas + "_", alphanums + "_$") + WordEnd(wordchars)
 size_modifiers = ["short", "long"]
@@ -1820,6 +1823,7 @@ storage_class_spec = None
 extra_modifier = None
 fund_type = None
 extra_type_list = []
+sizeof_types = Forward()
 
 c99_int_types = [
     "int8_t",
@@ -1939,7 +1943,7 @@ def _init_cparser(extra_types=None, extra_modifiers=None):
         + ZeroOrMore(uni_right_operator)
     )
 
-    atom = cast_atom | uncast_atom
+    atom = ("sizeof" + expression) | ("sizeof" + sizeof_types) | cast_atom | uncast_atom
 
     expression << Group(atom + ZeroOrMore(bi_operator + atom))
     expression.setParseAction(recombine)
