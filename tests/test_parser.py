@@ -604,6 +604,14 @@ class TestParsing(object):
             1,
             Type("unsigned long long int"),
         )
+        assert "long_long_int_upper" in variables and variables["long_long_int_upper"] == (
+            1,
+            Type("unsigned long " "long int"),
+        )
+        assert "long_long_int_lower" in variables and variables["long_long_int_lower"] == (
+            1,
+            Type("unsigned long " "long int"),
+        )
 
         # stddef integers
         assert "size" in variables and variables["size"] == (
