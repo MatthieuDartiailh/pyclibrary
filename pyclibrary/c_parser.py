@@ -1789,9 +1789,9 @@ lparen = Literal("(").ignore(quotedString).suppress()
 rparen = Literal(")").ignore(quotedString).suppress()
 
 # Numbers
-int_strip = lambda t: t[0].rstrip("UL")  # noqa
-hexint = Regex(r"[+-]?\s*0[xX][{}]+[UL]*".format(hexnums)).setParseAction(int_strip)
-decint = Regex(r"[+-]?\s*[0-9]+[UL]*").setParseAction(int_strip)
+int_strip = lambda t: t[0].rstrip("UuLl")  # noqa
+hexint = Regex(r"[+-]?\s*0[xX][{}]+[UuLl]*".format(hexnums)).setParseAction(int_strip)
+decint = Regex(r"[+-]?\s*[0-9]+[UuLl]*").setParseAction(int_strip)
 integer = hexint | decint
 # The floating regex is ugly but it is because we do not want to match
 # integer to it.

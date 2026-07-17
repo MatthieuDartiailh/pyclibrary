@@ -21,6 +21,8 @@ long long long_long = 1;
 long long int long_long_int = 1;
 unsigned long long long_long_un = 1;
 unsigned long long int long_long_int_un = 1;
+unsigned long long int long_long_int_upper = 1ULL;
+unsigned long long int long_long_int_lower = 1ull;
 
 // stddef integers
 size_t size = 1;
