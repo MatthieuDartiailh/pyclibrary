@@ -82,7 +82,7 @@ jobs:
           from packaging.version import Version
 
           branch = os.environ["RELEASE_BRANCH"]
-          match = re.fullmatch(r"release-notes-(\d+\.\d+\.\d+(?:[-.][0-9A-Za-z]+)*)", branch)
+          match = re.fullmatch(r"release-notes-(\d+\.\d+\.\d+(?:[-.0-9A-Za-z]+)*)", branch)
           if match is None:
               raise SystemExit(f"Unexpected release branch: {branch}")
 
