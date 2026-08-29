@@ -77,13 +77,16 @@ jobs:
         run: |
           python - <<'PY'
           import os
+          import re
+
           from packaging.version import Version
 
           branch = os.environ["RELEASE_BRANCH"]
-          if not branch.startswith("release-notes-"):
+          match = re.fullmatch(r"release-notes-(\d+\.\d+\.\d+(?:[-.][0-9A-Za-z]+)*)", branch)
+          if match is None:
               raise SystemExit(f"Unexpected release branch: {branch}")
 
-          version = branch.removeprefix("release-notes-")
+          version = match.group(1)
           try:
               Version(version)
           except Exception as exc:
