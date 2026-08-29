@@ -72,11 +72,14 @@ jobs:
       - name: Extract release version
         id: version
         env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
+          RELEASE_BRANCH: ${{ github.event.pull_request.head.ref }}
         shell: bash
         run: |
-          title="${PR_TITLE}"
-          version="${title#Prepare release notes for }"
+          version="${RELEASE_BRANCH#release-notes-}"
+          if [ -z "${version}" ]; then
+            echo "Unexpected release branch: ${RELEASE_BRANCH}" >&2
+            exit 1
+          fi
           echo "version=${version}" >> "$GITHUB_OUTPUT"
       - name: Create and push tag
         env:
