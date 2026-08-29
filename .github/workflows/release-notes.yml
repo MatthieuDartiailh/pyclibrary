@@ -75,9 +75,13 @@ jobs:
           RELEASE_BRANCH: ${{ github.event.pull_request.head.ref }}
         shell: bash
         run: |
-          version="${RELEASE_BRANCH#release-notes-}"
-          if [ -z "${version}" ]; then
+          if [[ "${RELEASE_BRANCH}" != release-notes-* ]]; then
             echo "Unexpected release branch: ${RELEASE_BRANCH}" >&2
+            exit 1
+          fi
+          version="${RELEASE_BRANCH#release-notes-}"
+          if [[ -z "${version}" ]]; then
+            echo "Release branch version is empty: ${RELEASE_BRANCH}" >&2
             exit 1
           fi
           echo "version=${version}" >> "$GITHUB_OUTPUT"
