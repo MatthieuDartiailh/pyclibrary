@@ -79,7 +79,7 @@ jobs:
           import os
           import re
 
-          from packaging.version import Version
+          from packaging.version import InvalidVersion, Version
 
           branch = os.environ["RELEASE_BRANCH"]
           match = re.fullmatch(r"release-notes-(.+)", branch)
@@ -89,7 +89,7 @@ jobs:
           version = match.group(1)
           try:
               version = str(Version(version))
-          except Exception as exc:
+          except InvalidVersion as exc:
               raise SystemExit(f"Invalid release version: {version}") from exc
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
