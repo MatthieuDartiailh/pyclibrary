@@ -88,9 +88,9 @@ jobs:
 
           version = match.group(1)
           try:
-              Version(version)
+              version = str(Version(version))
           except Exception as exc:
-              raise SystemExit(f"Invalid release version: {version}") from exc
+              raise SystemExit(f"Invalid release version: {match.group(1)}") from exc
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write(f"version={version}\n")
