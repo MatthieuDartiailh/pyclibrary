@@ -86,7 +86,7 @@ jobs:
           version = branch.removeprefix("release-notes-")
           try:
               Version(version)
-          except Exception as exc:  # pragma: no cover - exercised by workflow validation.
+          except Exception as exc:
               raise SystemExit(f"Invalid release version: {version}") from exc
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
