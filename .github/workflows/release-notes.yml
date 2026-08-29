@@ -75,7 +75,6 @@ jobs:
           RELEASE_BRANCH: ${{ github.event.pull_request.head.ref }}
         shell: bash
         run: |
-          python -m pip install --upgrade packaging
           python - <<'PY'
           import os
           import re
