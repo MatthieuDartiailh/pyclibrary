@@ -84,7 +84,10 @@ jobs:
               raise SystemExit(f"Unexpected release branch: {branch}")
 
           version = branch.removeprefix("release-notes-")
-          Version(version)
+          try:
+              Version(version)
+          except Exception as exc:  # pragma: no cover - exercised by workflow validation.
+              raise SystemExit(f"Invalid release version: {version}") from exc
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write(f"version={version}\n")
