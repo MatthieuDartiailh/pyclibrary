@@ -95,7 +95,7 @@ jobs:
               raise SystemExit(f"Invalid release version: {version}") from exc
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
-              output.write(f"version<<EOF\n{version}\nEOF\n")
+              output.write(f"version={version}\n")
           PY
       - name: Create and push tag
         env:
