@@ -85,7 +85,7 @@ def find_header(h_name, dirs=None):
             )
         )
 
-    if sys.platform == "linux2":
+    if sys.platform.startswith("linux"):
         dirs.extend(("/usr/local/include", "/usr/target/include", "/usr/include"))
 
     for d in dirs:
