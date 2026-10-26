@@ -508,6 +508,10 @@ class TestPreprocessing(object):
         assert "SETBIT_AUTO" in fnmacros
         assert "int z3 = ((((3) |= (0x01)), ((3) |= (0x01))));" in stream
 
+        # Test calling a macro function with arguments containing parentheses
+        assert "ADD" in fnmacros
+        assert "int w = (((1)) + (2*2));" in stream
+
     def test_pragmas(self):
         path = os.path.join(self.h_dir, "pragmas.h")
         self.parser.load_file(path)
