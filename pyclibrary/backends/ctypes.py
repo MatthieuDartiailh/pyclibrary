@@ -224,7 +224,7 @@ class CTypesCLibrary(CLibrary):
                 seen = mods[0]
                 for m in mods[1:]:
                     if isinstance(seen, list) and isinstance(m, list):
-                        seen += m
+                        seen = seen + m
                     else:
                         n_mods.append(seen)
                         seen = m
