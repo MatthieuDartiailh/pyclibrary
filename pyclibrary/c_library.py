@@ -490,7 +490,7 @@ class CFunction(object):
 
         try:
             if self.lock_call:
-                with self.lib.lock:
+                with self.lib._lock_:
                     res = self.func(*arg_list)
             else:
                 res = self.func(*arg_list)

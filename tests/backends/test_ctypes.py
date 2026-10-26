@@ -111,6 +111,15 @@ class TestCTypesCLibrary(object):
         assert type(pyc_array) is type(c_array)
         assert pyc_array[0] == c_array[0]
 
+    def test_function_call_with_lock(self):
+        """Test calling a function when calls are locked."""
+        type(self.library).libs.clear()
+        library = CLibrary(_ctypes_test.__file__, ["ctypes_test.h"], lock_calls=True)
+        try:
+            assert library.get_an_integer()() == 42
+        finally:
+            type(library).libs.clear()
+
 
 class TestCachedCTypesLibrary(TestCTypesCLibrary):
     """Run test on cached headers."""
