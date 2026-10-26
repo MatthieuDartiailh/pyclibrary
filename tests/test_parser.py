@@ -465,6 +465,12 @@ class TestPreprocessing(object):
         assert "NO_DEFINE_LOG" not in macros
         assert "NO_DEFINE_LOG" not in macros
 
+        # Test not equal
+        assert "DEFINE_NEQ" in macros
+        assert "  int DECLARE_NEQ;\n" in stream
+        assert "NO_DEFINE_NEQ" not in macros
+        assert "  int NO_DECLARE_NEQ;\n" not in stream
+
         # Test undef
         assert "DEFINE_UNDEF" in macros
         assert "UNDEF" not in macros
