@@ -266,7 +266,7 @@ class CLibrary(object, metaclass=CLibraryMeta):
 
         for n in names:
             if n in objs:
-                return self.objs[n]
+                return objs[n]
 
         for n in names:  # try with and without prefix
             if n not in self._defs_[typ] and not (
