@@ -1029,6 +1029,7 @@ class CParser(object):
             Literal("!").setParseAction(lambda: " not ")
             | Literal("&&").setParseAction(lambda: " and ")
             | Literal("||").setParseAction(lambda: " or ")
+            | integer
             | Word(alphas + "_", alphanums + "_").setParseAction(lambda: "0")
         )
         expr2 = macro_diffs.transformString(expr).strip()
