@@ -1,0 +1,1 @@
+Adopt hatchling-based packaging together with towncrier-managed release notes and a manual release workflow.
