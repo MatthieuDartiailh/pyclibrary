@@ -60,6 +60,11 @@ class TestCTypesCLibrary(object):
     def test_make_ndarray(self):
         assert "Array_20_Array_10" in str(self.library.T.names)
 
+    def test_make_array_of_array_typedef(self):
+        """Test that building a typedef does not alter the typedef it uses."""
+        assert ctypes.sizeof(self.library.Grid) == 6 * ctypes.sizeof(ctypes.c_int)
+        assert ctypes.sizeof(self.library.Row) == 3 * ctypes.sizeof(ctypes.c_int)
+
     def test_function_call1(self):
         # Test calling a function taking no arguments.
         res = self.library.get_an_integer()
