@@ -37,3 +37,7 @@ int z1, z2 = SETBITS(1, 2); // This is incorrect but can be preprocessed.
 // Test defining a macro function calling nested macro functions
 #define SETBIT_AUTO(x) (SETBITS(x, x))
 int z3 = SETBIT_AUTO(3);
+
+// Test macro function arguments containing parentheses
+#define ADD(a, b) ((a) + (b))
+int w = ADD((1), CARRE(2));
