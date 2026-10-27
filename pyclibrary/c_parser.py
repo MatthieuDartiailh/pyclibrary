@@ -1026,9 +1026,11 @@ class CParser(object):
     def eval_preprocessor_expr(self, expr):
         # Make a few alterations so the expression can be eval'd
         macro_diffs = (
-            Literal("!").setParseAction(lambda: " not ")
+            Literal("!=")
+            | Literal("!").setParseAction(lambda: " not ")
             | Literal("&&").setParseAction(lambda: " and ")
             | Literal("||").setParseAction(lambda: " or ")
+            | integer
             | Word(alphas + "_", alphanums + "_").setParseAction(lambda: "0")
         )
         expr2 = macro_diffs.transformString(expr).strip()
@@ -1139,9 +1141,25 @@ class CParser(object):
         defn = self.defs["fnmacros"][name]
 
         try:
-            args, end = text.split(")", 1)
-            _, args = args.split("(", 1)
-            args = [a.strip() for a in args.split(",")]
+            # Split the arguments on top level commas, up to the closing paren.
+            _, text = text.split("(", 1)
+            args = [""]
+            depth = 0
+            for i, c in enumerate(text):
+                if c == "," and depth == 0:
+                    args.append("")
+                    continue
+                if c == "(":
+                    depth += 1
+                elif c == ")":
+                    if depth == 0:
+                        break
+                    depth -= 1
+                args[-1] += c
+            else:
+                raise ValueError("No closing parenthesis")
+            end = text[i + 1 :]
+            args = [a.strip() for a in args]
         except Exception:
             mess = "Function macro {} argument analysis failed :\n{}"
             raise DefinitionError(0, mess.format(name, format_exc()))

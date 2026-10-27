@@ -465,9 +465,21 @@ class TestPreprocessing(object):
         assert "NO_DEFINE_LOG" not in macros
         assert "NO_DEFINE_LOG" not in macros
 
+        # Test not equal
+        assert "DEFINE_NEQ" in macros
+        assert "  int DECLARE_NEQ;\n" in stream
+        assert "NO_DEFINE_NEQ" not in macros
+        assert "  int NO_DECLARE_NEQ;\n" not in stream
+
         # Test undef
         assert "DEFINE_UNDEF" in macros
         assert "UNDEF" not in macros
+
+        # Test integer literals
+        assert "DEFINE_INT_LIT" in macros
+        assert "  int DECLARE_INT_LIT;\n" in stream
+        assert "NO_DEFINE_INT_LIT" not in macros
+        assert "  int NO_DECLARE_INT_LIT;\n" not in stream
 
     def test_macro_function(self):
         path = os.path.join(self.h_dir, "macro_functions.h")
@@ -507,6 +519,10 @@ class TestPreprocessing(object):
         # Test defining a macro function calling nested macro functions
         assert "SETBIT_AUTO" in fnmacros
         assert "int z3 = ((((3) |= (0x01)), ((3) |= (0x01))));" in stream
+
+        # Test calling a macro function with arguments containing parentheses
+        assert "ADD" in fnmacros
+        assert "int w = (((1)) + (2*2));" in stream
 
     def test_pragmas(self):
         path = os.path.join(self.h_dir, "pragmas.h")
@@ -604,13 +620,17 @@ class TestParsing(object):
             1,
             Type("unsigned long long int"),
         )
-        assert "long_long_int_upper" in variables and variables["long_long_int_upper"] == (
+        assert "long_long_int_upper" in variables and variables[
+            "long_long_int_upper"
+        ] == (
             1,
-            Type("unsigned long " "long int"),
+            Type("unsigned long long int"),
         )
-        assert "long_long_int_lower" in variables and variables["long_long_int_lower"] == (
+        assert "long_long_int_lower" in variables and variables[
+            "long_long_int_lower"
+        ] == (
             1,
-            Type("unsigned long " "long int"),
+            Type("unsigned long long int"),
         )
 
         # stddef integers

@@ -60,6 +60,11 @@ class TestCTypesCLibrary(object):
     def test_make_ndarray(self):
         assert "Array_20_Array_10" in str(self.library.T.names)
 
+    def test_make_array_of_array_typedef(self):
+        """Test that building a typedef does not alter the typedef it uses."""
+        assert ctypes.sizeof(self.library.Grid) == 6 * ctypes.sizeof(ctypes.c_int)
+        assert ctypes.sizeof(self.library.Row) == 3 * ctypes.sizeof(ctypes.c_int)
+
     def test_function_call1(self):
         # Test calling a function taking no arguments.
         res = self.library.get_an_integer()
@@ -110,6 +115,15 @@ class TestCTypesCLibrary(object):
         c_array = (ctypes.c_void_p * 2)(1, 2)
         assert type(pyc_array) is type(c_array)
         assert pyc_array[0] == c_array[0]
+
+    def test_function_call_with_lock(self):
+        """Test calling a function when calls are locked."""
+        type(self.library).libs.clear()
+        library = CLibrary(_ctypes_test.__file__, ["ctypes_test.h"], lock_calls=True)
+        try:
+            assert library.get_an_integer()() == 42
+        finally:
+            type(library).libs.clear()
 
 
 class TestCachedCTypesLibrary(TestCTypesCLibrary):

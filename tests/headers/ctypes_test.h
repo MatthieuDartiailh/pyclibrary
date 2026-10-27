@@ -29,6 +29,9 @@ typedef struct {
     char names[10][20];
 } T;
 
+typedef int Row[3];
+typedef Row Grid[2];
+
 typedef struct {
     char *name;
     char *value;

@@ -94,9 +94,27 @@
   int DECLARE_LOG;
 #endif
 
+// Test not equal
+#if VAL1 != 6
+  #define NO_DEFINE_NEQ
+  int NO_DECLARE_NEQ;
+#elif VAL1 != 5
+  #define DEFINE_NEQ
+  int DECLARE_NEQ;
+#endif
+
 // Test undef
 #define UNDEF
 #ifdef UNDEF
     #define DEFINE_UNDEF
 #endif
 #undef UNDEF
+
+// Test integer literals
+#if 0x10 == 16 && 1UL == 1
+  #define DEFINE_INT_LIT
+  int DECLARE_INT_LIT;
+#else
+  #define NO_DEFINE_INT_LIT
+  int NO_DECLARE_INT_LIT;
+#endif
