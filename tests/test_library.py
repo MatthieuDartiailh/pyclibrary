@@ -72,7 +72,13 @@ class TestCLibrary(object):
         assert library is CLibrary(_ctypes_test.__file__, ["ctypes_test.h"])
 
     def test_accessing_prefixed_value(self):
-        pass
+        CLibrary.libs.clear()
+        library = CLibrary(_ctypes_test.__file__, ["ctypes_test.h"], prefix="an_")
+        try:
+            assert library("values", "an_integer") == 42
+            assert library("values", "integer") == 42
+        finally:
+            CLibrary.libs.clear()
 
 
 def test_function_pretty_signature():
