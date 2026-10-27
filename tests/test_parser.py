@@ -475,6 +475,12 @@ class TestPreprocessing(object):
         assert "DEFINE_UNDEF" in macros
         assert "UNDEF" not in macros
 
+        # Test integer literals
+        assert "DEFINE_INT_LIT" in macros
+        assert "  int DECLARE_INT_LIT;\n" in stream
+        assert "NO_DEFINE_INT_LIT" not in macros
+        assert "  int NO_DECLARE_INT_LIT;\n" not in stream
+
     def test_macro_function(self):
         path = os.path.join(self.h_dir, "macro_functions.h")
         self.parser.load_file(path)
