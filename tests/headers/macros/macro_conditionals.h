@@ -94,6 +94,15 @@
   int DECLARE_LOG;
 #endif
 
+// Test not equal
+#if VAL1 != 6
+  #define NO_DEFINE_NEQ
+  int NO_DECLARE_NEQ;
+#elif VAL1 != 5
+  #define DEFINE_NEQ
+  int DECLARE_NEQ;
+#endif
+
 // Test undef
 #define UNDEF
 #ifdef UNDEF

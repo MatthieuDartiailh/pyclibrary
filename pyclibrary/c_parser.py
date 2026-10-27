@@ -1026,7 +1026,8 @@ class CParser(object):
     def eval_preprocessor_expr(self, expr):
         # Make a few alterations so the expression can be eval'd
         macro_diffs = (
-            Literal("!").setParseAction(lambda: " not ")
+            Literal("!=")
+            | Literal("!").setParseAction(lambda: " not ")
             | Literal("&&").setParseAction(lambda: " and ")
             | Literal("||").setParseAction(lambda: " or ")
             | Word(alphas + "_", alphanums + "_").setParseAction(lambda: "0")
