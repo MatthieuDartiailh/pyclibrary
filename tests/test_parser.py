@@ -830,6 +830,13 @@ class TestParsing(object):
             Type("void"), (("e", Type("enum enum_name"), None),)
         )
 
+        # Digits and integer suffixes inside a name are not literals (#58).
+        values = self.parser.defs["values"]
+        assert values["A1L2"] == 0
+        assert values["A"] == 0
+        assert values["B0x1F"] == 3
+        assert values["C"] == 3
+
     def test_struct(self):
         path = os.path.join(self.h_dir, "structs.h")
         self.parser.load_file(path)

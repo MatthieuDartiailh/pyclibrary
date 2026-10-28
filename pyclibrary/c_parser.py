@@ -1810,8 +1810,12 @@ rparen = Literal(")").ignore(quotedString).suppress()
 
 # Numbers
 int_strip = lambda t: t[0].rstrip("UuLl")  # noqa
-hexint = Regex(r"[+-]?\s*0[xX][{}]+[UuLl]*".format(hexnums)).setParseAction(int_strip)
-decint = Regex(r"[+-]?\s*[0-9]+[UuLl]*").setParseAction(int_strip)
+# The lookarounds keep a literal from starting or ending inside a name, so the
+# "1L" in "A1L2" is not read as a number.
+hexint = Regex(
+    r"(?<![\w$])[+-]?\s*0[xX][{}]+[UuLl]*(?![\w$])".format(hexnums)
+).setParseAction(int_strip)
+decint = Regex(r"(?<![\w$])[+-]?\s*[0-9]+[UuLl]*(?![\w$])").setParseAction(int_strip)
 integer = hexint | decint
 # The floating regex is ugly but it is because we do not want to match
 # integer to it.

@@ -23,4 +23,12 @@ typedef enum
     typedef_enum2
 } no_name_enum_typeddef;
 
+typedef enum digits_in_names
+{
+    A1L2,
+    A = A1L2,
+    B0x1F = 3,
+    C = B0x1F
+} digits_in_names;
+
 void function_taking_enum(enum enum_name e);
