@@ -14,6 +14,7 @@ This actually needs ctypes to make sense but it affects all wrappers.
 import _ctypes_test
 import ctypes
 import os
+import pathlib
 
 import pytest
 from pyclibrary.c_library import CLibrary
@@ -58,6 +59,11 @@ class TestCLibrary(object):
 
     def test_accessing_library_by_path(self):
         library = CLibrary(_ctypes_test.__file__, ["ctypes_test.h"])
+        assert library._lib_
+
+    def test_accessing_library_by_pathlib_path(self):
+        CLibrary.libs.clear()
+        library = CLibrary(pathlib.Path(_ctypes_test.__file__), ["ctypes_test.h"])
         assert library._lib_
 
     def test_accessing_library_by_object(self):
