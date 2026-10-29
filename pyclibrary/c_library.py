@@ -53,6 +53,8 @@ class CLibraryMeta(type):
 
     def __call__(cls, lib, *args, **kwargs):
         # Identify the library path.
+        if isinstance(lib, os.PathLike):
+            lib = os.fspath(lib)
         if isinstance(lib, str):
             if os.sep not in lib:
                 lib_path = find_library(lib).path
