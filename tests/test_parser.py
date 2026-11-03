@@ -996,3 +996,17 @@ class TestParsing(object):
         assert functions.get("typeQualedFunc") == Type(
             Type("int"), ((None, ptyp, None),)
         )
+
+        # A name starting with "__" is still the declared name (#53).
+        assert functions.get("underscoreNames") == Type(
+            Type("int"),
+            (
+                ("__flags", Type("unsigned"), None),
+                ("__dest", Type("char", "*", type_quals=((), ("__",))), None),
+            ),
+        )
+        assert self.parser.defs["structs"]["underscore_members"] == Struct(
+            ("_ok", Type("int"), None),
+            ("__fail", Type("int"), None),
+            ("__arr", Type("char", [2]), None),
+        )

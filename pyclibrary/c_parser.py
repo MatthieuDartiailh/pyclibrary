@@ -1903,12 +1903,15 @@ def _init_cparser(extra_types=None, extra_modifiers=None):
     call_conv = Optional(Keyword("__cdecl") | Keyword("__stdcall"))("call_conv")
 
     # Removes '__name' from all type specs. may cause trouble.
+    # A '__name' right before ';', ',', ')', '[', '=' or ':' is the name being
+    # declared (e.g. 'unsigned __flags'), not a qualifier.
     underscore_2_ident = (
         WordStart(wordchars)
         + ~keyword
         + "__"
         + Word(alphanums, alphanums + "_$")
         + WordEnd(wordchars)
+        + ~oneOf("; , ) [ = :")
     ).setParseAction(lambda t: t[0])
     type_qualifier = ZeroOrMore(
         (underscore_2_ident + Optional(nestedExpr())) | kwl(qualifiers)
