@@ -11,6 +11,7 @@ function signatures from C header files.
 
 """
 
+import ast
 import logging
 import os
 import re
@@ -1680,7 +1681,10 @@ class CParser(object):
         expr = (quotedString | number | cast).transformString(expr)
         if expr == "":
             return None
-        return eval(expr, *args)
+        # Use C division: an integer divided by an integer stays an integer.
+        tree = _CDivision().visit(ast.parse(expr, mode="eval"))
+        code = compile(ast.fix_missing_locations(tree), "<expr>", "eval")
+        return eval(code, *args)
 
     def add_def(self, typ, name, val):
         """Add a definition of a specific type to both the definition set for
@@ -1774,6 +1778,28 @@ def flatten(lst):
         else:
             res.append(str(i))
     return res
+
+
+def _c_div(a, b):
+    """Divide like C: integer division truncates toward zero."""
+    if isinstance(a, int) and isinstance(b, int):
+        q = abs(a) // abs(b)
+        return q if (a < 0) == (b < 0) else -q
+    return a / b
+
+
+class _CDivision(ast.NodeTransformer):
+    """Turn every "a / b" into "_c_div(a, b)"."""
+
+    def visit_BinOp(self, node):
+        self.generic_visit(node)
+        if isinstance(node.op, ast.Div):
+            return ast.Call(
+                func=ast.Name(id="_c_div", ctx=ast.Load()),
+                args=[node.left, node.right],
+                keywords=[],
+            )
+        return node
 
 
 def recombine(tok):

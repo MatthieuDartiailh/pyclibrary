@@ -73,3 +73,9 @@ const int * volatile * typeQualedIntPtrPtr, volatile * typeQualedIntPtr;
 
 // Test type definition precedence
 int (*prec_ptr_of_arr)[1], *(prec_arr_of_ptr[1]), *prec_arr_of_ptr2[1];
+
+// Integer division truncates toward zero, as in C
+int int_div = 9 / 2;
+int neg_int_div = -9 / 2;
+double float_div = 9.0 / 2;
+char int_div_arr[9 / 2];
