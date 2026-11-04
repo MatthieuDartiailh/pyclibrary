@@ -755,6 +755,8 @@ class TestParsing(object):
         assert variables.get("neg_int_div") == (-4, Type("int"))
         assert variables.get("float_div") == (4.5, Type("double"))
         assert variables.get("int_div_arr") == (None, Type("char", [4]))
+        assert variables.get("float_div_mod") == (9.0, Type("float"))
+        assert variables.get("neg_int_mod") == (-1, Type("int"))
 
     # No structure, no unions, no enum
     def test_typedef(self):
