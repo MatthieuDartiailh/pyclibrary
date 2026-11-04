@@ -1788,14 +1788,27 @@ def _c_div(a, b):
     return a / b
 
 
+def _c_mod(a, b):
+    """Calculate the remainder like C, with a sign matching the dividend."""
+    if isinstance(a, int) and isinstance(b, int):
+        return a - _c_div(a, b) * b
+    return a % b
+
+
 class _CDivision(ast.NodeTransformer):
-    """Turn every "a / b" into "_c_div(a, b)"."""
+    """Turn division and modulo into their C semantic equivalents."""
 
     def visit_BinOp(self, node):
         self.generic_visit(node)
         if isinstance(node.op, ast.Div):
             return ast.Call(
                 func=ast.Name(id="_c_div", ctx=ast.Load()),
+                args=[node.left, node.right],
+                keywords=[],
+            )
+        if isinstance(node.op, ast.Mod):
+            return ast.Call(
+                func=ast.Name(id="_c_mod", ctx=ast.Load()),
                 args=[node.left, node.right],
                 keywords=[],
             )

@@ -79,3 +79,5 @@ int int_div = 9 / 2;
 int neg_int_div = -9 / 2;
 double float_div = 9.0 / 2;
 char int_div_arr[9 / 2];
+float float_div_mod = (9 / 2) * 2 + 9 % 2;
+int neg_int_mod = -9 % 2; // -1
