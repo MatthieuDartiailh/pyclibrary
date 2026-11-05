@@ -1912,7 +1912,7 @@ def _init_cparser(extra_types=None, extra_modifiers=None):
         + Word(alphanums, alphanums + "_$")
         + WordEnd(wordchars)
         + ~oneOf("; , ) [ = :")
-    ).setParseAction(lambda t: t[0])
+    ).setParseAction(lambda t: "".join(t))
     type_qualifier = ZeroOrMore(
         (underscore_2_ident + Optional(nestedExpr())) | kwl(qualifiers)
     )

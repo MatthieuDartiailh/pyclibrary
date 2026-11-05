@@ -1002,7 +1002,7 @@ class TestParsing(object):
             Type("int"),
             (
                 ("__flags", Type("unsigned"), None),
-                ("__dest", Type("char", "*", type_quals=((), ("__",))), None),
+                ("__dest", Type("char", "*", type_quals=((), ("__restrict",))), None),
             ),
         )
         assert self.parser.defs["structs"]["underscore_members"] == Struct(
