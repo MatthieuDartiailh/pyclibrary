@@ -28,3 +28,7 @@ extern int externFunc(void);
 
 //define typequals in abstract typedef
 int typeQualedFunc(int volatile * const *);
+
+// Names starting with two underscores, as in system headers.
+int underscoreNames(unsigned __flags, char *__restrict __dest);
+struct underscore_members { int _ok; int __fail; char __arr[2]; };
