@@ -750,6 +750,14 @@ class TestParsing(object):
         assert variables.get("prec_arr_of_ptr") == (None, Type("int", "*", [1]))
         assert variables.get("prec_arr_of_ptr2") == (None, Type("int", "*", [1]))
 
+        # Integer division truncates toward zero, as in C (#65)
+        assert variables.get("int_div") == (4, Type("int"))
+        assert variables.get("neg_int_div") == (-4, Type("int"))
+        assert variables.get("float_div") == (4.5, Type("double"))
+        assert variables.get("int_div_arr") == (None, Type("char", [4]))
+        assert variables.get("float_div_mod") == (9.0, Type("float"))
+        assert variables.get("neg_int_mod") == (-1, Type("int"))
+
     # No structure, no unions, no enum
     def test_typedef(self):
         path = os.path.join(self.h_dir, "typedefs.h")
