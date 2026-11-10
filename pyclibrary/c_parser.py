@@ -1880,7 +1880,7 @@ type_qualifier = None
 storage_class_spec = None
 extra_modifier = None
 fund_type = None
-extra_type_list = []
+extra_type_list: list[str] = []
 
 c99_int_types = [
     "int8_t",
