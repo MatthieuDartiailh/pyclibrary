@@ -131,7 +131,7 @@ __version__ = "{version}"
     showcontent = true
 
   [[tool.towncrier.type]]
-    directory = "removals"
+    directory = "removal"
     name = "Removals"
     showcontent = true
 
