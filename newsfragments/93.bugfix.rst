@@ -1,0 +1,1 @@
+Fixed the `NameError` raised when `lock_calls=True` is enabled during function calls.

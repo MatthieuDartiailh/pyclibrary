@@ -1,0 +1,1 @@
+Searched the system include directories on Linux when resolving headers in `find_header`.

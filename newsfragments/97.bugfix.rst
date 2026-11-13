@@ -1,0 +1,1 @@
+Fixed hex and suffixed integer literals in `#if` conditions.
