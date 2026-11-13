@@ -1,0 +1,1 @@
+Refreshed GitHub Actions versions and updated linting configuration to match the latest Ruff and runner tooling.

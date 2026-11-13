@@ -1,0 +1,1 @@
+Stopped reading digits inside names as integer literals when parsing C identifiers.

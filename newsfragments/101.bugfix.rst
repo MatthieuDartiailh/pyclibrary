@@ -1,0 +1,1 @@
+Accepted path-like objects such as `pathlib.Path` in `CLibrary` for file and header lookups.

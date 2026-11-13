@@ -96,7 +96,7 @@ def find_header(h_name, dirs=None):
     raise OSError("Can't find header with h_name {}".format(h_name))
 
 
-LIBRARY_DIRS = []
+LIBRARY_DIRS: list[str] = []
 
 
 def add_library_locations(dir_list):

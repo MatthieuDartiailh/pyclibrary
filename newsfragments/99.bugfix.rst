@@ -1,0 +1,1 @@
+Fixed parsing of function macro arguments containing parentheses.
