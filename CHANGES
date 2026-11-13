@@ -1,12 +1,10 @@
+PyCLibrary Changelog
+====================
+
+.. towncrier release notes start
+
 0.4.0 - 2026-11-13
 ------------------
-
-Misc
-~~~~
-
-- Refreshed GitHub Actions versions and updated linting configuration to match the latest Ruff and runner tooling. (#88)
-- Adopted Hatchling-based packaging together with Towncrier-managed release notes and a manual release workflow. (#91)
-
 
 Bug fixes
 ~~~~~~~~~
@@ -25,9 +23,12 @@ Bug fixes
 - Fixed integer division to follow C semantics and truncate toward zero. (#104)
 - Fixed C-style modulo operations in expressions to match expected integer semantics. (#105)
 
+Misc
+~~~~
 
-PyCLibrary Changelog
-====================
+- Refreshed GitHub Actions versions and updated linting configuration to match the latest Ruff and runner tooling. (#88)
+- Adopted Hatchling-based packaging together with Towncrier-managed release notes and a manual release workflow. (#91)
+
 
 0.3.0 - 03/09/2025
 ------------------
