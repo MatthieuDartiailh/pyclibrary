@@ -1,1 +1,0 @@
-Fixed the `NameError` raised when looking up a cached name without its prefix.

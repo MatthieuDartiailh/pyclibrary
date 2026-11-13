@@ -1,3 +1,31 @@
+0.4.0 - 2026-11-13
+------------------
+
+Misc
+~~~~
+
+- Refreshed GitHub Actions versions and updated linting configuration to match the latest Ruff and runner tooling. (#88)
+- Adopted Hatchling-based packaging together with Towncrier-managed release notes and a manual release workflow. (#91)
+
+
+Bug fixes
+~~~~~~~~~
+
+- Fixed parsing of integer literals with lowercase `ull` suffixes in C expressions. (#89)
+- Fixed the `NameError` raised when `lock_calls=True` is enabled during function calls. (#93)
+- Searched the system include directories on Linux when resolving headers in `find_header`. (#94)
+- Fixed the `NameError` raised when looking up a cached name without its prefix. (#95)
+- Fixed `#if` conditions using `!=` so they evaluate correctly instead of always returning false. (#96)
+- Fixed hex and suffixed integer literals in `#if` conditions. (#97)
+- Fixed typedef building for array typedefs so the parent typedef is no longer mutated unexpectedly. (#98)
+- Fixed parsing of function macro arguments containing parentheses. (#99)
+- Stopped reading digits inside names as integer literals when parsing C identifiers. (#100)
+- Accepted path-like objects such as `pathlib.Path` in `CLibrary` for file and header lookups. (#101)
+- Fixed parsing of names beginning with two underscores as declared names. (#103)
+- Fixed integer division to follow C semantics and truncate toward zero. (#104)
+- Fixed C-style modulo operations in expressions to match expected integer semantics. (#105)
+
+
 PyCLibrary Changelog
 ====================
 

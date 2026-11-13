@@ -1,1 +1,0 @@
-Fixed typedef building for array typedefs so the parent typedef is no longer mutated unexpectedly.

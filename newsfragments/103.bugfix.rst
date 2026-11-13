@@ -1,1 +1,0 @@
-Fixed parsing of names beginning with two underscores as declared names.
