@@ -3,6 +3,15 @@ PyCLibrary Changelog
 
 .. towncrier release notes start
 
+0.4.1 - 2026-11-13
+------------------
+
+Misc
+~~~~
+
+- Fix the automated release workflow no code change (#107)
+
+
 0.4.0 - 2026-11-13
 ------------------
 
