@@ -116,11 +116,6 @@ __version__ = "{version}"
   underlines = ["-", "~"]
 
   [[tool.towncrier.type]]
-    directory = "misc"
-    name = "Misc"
-    showcontent = true
-
-  [[tool.towncrier.type]]
     directory = "feature"
     name = "Features"
     showcontent = true
@@ -138,6 +133,11 @@ __version__ = "{version}"
   [[tool.towncrier.type]]
     directory = "doc"
     name = "Documentation"
+    showcontent = true
+
+  [[tool.towncrier.type]]
+    directory = "misc"
+    name = "Misc"
     showcontent = true
 
 [tool.pytest.ini_options]
