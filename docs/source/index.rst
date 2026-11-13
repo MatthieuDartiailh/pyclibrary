@@ -28,7 +28,7 @@ which cannot simply be mapped to Python object your code will most likely
 not be backend independent so it is discouraged to try to switch between
 backends.
 
-PyCLibrary supports Python 2.7 and 3.3+
+PyCLibrary supports Python 3.10 and newer
 
 .. toctree::
     :hidden:

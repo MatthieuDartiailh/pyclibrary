@@ -60,7 +60,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14-dev']
+        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14', '3.15']
     steps:
       - uses: actions/checkout@v7
       - name: Get history and tags for SCM versioning to work
@@ -82,7 +82,7 @@ jobs:
           pip install pytest-cov
           python -m pytest tests --cov pyclibrary --cov-report xml -v
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: unittests
@@ -90,5 +90,5 @@ jobs:
           fail_ci_if_error: true
       - name: Test with the oldest supported dependency versions
         run: |
-          pip install pyparsing==2.3.1
+          pip install pyparsing==3.1.0
           python -m pytest tests

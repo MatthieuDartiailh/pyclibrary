@@ -1,0 +1,2 @@
+- update minimum pyparsing version to 3.1.0
+- various CI related updates no library code change
