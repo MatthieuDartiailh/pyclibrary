@@ -51,8 +51,8 @@ jobs:
       - name: Check whether the tag already exists
         shell: bash
         run: |
-          if git ls-remote --tags origin "v${{ inputs.version }}" | grep -q "refs/tags/v${{ inputs.version }}$"; then
-            echo "Tag v${{ inputs.version }} already exists; refusing to open a release notes PR for it."
+          if git ls-remote --tags origin "${{ inputs.version }}" | grep -q "refs/tags/${{ inputs.version }}$"; then
+            echo "Tag ${{ inputs.version }} already exists; refusing to open a release notes PR for it."
             exit 1
           fi
       - name: Create release notes PR
